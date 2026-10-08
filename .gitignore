@@ -1,0 +1,31 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+.kotlin
+.idea/
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# App build outputs
+app/build/
+**/build/
+
+# Keystores
+*.jks
+*.keystore
+
+# Google Services / Sensitive
+google-services.json
+
+# Room schemas (Room schemas are committed to git as per spec, so NOT ignored)
+#!app/schemas/

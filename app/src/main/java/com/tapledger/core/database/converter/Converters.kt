@@ -1,0 +1,90 @@
+package com.tapledger.core.database.converter
+
+import androidx.room.TypeConverter
+import com.tapledger.core.model.AccountType
+import com.tapledger.core.model.AdvanceDirection
+import com.tapledger.core.model.AdvancePolicy
+import com.tapledger.core.model.AuditAction
+import com.tapledger.core.model.BudgetBucket
+import com.tapledger.core.model.BudgetPeriodStatus
+import com.tapledger.core.model.StatementImportStatus
+import com.tapledger.core.model.StatementMatchStatus
+import com.tapledger.core.model.TransactionKind
+import com.tapledger.core.model.TransactionSource
+import com.tapledger.core.model.TransactionStatus
+import com.tapledger.core.model.TransferDirection
+
+class Converters {
+
+    @TypeConverter
+    fun fromAccountType(value: AccountType?): String? = value?.name
+
+    @TypeConverter
+    fun toAccountType(value: String?): AccountType? = value?.let { AccountType.valueOf(it) }
+
+    @TypeConverter
+    fun fromBudgetBucket(value: BudgetBucket?): String? = value?.name
+
+    @TypeConverter
+    fun toBudgetBucket(value: String?): BudgetBucket? = value?.let { BudgetBucket.valueOf(it) }
+
+    @TypeConverter
+    fun fromAdvancePolicy(value: AdvancePolicy?): String? = value?.name
+
+    @TypeConverter
+    fun toAdvancePolicy(value: String?): AdvancePolicy? = value?.let { AdvancePolicy.valueOf(it) }
+
+    @TypeConverter
+    fun fromAdvanceDirection(value: AdvanceDirection?): String? = value?.name
+
+    @TypeConverter
+    fun toAdvanceDirection(value: String?): AdvanceDirection? = value?.let { AdvanceDirection.valueOf(it) }
+
+    @TypeConverter
+    fun fromBudgetPeriodStatus(value: BudgetPeriodStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toBudgetPeriodStatus(value: String?): BudgetPeriodStatus? = value?.let { BudgetPeriodStatus.valueOf(it) }
+
+    @TypeConverter
+    fun fromTransactionKind(value: TransactionKind?): String? = value?.name
+
+    @TypeConverter
+    fun toTransactionKind(value: String?): TransactionKind? = value?.let { TransactionKind.valueOf(it) }
+
+    @TypeConverter
+    fun fromTransactionStatus(value: TransactionStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toTransactionStatus(value: String?): TransactionStatus? = value?.let { TransactionStatus.valueOf(it) }
+
+    @TypeConverter
+    fun fromTransactionSource(value: TransactionSource?): String? = value?.name
+
+    @TypeConverter
+    fun toTransactionSource(value: String?): TransactionSource? = value?.let { TransactionSource.valueOf(it) }
+
+    @TypeConverter
+    fun fromTransferDirection(value: TransferDirection?): String? = value?.name
+
+    @TypeConverter
+    fun toTransferDirection(value: String?): TransferDirection? = value?.let { TransferDirection.valueOf(it) }
+
+    @TypeConverter
+    fun fromStatementImportStatus(value: StatementImportStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toStatementImportStatus(value: String?): StatementImportStatus? = value?.let { StatementImportStatus.valueOf(it) }
+
+    @TypeConverter
+    fun fromStatementMatchStatus(value: StatementMatchStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toStatementMatchStatus(value: String?): StatementMatchStatus? = value?.let { StatementMatchStatus.valueOf(it) }
+
+    @TypeConverter
+    fun fromAuditAction(value: AuditAction?): String? = value?.name
+
+    @TypeConverter
+    fun toAuditAction(value: String?): AuditAction? = value?.let { AuditAction.valueOf(it) }
+}
