@@ -21,4 +21,7 @@ interface MonthCloseDao {
 
     @Query("DELETE FROM month_closes WHERE budget_period_id = :periodId")
     suspend fun deleteForPeriod(periodId: Long)
+
+    @Query("SELECT * FROM month_closes")
+    suspend fun getAllMonthClosesSync(): List<MonthCloseEntity>
 }

@@ -9,7 +9,9 @@ import com.tapledger.ui.screens.accounts.AccountsScreen
 import com.tapledger.ui.screens.backup.BackupRestoreScreen
 import com.tapledger.ui.screens.categories.CategoryManagementScreen
 import com.tapledger.ui.screens.dashboard.DashboardScreen
+import com.tapledger.ui.screens.diagnostics.DataDiagnosticsScreen
 import com.tapledger.ui.screens.manual.ManualEntryScreen
+import com.tapledger.ui.screens.monthclose.MonthCloseScreen
 import com.tapledger.ui.screens.pending.PendingInboxScreen
 import com.tapledger.ui.screens.setup.SetupScreen
 import com.tapledger.ui.screens.statement.StatementReconciliationScreen
@@ -25,6 +27,8 @@ sealed class Screen(val route: String) {
     object Setup : Screen("setup")
     object CategoryManagement : Screen("categories")
     object StatementReconciliation : Screen("statements")
+    object MonthClose : Screen("month_close")
+    object DataDiagnostics : Screen("diagnostics")
 }
 
 @Composable
@@ -45,7 +49,9 @@ fun TapLedgerNavGraph(
                 onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) },
                 onNavigateToSetup = { navController.navigate(Screen.Setup.route) },
                 onNavigateToCategories = { navController.navigate(Screen.CategoryManagement.route) },
-                onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) }
+                onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) },
+                onNavigateToMonthClose = { navController.navigate(Screen.MonthClose.route) },
+                onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) }
             )
         }
         composable(Screen.Transactions.route) {
@@ -86,6 +92,16 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.StatementReconciliation.route) {
             StatementReconciliationScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.MonthClose.route) {
+            MonthCloseScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.DataDiagnostics.route) {
+            DataDiagnosticsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

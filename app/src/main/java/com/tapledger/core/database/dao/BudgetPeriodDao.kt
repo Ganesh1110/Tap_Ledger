@@ -28,4 +28,7 @@ interface BudgetPeriodDao {
 
     @Query("SELECT * FROM budget_periods ORDER BY year DESC, month DESC")
     fun getAllPeriods(): Flow<List<BudgetPeriodEntity>>
+
+    @Query("SELECT * FROM budget_periods")
+    suspend fun getAllPeriodsSync(): List<BudgetPeriodEntity>
 }

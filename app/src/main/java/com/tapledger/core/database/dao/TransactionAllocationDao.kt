@@ -45,4 +45,7 @@ interface TransactionAllocationDao {
           AND t.status IN ('PENDING', 'CATEGORIZED')
     """)
     suspend fun getAllocationsForCategoryInPeriod(categoryId: Long, startEpochMillis: Long, endEpochMillis: Long): List<TransactionAllocationEntity>
+
+    @Query("SELECT * FROM transaction_allocations")
+    suspend fun getAllTransactionAllocationsSync(): List<TransactionAllocationEntity>
 }

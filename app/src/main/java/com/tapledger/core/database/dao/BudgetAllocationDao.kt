@@ -26,6 +26,9 @@ interface BudgetAllocationDao {
     @Query("SELECT * FROM budget_allocations WHERE budget_period_id = :periodId ORDER BY sort_order_snapshot ASC, category_name_snapshot ASC")
     suspend fun getAllocationsForPeriodSync(periodId: Long): List<BudgetAllocationEntity>
 
+    @Query("SELECT * FROM budget_allocations")
+    suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity>
+
     @Query("SELECT * FROM budget_allocations WHERE budget_period_id = :periodId AND category_id = :categoryId LIMIT 1")
     suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity?
 }

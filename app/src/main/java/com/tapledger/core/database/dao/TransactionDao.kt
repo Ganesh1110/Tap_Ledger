@@ -29,6 +29,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY occurred_at DESC, id DESC")
     fun observeAllTransactions(): Flow<List<TransactionEntity>>
 
+    @Query("SELECT * FROM transactions")
+    suspend fun getAllTransactionsSync(): List<TransactionEntity>
+
     @Query("SELECT * FROM transactions WHERE status = 'PENDING' ORDER BY occurred_at DESC")
     fun observePendingTransactions(): Flow<List<TransactionEntity>>
 

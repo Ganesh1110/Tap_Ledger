@@ -30,7 +30,9 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.ReceiptLong
@@ -80,7 +82,9 @@ fun DashboardScreen(
     onNavigateToBackup: () -> Unit,
     onNavigateToSetup: () -> Unit,
     onNavigateToCategories: () -> Unit,
-    onNavigateToStatements: () -> Unit
+    onNavigateToStatements: () -> Unit,
+    onNavigateToMonthClose: () -> Unit,
+    onNavigateToDiagnostics: () -> Unit
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
@@ -163,6 +167,8 @@ fun DashboardScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             IconButton(icon = Icons.Default.Category, onClick = onNavigateToCategories)
                             IconButton(icon = Icons.Default.ReceiptLong, onClick = onNavigateToStatements)
+                            IconButton(icon = Icons.Default.Lock, onClick = onNavigateToMonthClose)
+                            IconButton(icon = Icons.Default.HealthAndSafety, onClick = onNavigateToDiagnostics)
                             IconButton(icon = Icons.Default.History, onClick = onNavigateToTransactions)
                             IconButton(icon = Icons.Default.AccountBalance, onClick = onNavigateToAccounts)
                             IconButton(icon = Icons.Default.Backup, onClick = onNavigateToBackup)
