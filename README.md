@@ -93,6 +93,7 @@ TapLedger/
 - [x] **M8 — Statement Import & Reconciliation**: 1-to-1 reconciliation matching, arithmetic verification, missing-in-app detection.
 - [x] **M9 — Month Close**: Period locking, `advance_ledger` carry-forward, negative advance overspend capture.
 - [x] **M10 — Data Integrity**: Relational checks, transfer balance validation, audit log.
+- [x] **M11 — Category & Budget Management**: Bucket allocations, advance rules, intra-month budget transfers, and category management UI.
 - [x] **M12 — Xiaomi 15 / HyperOS Reliability**: Setup checklist, autostart/battery optimization guidance, universal settings fallbacks.
 
 ---
