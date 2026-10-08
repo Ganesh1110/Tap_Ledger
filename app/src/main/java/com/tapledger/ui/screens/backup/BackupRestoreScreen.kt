@@ -68,13 +68,13 @@ fun BackupRestoreScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "M3.5 Trustworthiness Gate: Backup Strategy",
+                        text = "Offline Vault & Data Protection",
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "tapLedger is 100% offline. Financial data is never synced to the cloud. Backups use SQLite VACUUM INTO to create safe snapshots even with WAL mode active.",
+                        text = "TapLedger is 100% offline. Your financial data never leaves your device. Backups are created safely offline and can be exported at any time.",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -111,7 +111,7 @@ fun BackupRestoreScreen(
                 } else {
                     Icon(Icons.Default.CheckCircle, contentDescription = null)
                     Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                    Text("Run PRAGMA Integrity Check")
+                    Text("Verify Database Integrity")
                 }
             }
 

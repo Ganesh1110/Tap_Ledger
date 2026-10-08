@@ -56,6 +56,7 @@ fun PendingInboxScreen(
 ) {
     val pendingTxs by viewModel.pendingTransactions.collectAsState()
     val categories by viewModel.categories.collectAsState()
+    val suggestedMap by viewModel.suggestedCategoryMap.collectAsState()
 
     Scaffold(
         topBar = {
@@ -85,9 +86,11 @@ fun PendingInboxScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 items(pendingTxs, key = { it.id }) { tx ->
+                    val suggestedCat = categories.find { it.id == suggestedMap[tx.id] }
                     PendingTransactionCard(
                         tx = tx,
                         categories = categories,
+                        suggestedCategory = suggestedCat,
                         onCategorize = { catId ->
                             viewModel.categorizeTransaction(tx.id, catId, tx.amountPaise)
                         },
@@ -105,6 +108,7 @@ fun PendingInboxScreen(
 fun PendingTransactionCard(
     tx: TransactionEntity,
     categories: List<CategoryEntity>,
+    suggestedCategory: CategoryEntity? = null,
     onCategorize: (Long) -> Unit,
     onVoid: () -> Unit
 ) {
@@ -144,6 +148,20 @@ fun PendingTransactionCard(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+
+            if (suggestedCategory != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Button(
+                    onClick = { onCategorize(suggestedCategory.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Text("✨ Suggested: ${suggestedCategory.name} (1-Tap Apply)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

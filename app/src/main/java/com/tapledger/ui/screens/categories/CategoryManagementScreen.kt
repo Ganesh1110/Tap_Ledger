@@ -94,11 +94,6 @@ fun CategoryManagementScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Categories & Budget") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
                 actions = {
                     IconButton(onClick = { showAddDialog = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Add Category")
@@ -128,7 +123,7 @@ fun CategoryManagementScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
@@ -342,9 +337,6 @@ fun CategoryCard(
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(onClick = onEdit) {
                     Icon(Icons.Default.Edit, contentDescription = "Edit Category", tint = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Deactivate Category", tint = MaterialTheme.colorScheme.error)
                 }
             }
         }

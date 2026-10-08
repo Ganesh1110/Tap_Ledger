@@ -220,7 +220,11 @@ fun MonthCloseScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = catSum.allocation.categoryNameSnapshot, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     Text(
-                                        text = "Rule: ${catSum.allocation.advancePolicySnapshot.name}",
+                                        text = "Rule: ${when(catSum.allocation.advancePolicySnapshot) {
+                                            com.tapledger.core.model.AdvancePolicy.CARRY_TO_ADVANCE -> "Rollover Surplus to Next Month"
+                                            com.tapledger.core.model.AdvancePolicy.SWEEP_TO_SAVINGS -> "Sweep Surplus to Savings"
+                                            com.tapledger.core.model.AdvancePolicy.EXPIRE -> "Expire Surplus"
+                                        }}",
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

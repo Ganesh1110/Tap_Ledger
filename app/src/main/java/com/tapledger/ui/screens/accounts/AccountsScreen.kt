@@ -44,12 +44,7 @@ fun AccountsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Accounts & Balances") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                }
+                title = { Text("Accounts & Balances") }
             )
         }
     ) { padding ->
@@ -58,7 +53,7 @@ fun AccountsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
-            contentPadding = PaddingValues(vertical = 8.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             state.netWorth?.let { nw ->

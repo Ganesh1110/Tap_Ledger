@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.ReceiptLong
@@ -41,6 +42,10 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -68,10 +73,15 @@ import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.core.util.PermissionUtils
 import com.tapledger.domain.model.AccountBalanceSummary
 import com.tapledger.domain.model.BudgetCategorySummary
+import com.tapledger.ui.components.DonutChart
+import com.tapledger.ui.components.DonutSlice
 import com.tapledger.ui.components.MoneyText
 import com.tapledger.ui.theme.AmberWarning
 import com.tapledger.ui.theme.EmeraldPrimary
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.RoseError
+import com.tapledger.ui.theme.WarningAmber
 
 @Composable
 fun DashboardScreen(
@@ -126,12 +136,14 @@ fun DashboardScreen(
                 CircularProgressIndicator()
             }
         } else {
+            var showMoreMenu by remember { mutableStateOf(false) }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // 1. Month Header & Quick Navigation
@@ -155,15 +167,53 @@ fun DashboardScreen(
                                 )
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            IconButton(icon = Icons.Default.Category, onClick = onNavigateToCategories)
-                            IconButton(icon = Icons.Default.ReceiptLong, onClick = onNavigateToStatements)
-                            IconButton(icon = Icons.Default.Lock, onClick = onNavigateToMonthClose)
-                            IconButton(icon = Icons.Default.HealthAndSafety, onClick = onNavigateToDiagnostics)
-                            IconButton(icon = Icons.Default.History, onClick = onNavigateToTransactions)
-                            IconButton(icon = Icons.Default.AccountBalance, onClick = onNavigateToAccounts)
-                            IconButton(icon = Icons.Default.Backup, onClick = onNavigateToBackup)
-                            IconButton(icon = Icons.Default.Settings, onClick = onNavigateToSetup)
+                        Box {
+                            IconButton(icon = Icons.Default.MoreVert, onClick = { showMoreMenu = true })
+                            DropdownMenu(
+                                expanded = showMoreMenu,
+                                onDismissRequest = { showMoreMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Statement Reconciliation") },
+                                    leadingIcon = { Icon(Icons.Default.ReceiptLong, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        onNavigateToStatements()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Month Close & Lock") },
+                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        onNavigateToMonthClose()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Data Diagnostics & Health") },
+                                    leadingIcon = { Icon(Icons.Default.HealthAndSafety, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        onNavigateToDiagnostics()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Backup & Restore") },
+                                    leadingIcon = { Icon(Icons.Default.Backup, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        onNavigateToBackup()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("HyperOS Setup Checklist") },
+                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        onNavigateToSetup()
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -319,58 +369,65 @@ fun IconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: (
 
 @Composable
 fun BudgetOverviewCard(bs: com.tapledger.domain.model.BudgetPeriodSummary) {
+    val palette = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary,
+        IncomeGreen,
+        WarningAmber,
+        ExpenseRed
+    )
+
+    val slices = bs.categorySummaries
+        .filter { it.netSpentPaise > 0L }
+        .mapIndexed { idx, cat ->
+            DonutSlice(
+                label = cat.allocation.categoryNameSnapshot,
+                amountPaise = cat.netSpentPaise,
+                color = palette[idx % palette.size]
+            )
+        }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("Income", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        MoneyFormatter.formatRupees(bs.totalIncomePaise),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                }
-                Column {
-                    Text("Budgeted", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        MoneyFormatter.formatRupees(bs.totalBudgetedPaise),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                }
-                Column {
-                    Text("Spent", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        MoneyFormatter.formatRupees(bs.totalSpentPaise),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                }
-                Column {
-                    Text("Remaining", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        MoneyFormatter.formatRupees(bs.totalRemainingPaise),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = if (bs.totalRemainingPaise >= 0) EmeraldPrimary else RoseError
-                    )
-                }
-            }
-            if (bs.unallocatedBudgetPaise > 0) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Unallocated: ${MoneyFormatter.formatRupees(bs.unallocatedBudgetPaise)}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.secondary
+                DonutChart(
+                    slices = slices,
+                    totalAmountPaise = bs.totalSpentPaise,
+                    chartSize = 130.dp,
+                    strokeWidth = 18.dp
                 )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Monthly Overview", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Income", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MoneyText(amountPaise = bs.totalIncomePaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Budgeted", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MoneyText(amountPaise = bs.totalBudgetedPaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Spent", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MoneyText(amountPaise = bs.totalSpentPaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = ExpenseRed)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Remaining", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        MoneyText(amountPaise = bs.totalRemainingPaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = if (bs.totalRemainingPaise >= 0) IncomeGreen else ExpenseRed)
+                    }
+                }
             }
         }
     }

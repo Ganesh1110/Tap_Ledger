@@ -9,6 +9,7 @@ import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.BudgetRepository
+import com.tapledger.data.repository.MerchantRepository
 import com.tapledger.data.repository.TransactionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,7 +36,8 @@ data class ManualEntryUiState(
 class ManualEntryViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
     private val budgetRepository: BudgetRepository,
-    private val transactionRepository: TransactionRepository
+    private val transactionRepository: TransactionRepository,
+    private val merchantRepository: MerchantRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ManualEntryUiState())
@@ -81,6 +83,14 @@ class ManualEntryViewModel @Inject constructor(
 
     fun onMerchantChanged(merchant: String) {
         _uiState.value = _uiState.value.copy(merchantText = merchant)
+        if (merchant.isNotBlank()) {
+            viewModelScope.launch {
+                val suggestedCatId = merchantRepository.getSuggestedCategoryId(merchant)
+                if (suggestedCatId != null) {
+                    _uiState.value = _uiState.value.copy(selectedCategoryId = suggestedCatId)
+                }
+            }
+        }
     }
 
     fun onNoteChanged(note: String) {
@@ -114,6 +124,9 @@ class ManualEntryViewModel @Inject constructor(
                     TransactionKind.FEE,
                     TransactionKind.INTEREST -> {
                         val categoryId = state.selectedCategoryId
+                        if (categoryId != null && state.merchantText.isNotBlank()) {
+                            merchantRepository.rememberMerchantCategory(state.merchantText, categoryId)
+                        }
                         val allocations = if (categoryId != null) {
                             listOf(Pair(categoryId, amountPaise))
                         } else emptyList()

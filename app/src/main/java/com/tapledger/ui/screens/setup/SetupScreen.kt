@@ -159,7 +159,7 @@ fun SetupScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Self-Attested Configuration Checks (Section 46 & 47):", fontWeight = FontWeight.SemiBold)
+            Text("Background Reliability Verification:", fontWeight = FontWeight.SemiBold)
 
             CheckItem(
                 title = "Autostart Enabled",

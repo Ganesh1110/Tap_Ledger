@@ -45,7 +45,10 @@ import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.components.MoneyText
 import com.tapledger.ui.theme.AmberWarning
 import com.tapledger.ui.theme.EmeraldPrimary
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.RoseError
+import com.tapledger.ui.theme.WarningAmber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,12 +62,7 @@ fun TransactionsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Ledger History (${transactions.size})") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                }
+                title = { Text("Ledger History (${transactions.size})") }
             )
         }
     ) { padding ->
@@ -82,7 +80,7 @@ fun TransactionsScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 groupedByDate.forEach { (dateStr, txList) ->
@@ -160,13 +158,18 @@ fun TransactionItemCard(
                     )
                     Spacer(modifier = Modifier.padding(horizontal = 4.dp))
                     Text(
-                        text = "[${tx.status.name}]",
+                        text = when (tx.status) {
+                            TransactionStatus.PENDING -> "• Pending"
+                            TransactionStatus.CATEGORIZED -> "• Categorized"
+                            TransactionStatus.VOIDED -> "• Voided"
+                            TransactionStatus.IGNORED -> "• Ignored"
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = when (tx.status) {
-                            TransactionStatus.PENDING -> AmberWarning
-                            TransactionStatus.CATEGORIZED -> EmeraldPrimary
-                            TransactionStatus.VOIDED -> RoseError
+                            TransactionStatus.PENDING -> WarningAmber
+                            TransactionStatus.CATEGORIZED -> IncomeGreen
+                            TransactionStatus.VOIDED -> ExpenseRed
                             TransactionStatus.IGNORED -> MaterialTheme.colorScheme.secondary
                         }
                     )
