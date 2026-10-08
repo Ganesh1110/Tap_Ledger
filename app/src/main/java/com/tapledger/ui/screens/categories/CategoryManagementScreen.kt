@@ -100,20 +100,14 @@ fun CategoryManagementScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showAddDialog = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add Category")
+                    }
                     IconButton(onClick = { showTransferDialog = true }) {
                         Icon(Icons.Default.SwapHoriz, contentDescription = "Transfer Budget")
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Category")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->

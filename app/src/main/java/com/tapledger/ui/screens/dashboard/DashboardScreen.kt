@@ -115,17 +115,7 @@ fun DashboardScreen(
         viewModel.loadDashboard()
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToManualEntry,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Transaction")
-            }
-        }
-    ) { padding ->
+    Scaffold { padding ->
         if (state.isLoading) {
             Box(
                 modifier = Modifier
