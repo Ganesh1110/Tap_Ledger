@@ -97,4 +97,7 @@ interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE refund_of_transaction_id = :originalTransactionId")
     suspend fun getRefundsForTransaction(originalTransactionId: Long): List<TransactionEntity>
+
+    @Query("SELECT * FROM transactions WHERE account_id = :accountId AND status != 'VOIDED'")
+    suspend fun getTransactionsForAccountSync(accountId: Long): List<TransactionEntity>
 }

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
@@ -78,7 +79,8 @@ fun DashboardScreen(
     onNavigateToAccounts: () -> Unit,
     onNavigateToBackup: () -> Unit,
     onNavigateToSetup: () -> Unit,
-    onNavigateToCategories: () -> Unit
+    onNavigateToCategories: () -> Unit,
+    onNavigateToStatements: () -> Unit
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
@@ -160,6 +162,7 @@ fun DashboardScreen(
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             IconButton(icon = Icons.Default.Category, onClick = onNavigateToCategories)
+                            IconButton(icon = Icons.Default.ReceiptLong, onClick = onNavigateToStatements)
                             IconButton(icon = Icons.Default.History, onClick = onNavigateToTransactions)
                             IconButton(icon = Icons.Default.AccountBalance, onClick = onNavigateToAccounts)
                             IconButton(icon = Icons.Default.Backup, onClick = onNavigateToBackup)

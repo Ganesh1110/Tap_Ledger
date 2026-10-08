@@ -12,6 +12,7 @@ import com.tapledger.ui.screens.dashboard.DashboardScreen
 import com.tapledger.ui.screens.manual.ManualEntryScreen
 import com.tapledger.ui.screens.pending.PendingInboxScreen
 import com.tapledger.ui.screens.setup.SetupScreen
+import com.tapledger.ui.screens.statement.StatementReconciliationScreen
 import com.tapledger.ui.screens.transactions.TransactionsScreen
 
 sealed class Screen(val route: String) {
@@ -23,6 +24,7 @@ sealed class Screen(val route: String) {
     object BackupRestore : Screen("backup_restore")
     object Setup : Screen("setup")
     object CategoryManagement : Screen("categories")
+    object StatementReconciliation : Screen("statements")
 }
 
 @Composable
@@ -42,7 +44,8 @@ fun TapLedgerNavGraph(
                 onNavigateToAccounts = { navController.navigate(Screen.Accounts.route) },
                 onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) },
                 onNavigateToSetup = { navController.navigate(Screen.Setup.route) },
-                onNavigateToCategories = { navController.navigate(Screen.CategoryManagement.route) }
+                onNavigateToCategories = { navController.navigate(Screen.CategoryManagement.route) },
+                onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) }
             )
         }
         composable(Screen.Transactions.route) {
@@ -78,6 +81,11 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.CategoryManagement.route) {
             CategoryManagementScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.StatementReconciliation.route) {
+            StatementReconciliationScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
