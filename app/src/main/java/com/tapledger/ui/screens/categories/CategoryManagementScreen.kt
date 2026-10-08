@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -59,6 +60,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -384,6 +387,10 @@ fun AddEditCategoryDialog(
                     onValueChange = { name = it },
                     label = { Text("Category Name") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -392,21 +399,36 @@ fun AddEditCategoryDialog(
                     onValueChange = { budgetRupees = it },
                     label = { Text("Monthly Budget (₹)") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Done
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Text("Bucket Tier:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    BudgetBucket.entries.forEach { bucket ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    listOf(BudgetBucket.NEEDS, BudgetBucket.WANTS, BudgetBucket.SAVINGS).forEach { bucket ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { selectedBucket = bucket }
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedBucket = bucket }
+                                .padding(vertical = 2.dp)
                         ) {
                             RadioButton(
                                 selected = selectedBucket == bucket,
                                 onClick = { selectedBucket = bucket }
                             )
-                            Text(bucket.name, fontSize = 12.sp)
+                            Text(
+                                text = when (bucket) {
+                                    BudgetBucket.NEEDS -> "Needs (Essential Living)"
+                                    BudgetBucket.WANTS -> "Wants (Discretionary)"
+                                    BudgetBucket.SAVINGS -> "Savings (Investments & Goals)"
+                                    else -> bucket.name
+                                },
+                                fontSize = 13.sp
+                            )
                         }
                     }
                 }
@@ -538,6 +560,10 @@ fun TransferBudgetDialog(
                     onValueChange = { amountRupees = it },
                     label = { Text("Amount (₹)") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -546,6 +572,10 @@ fun TransferBudgetDialog(
                     onValueChange = { reason = it },
                     label = { Text("Reason / Note (Optional)") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Done
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
