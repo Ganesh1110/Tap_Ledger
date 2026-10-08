@@ -68,6 +68,7 @@ import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.core.util.PermissionUtils
 import com.tapledger.domain.model.AccountBalanceSummary
 import com.tapledger.domain.model.BudgetCategorySummary
+import com.tapledger.ui.components.MoneyText
 import com.tapledger.ui.theme.AmberWarning
 import com.tapledger.ui.theme.EmeraldPrimary
 import com.tapledger.ui.theme.RoseError
@@ -387,6 +388,9 @@ fun BudgetOverviewCard(bs: com.tapledger.domain.model.BudgetPeriodSummary) {
 
 @Composable
 fun AccountBalanceRow(summary: AccountBalanceSummary) {
+    val isCreditCard = summary.account.type == com.tapledger.core.model.AccountType.CREDIT_CARD
+    val displayPaise = if (isCreditCard) kotlin.math.abs(summary.currentBalancePaise) else summary.currentBalancePaise
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -404,22 +408,17 @@ fun AccountBalanceRow(summary: AccountBalanceSummary) {
                     fontWeight = FontWeight.Medium,
                     fontSize = 15.sp
                 )
-                summary.account.identifierLast4?.let {
-                    Text(
-                        text = "•••• $it",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = if (isCreditCard) "Outstanding Liability ${summary.account.identifierLast4?.let { "•••• $it" } ?: ""}"
+                           else "Available Balance ${summary.account.identifierLast4?.let { "•••• $it" } ?: ""}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Text(
-                text = MoneyFormatter.formatRupees(summary.currentBalancePaise),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp,
-                color = when {
-                    summary.currentBalancePaise < 0 -> RoseError
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
+            MoneyText(
+                amountPaise = displayPaise,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = if (isCreditCard && displayPaise > 0L) RoseError else MaterialTheme.colorScheme.onSurface
             )
         }
     }

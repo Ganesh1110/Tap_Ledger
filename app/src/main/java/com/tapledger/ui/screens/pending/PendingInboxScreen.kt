@@ -45,6 +45,8 @@ import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.ui.components.EmptyState
+import com.tapledger.ui.components.MoneyText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,18 +70,11 @@ fun PendingInboxScreen(
         }
     ) { padding ->
         if (pendingTxs.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No pending transactions. All classified!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            EmptyState(
+                title = "Inbox Zero!",
+                subtitle = "All captured transactions have been classified into budget categories.",
+                modifier = Modifier.padding(padding)
+            )
         } else {
             LazyColumn(
                 modifier = Modifier
@@ -144,10 +139,9 @@ fun PendingTransactionCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = MoneyFormatter.formatRupees(tx.amountPaise),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
+                MoneyText(
+                    amountPaise = tx.amountPaise,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
@@ -161,36 +155,37 @@ fun PendingTransactionCard(
             )
             Spacer(modifier = Modifier.height(6.dp))
 
+            fun onBucketSelected(bucket: BudgetBucket) {
+                val matching = categories.filter { it.defaultBucket == bucket }
+                if (matching.size == 1) {
+                    onCategorize(matching.first().id)
+                } else {
+                    selectedBucketFilter = bucket
+                    showCategoryMenu = true
+                }
+            }
+
             // Tier 1 Bucket Buttons (Section 41)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = {
-                        selectedBucketFilter = BudgetBucket.NEEDS
-                        showCategoryMenu = true
-                    },
+                    onClick = { onBucketSelected(BudgetBucket.NEEDS) },
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                 ) {
                     Text("Needs", fontSize = 12.sp)
                 }
                 Button(
-                    onClick = {
-                        selectedBucketFilter = BudgetBucket.WANTS
-                        showCategoryMenu = true
-                    },
+                    onClick = { onBucketSelected(BudgetBucket.WANTS) },
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                 ) {
                     Text("Wants", fontSize = 12.sp)
                 }
                 Button(
-                    onClick = {
-                        selectedBucketFilter = BudgetBucket.SAVINGS
-                        showCategoryMenu = true
-                    },
+                    onClick = { onBucketSelected(BudgetBucket.SAVINGS) },
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                 ) {

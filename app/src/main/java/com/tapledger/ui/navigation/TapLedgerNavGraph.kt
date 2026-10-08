@@ -1,6 +1,7 @@
 package com.tapledger.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -34,11 +35,13 @@ sealed class Screen(val route: String) {
 @Composable
 fun TapLedgerNavGraph(
     navController: NavHostController = rememberNavController(),
-    startDestination: String = Screen.Dashboard.route
+    startDestination: String = Screen.Dashboard.route,
+    modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = startDestination,
+        modifier = modifier
     ) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(

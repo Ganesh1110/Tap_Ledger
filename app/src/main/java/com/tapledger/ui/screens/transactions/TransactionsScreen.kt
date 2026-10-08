@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,10 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.tapledger.core.database.entity.TransactionEntity
-import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionStatus
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.ui.components.EmptyState
+import com.tapledger.ui.components.MoneyText
 import com.tapledger.ui.theme.AmberWarning
 import com.tapledger.ui.theme.EmeraldPrimary
 import com.tapledger.ui.theme.RoseError
@@ -56,7 +59,7 @@ fun TransactionsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Transactions (${transactions.size})") },
+                title = { Text("Ledger History (${transactions.size})") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -70,26 +73,64 @@ fun TransactionsScreen(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add")
+                Icon(Icons.Default.Add, contentDescription = "Add Transaction")
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(transactions, key = { it.id }) { tx ->
-                TransactionItemCard(
-                    tx = tx,
-                    onVoid = { viewModel.voidTransaction(tx.id) },
-                    onRestore = { viewModel.restoreTransaction(tx.id) }
-                )
+        if (transactions.isEmpty()) {
+            EmptyState(
+                title = "No Transactions Recorded",
+                subtitle = "Transactions captured from bank notifications or added manually will appear here in chronological order.",
+                modifier = Modifier.padding(padding)
+            )
+        } else {
+            val groupedByDate = transactions.groupBy { DateTimeUtils.formatDate(it.occurredAt) }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                groupedByDate.forEach { (dateStr, txList) ->
+                    item {
+                        LedgerLineHeader(dateStr = dateStr)
+                    }
+
+                    items(txList, key = { it.id }) { tx ->
+                        TransactionItemCard(
+                            tx = tx,
+                            onVoid = { viewModel.voidTransaction(tx.id) },
+                            onRestore = { viewModel.restoreTransaction(tx.id) }
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+fun LedgerLineHeader(dateStr: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "● $dateStr",
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+        )
     }
 }
 
@@ -155,18 +196,9 @@ fun TransactionItemCard(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = MoneyFormatter.formatRupees(
-                        paise = tx.amountPaise,
-                        showSign = true
-                    ),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = when (tx.kind) {
-                        TransactionKind.INCOME,
-                        TransactionKind.REFUND -> EmeraldPrimary
-                        else -> MaterialTheme.colorScheme.onSurface
-                    }
+                MoneyText(
+                    amountPaise = if (tx.kind == TransactionKind.INCOME || tx.kind == TransactionKind.REFUND) tx.amountPaise else -tx.amountPaise,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
 
                 if (isVoided) {
