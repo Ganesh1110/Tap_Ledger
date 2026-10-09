@@ -56,6 +56,7 @@ class DataDiagnosticsViewModel @Inject constructor(
                     it.copy(
                         isAuditRunning = false,
                         issues = issues,
+                        lastScannedAt = com.tapledger.core.util.DateTimeUtils.nowEpochMillis(),
                         errorMessage = null
                     )
                 }

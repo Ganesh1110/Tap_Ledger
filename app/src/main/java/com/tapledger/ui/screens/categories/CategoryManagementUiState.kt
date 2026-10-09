@@ -5,7 +5,9 @@ import com.tapledger.core.database.entity.CategoryEntity
 
 data class CategoryItemState(
     val category: CategoryEntity,
-    val currentAllocationPaise: Long = 0L
+    val currentAllocationPaise: Long = 0L,
+    val spentPaise: Long = 0L,
+    val remainingPaise: Long = 0L
 )
 
 data class CategoryManagementUiState(

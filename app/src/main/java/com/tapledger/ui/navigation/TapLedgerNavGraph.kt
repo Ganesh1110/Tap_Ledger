@@ -1,5 +1,10 @@
 package com.tapledger.ui.navigation
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -17,6 +22,7 @@ import com.tapledger.ui.screens.pending.PendingInboxScreen
 import com.tapledger.ui.screens.setup.SetupScreen
 import com.tapledger.ui.screens.statement.StatementReconciliationScreen
 import com.tapledger.ui.screens.transactions.TransactionsScreen
+import com.tapledger.ui.theme.MotionSpec
 
 sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
@@ -42,7 +48,21 @@ fun TapLedgerNavGraph(
     NavHost(
         navController = navController,
         startDestination = startDestination,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = {
+            fadeIn(animationSpec = tween(MotionSpec.EnterDurationMillis, easing = FastOutSlowInEasing)) +
+                    scaleIn(initialScale = 0.97f, animationSpec = tween(MotionSpec.EnterDurationMillis, easing = FastOutSlowInEasing))
+        },
+        exitTransition = {
+            fadeOut(animationSpec = tween(MotionSpec.ExitDurationMillis, easing = FastOutSlowInEasing))
+        },
+        popEnterTransition = {
+            fadeIn(animationSpec = tween(MotionSpec.EnterDurationMillis, easing = FastOutSlowInEasing)) +
+                    scaleIn(initialScale = 0.97f, animationSpec = tween(MotionSpec.EnterDurationMillis, easing = FastOutSlowInEasing))
+        },
+        popExitTransition = {
+            fadeOut(animationSpec = tween(MotionSpec.ExitDurationMillis, easing = FastOutSlowInEasing))
+        }
     ) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
@@ -61,7 +81,6 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.Transactions.route) {
             TransactionsScreen(
-                onNavigateBack = { navController.popBackStack() },
                 onNavigateToManualEntry = { navController.navigate(Screen.ManualEntry.route) }
             )
         }
@@ -72,7 +91,8 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.PendingInbox.route) {
             PendingInboxScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSetup = { navController.navigate(Screen.Setup.route) }
             )
         }
         composable(Screen.Accounts.route) {
@@ -91,9 +111,7 @@ fun TapLedgerNavGraph(
             )
         }
         composable(Screen.CategoryManagement.route) {
-            CategoryManagementScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            CategoryManagementScreen()
         }
         composable(Screen.StatementReconciliation.route) {
             StatementReconciliationScreen(

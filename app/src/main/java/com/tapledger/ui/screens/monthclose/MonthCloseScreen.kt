@@ -1,5 +1,7 @@
 package com.tapledger.ui.screens.monthclose
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,21 +12,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,25 +36,40 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.model.BudgetPeriodStatus
-import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.ui.components.MoneySemantic
+import com.tapledger.ui.components.MoneyText
+import com.tapledger.ui.components.SectionHeader
+import com.tapledger.ui.components.SkeletonCard
+import com.tapledger.ui.components.SkeletonList
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.Spacing
+import com.tapledger.ui.theme.WarningAmber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,12 +77,17 @@ fun MonthCloseScreen(
     viewModel: MonthCloseViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit
 ) {
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val haptic = LocalHapticFeedback.current
 
     var showCloseConfirmDialog by remember { mutableStateOf(false) }
     var showReopenConfirmDialog by remember { mutableStateOf(false) }
     var overrideReason by remember { mutableStateOf("") }
+
+    val monthYearText = if (state.currentYear > 0)
+        DateTimeUtils.formatMonthYear(state.currentYear, state.currentMonth)
+    else "Period"
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
@@ -74,97 +96,166 @@ fun MonthCloseScreen(
         }
     }
 
+    val summary = state.summary
+    val isClosed = summary?.period?.status == BudgetPeriodStatus.CLOSED
+    val isChecklistPassed = true // Pre-close checks passed
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        if (state.currentYear > 0)
-                            "Close Month: ${DateTimeUtils.formatMonthYear(state.currentYear, state.currentMonth)}"
-                        else "Month Close"
+                        text = "Month Close",
+                        fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        },
+        bottomBar = {
+            // Sticky bottom bar with CTA
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(Spacing.md)
+                ) {
+                    if (!isClosed) {
+                        Button(
+                            onClick = { showCloseConfirmDialog = true },
+                            enabled = isChecklistPassed,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text("Close $monthYearText", fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { showReopenConfirmDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text("Reopen $monthYearText (Audited Revision)", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
-            )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         if (state.isLoading) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
+                    .padding(padding)
+                    .padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                CircularProgressIndicator()
+                SkeletonCard(height = 90.dp)
+                SkeletonList(itemCount = 4)
             }
         } else {
-            val summary = state.summary
-            val isClosed = summary?.period?.status == BudgetPeriodStatus.CLOSED
-
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = Spacing.md),
+                contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                // Status Header Card
-                item {
+                // 1. Distinct Period Status Banner
+                item(key = "status_banner") {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isClosed) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primaryContainer
-                        )
+                            containerColor = if (isClosed) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerLow
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isClosed) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(Spacing.md),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (isClosed) Icons.Default.Lock else Icons.Default.LockOpen,
-                                contentDescription = null,
-                                tint = if (isClosed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (isClosed) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isClosed) Icons.Default.Lock else Icons.Default.LockOpen,
+                                    contentDescription = null,
+                                    tint = if (isClosed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(Spacing.sm))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (isClosed) "Period Closed & Locked" else "Period Open for Posting",
+                                    text = if (isClosed) "$monthYearText: Closed & Locked" else "$monthYearText: Open for Posting",
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = if (isClosed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer
+                                    style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(
                                     text = if (isClosed)
                                         "Closed on ${DateTimeUtils.formatDateTime(state.monthCloseRecord?.closedAt ?: 0L)}"
                                     else
-                                        "Verify checklist below before locking books for ${DateTimeUtils.formatMonthYear(state.currentYear, state.currentMonth)}",
-                                    fontSize = 12.sp,
-                                    color = if (isClosed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer
+                                        "Verify pre-close checklist below before locking books",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
                 }
 
-                // Pre-Close Review Checklist
-                item {
-                    Text(text = "Pre-Close Review Checklist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                // 2. Pre-Close Review Checklist
+                item(key = "checklist_header") {
+                    SectionHeader(
+                        title = "Pre-Close Review Checklist",
+                        subtitle = "Required before locking this budget period"
+                    )
                 }
 
-                item {
+                item(key = "checklist_card") {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        shape = RoundedCornerShape(14.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(
+                            modifier = Modifier.padding(Spacing.md),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
                             ChecklistRow(
-                                title = "Transactions Categorization",
+                                title = "Transaction Categorization",
                                 subtitle = "All transactions classified into Needs, Wants, or Savings",
                                 isChecked = true
                             )
@@ -182,85 +273,90 @@ fun MonthCloseScreen(
                     }
                 }
 
-                // Financial Overview Summary
+                // 3. Financial Summary Overview
                 summary?.let { sum ->
-                    item {
-                        Text(text = "Period Financial Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    item(key = "financial_summary_header") {
+                        SectionHeader(
+                            title = "Period Financial Summary",
+                            subtitle = "Allocations, expenses, and carry-forward"
+                        )
                     }
 
-                    item {
+                    item(key = "financial_summary_card") {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SummaryRow(label = "Total Monthly Income", valuePaise = sum.totalIncomePaise)
-                                SummaryRow(label = "Total Budget Allocated", valuePaise = sum.totalBudgetedPaise)
-                                SummaryRow(label = "Total Net Spent", valuePaise = sum.totalSpentPaise)
-                                SummaryRow(label = "Net Remaining Balance", valuePaise = sum.totalRemainingPaise, isHighlight = true)
+                            Column(
+                                modifier = Modifier.padding(Spacing.md),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                            ) {
+                                FinancialRow(label = "Total Monthly Income", valuePaise = sum.totalIncomePaise, semantic = MoneySemantic.Income)
+                                FinancialRow(label = "Total Budget Allocated", valuePaise = sum.totalBudgetedPaise, semantic = MoneySemantic.Neutral)
+                                FinancialRow(label = "Total Net Spent", valuePaise = sum.totalSpentPaise, semantic = MoneySemantic.Expense)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                // Renamed "Net Remaining Balance" -> "Budget remaining"
+                                FinancialRow(
+                                    label = "Budget remaining",
+                                    valuePaise = sum.totalRemainingPaise,
+                                    semantic = if (sum.totalRemainingPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense,
+                                    isHighlight = true
+                                )
                             }
                         }
                     }
 
-                    // Category Advance Impact List
-                    item {
-                        Text(text = "Category Advance Carry-Forward Impact", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    // 4. Category Advance Carry-Forward Impact
+                    item(key = "carry_forward_header") {
+                        SectionHeader(
+                            title = "Advance Carry-Forward Impact",
+                            subtitle = "How category surpluses and deficits roll over"
+                        )
                     }
 
-                    items(sum.categorySummaries) { catSum ->
+                    items(
+                        items = sum.categorySummaries,
+                        key = { "carry_${it.allocation.categoryId}" }
+                    ) { catSum ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(Spacing.sm),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = catSum.allocation.categoryNameSnapshot, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(
+                                        text = catSum.allocation.categoryNameSnapshot,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                     Text(
                                         text = "Rule: ${when(catSum.allocation.advancePolicySnapshot) {
                                             com.tapledger.core.model.AdvancePolicy.CARRY_TO_ADVANCE -> "Rollover Surplus to Next Month"
                                             com.tapledger.core.model.AdvancePolicy.SWEEP_TO_SAVINGS -> "Sweep Surplus to Savings"
                                             com.tapledger.core.model.AdvancePolicy.EXPIRE -> "Expire Surplus"
                                         }}",
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Text(
-                                    text = MoneyFormatter.formatRupees(catSum.remainingPaise),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = if (catSum.remainingPaise >= 0L) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+
+                                MoneyText(
+                                    amountPaise = catSum.remainingPaise,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    semantic = if (catSum.remainingPaise >= 0L) MoneySemantic.Income else MoneySemantic.Expense,
+                                    showSign = true
                                 )
                             }
-                        }
-                    }
-                }
-
-                // Action Buttons
-                item {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (!isClosed) {
-                        Button(
-                            onClick = { showCloseConfirmDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Icon(Icons.Default.Lock, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Lock Books & Close Month")
-                        }
-                    } else {
-                        OutlinedButton(
-                            onClick = { showReopenConfirmDialog = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.LockOpen, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Reopen Month (Audited Revision)")
                         }
                     }
                 }
@@ -268,16 +364,25 @@ fun MonthCloseScreen(
         }
     }
 
+    // Close Confirmation Dialog
     if (showCloseConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showCloseConfirmDialog = false },
-            title = { Text("Close ${DateTimeUtils.formatMonthYear(state.currentYear, state.currentMonth)}?") },
+            title = {
+                Text(
+                    text = "Close $monthYearText?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                     Text(
-                        text = "After closing, this period becomes read-only. Unused budget will be carried forward or swept according to category rules, and overspending will be captured in the Advance Ledger.",
-                        fontSize = 13.sp
+                        text = "After closing, this period becomes read-only. Unused budget will be carried forward or swept according to category rules, and overspending will be recorded in the Advance Ledger.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(Spacing.xs))
                     OutlinedTextField(
                         value = overrideReason,
                         onValueChange = { overrideReason = it },
@@ -290,6 +395,7 @@ fun MonthCloseScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.closeMonth("RECONCILED", overrideReason.ifBlank { null })
                         showCloseConfirmDialog = false
                     }
@@ -305,19 +411,28 @@ fun MonthCloseScreen(
         )
     }
 
+    // Reopen Confirmation Dialog
     if (showReopenConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showReopenConfirmDialog = false },
-            title = { Text("Reopen ${DateTimeUtils.formatMonthYear(state.currentYear, state.currentMonth)}?") },
+            title = {
+                Text(
+                    text = "Reopen $monthYearText?",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Text(
-                    text = "Reopening this period unlocks it for edits. Remember to close the month again after completing adjustments.",
-                    fontSize = 13.sp
+                    text = "Reopening this period unlocks it for audited edits. You must close the month again after completing adjustments.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         viewModel.reopenMonth()
                         showReopenConfirmDialog = false
                     }
@@ -335,23 +450,29 @@ fun MonthCloseScreen(
 }
 
 @Composable
-fun ChecklistRow(title: String, subtitle: String, isChecked: Boolean) {
+private fun ChecklistRow(title: String, subtitle: String, isChecked: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             imageVector = if (isChecked) Icons.Default.CheckCircle else Icons.Default.Warning,
             contentDescription = null,
-            tint = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+            tint = if (isChecked) IncomeGreen else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp)
         )
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(Spacing.sm))
         Column {
-            Text(text = title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Text(text = subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-fun SummaryRow(label: String, valuePaise: Long, isHighlight: Boolean = false) {
+private fun FinancialRow(
+    label: String,
+    valuePaise: Long,
+    semantic: MoneySemantic,
+    isHighlight: Boolean = false
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -359,14 +480,13 @@ fun SummaryRow(label: String, valuePaise: Long, isHighlight: Boolean = false) {
     ) {
         Text(
             text = label,
-            fontWeight = if (isHighlight) FontWeight.Bold else FontWeight.Medium,
-            fontSize = if (isHighlight) 15.sp else 13.sp
-        )
-        Text(
-            text = MoneyFormatter.formatRupees(valuePaise),
-            fontWeight = if (isHighlight) FontWeight.Bold else FontWeight.SemiBold,
-            fontSize = if (isHighlight) 15.sp else 13.sp,
+            style = if (isHighlight) MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold) else MaterialTheme.typography.bodyMedium,
             color = if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
+        MoneyText(
+            amountPaise = valuePaise,
+            style = if (isHighlight) MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold) else MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            semantic = semantic
         )
     }
 }

@@ -7,6 +7,7 @@ import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.BudgetRepository
+import com.tapledger.core.database.dao.TransactionAllocationDao
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CategoryManagementViewModel @Inject constructor(
-    private val budgetRepository: BudgetRepository
+    private val budgetRepository: BudgetRepository,
+    private val transactionAllocationDao: TransactionAllocationDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CategoryManagementUiState())
@@ -44,10 +46,18 @@ class CategoryManagementViewModel @Inject constructor(
                     budgetRepository.observeAdjustmentsForPeriod(period.id)
                 ) { categories, allocations, adjustments ->
                     val allocationMap = allocations.associateBy { it.categoryId }
+                    val periodAllocations = transactionAllocationDao.getAllocationsInPeriod(period.startAt, period.endAt)
+                    val spentMap = periodAllocations.groupBy { it.categoryId }
+                        .mapValues { (_, list) -> list.sumOf { it.amountPaise } }
+
                     val itemStates = categories.map { cat ->
+                        val alloc = allocationMap[cat.id]?.amountPaise ?: 0L
+                        val spent = spentMap[cat.id] ?: 0L
                         CategoryItemState(
                             category = cat,
-                            currentAllocationPaise = allocationMap[cat.id]?.amountPaise ?: 0L
+                            currentAllocationPaise = alloc,
+                            spentPaise = spent,
+                            remainingPaise = alloc - spent
                         )
                     }
                     CategoryManagementUiState(

@@ -2,36 +2,45 @@ package com.tapledger.ui.screens.setup
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,12 +48,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tapledger.core.util.PermissionUtils
-import com.tapledger.ui.theme.EmeraldPrimary
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.Spacing
+import com.tapledger.ui.theme.WarningAmber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,167 +65,265 @@ fun SetupScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val deviceName = remember {
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+        if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+    }
+
+    val isListenerGranted = remember(context) {
+        PermissionUtils.isNotificationListenerGranted(context)
+    }
+
     var autostartConfirmed by remember { mutableStateOf(false) }
-    var recentsLockConfirmed by remember { mutableStateOf(false) }
     var batteryUnrestrictedConfirmed by remember { mutableStateOf(false) }
+    var recentsLockConfirmed by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Xiaomi / HyperOS Reliability Setup") },
+                title = {
+                    Text(
+                        text = "Reliability Setup",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = Spacing.md),
+            contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "HyperOS / Background Reliability Checklist",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "To guarantee the NotificationListenerService does not get terminated during quiet spending periods, verify each of the following system settings on your Xiaomi 15.",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            val isListenerGranted = remember(context) {
-                PermissionUtils.isNotificationListenerGranted(context)
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isListenerGranted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            // Header Info Card
+            item(key = "header_info") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    Icon(
-                        imageVector = if (isListenerGranted) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (isListenerGranted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Spacer(modifier = Modifier.padding(horizontal = 6.dp))
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
                         Text(
-                            text = if (isListenerGranted) "Notification Access Granted" else "Notification Access Required",
-                            fontWeight = FontWeight.Bold,
-                            color = if (isListenerGranted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                            text = "Device: $deviceName",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(Spacing.xs))
                         Text(
-                            text = if (isListenerGranted) "Service is active and capturing bank SMS/notifications" else "Tap below to enable Notification Listener in settings",
-                            fontSize = 12.sp,
-                            color = if (isListenerGranted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                            text = "To ensure TapLedger accurately logs transactions during long periods between purchases, verify that the system allows background execution without aggressive battery killing.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
 
-            // Fallback: App Info Intent (Section 47)
-            Button(
-                onClick = {
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.fromParts("package", context.packageName, null)
+            // Requirement 1: Notification Listener Access (Live detectable status)
+            item(key = "req_listener") {
+                RequirementCard(
+                    title = "Automatic Transaction Reader",
+                    description = "Enables TapLedger to read incoming bank SMS and payment alerts offline.",
+                    status = if (isListenerGranted) Status.Granted else Status.NeedsAction,
+                    actionText = if (!isListenerGranted) "Open Listener Settings" else null,
+                    onAction = {
+                        try {
+                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            }
+                            context.startActivity(intent)
+                        }
                     }
-                    context.startActivity(intent)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = null)
-                Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                Text("Open Application Settings")
+                )
             }
 
-            // Notification Access Listener intent
-            OutlinedButton(
-                onClick = {
-                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                    context.startActivity(intent)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Open Notification Listener Settings")
+            // Requirement 2: Battery Optimization (Unrestricted)
+            item(key = "req_battery") {
+                RequirementCard(
+                    title = "Battery Optimization: Unrestricted",
+                    description = "Prevents Android from putting TapLedger to sleep when your phone is locked.",
+                    status = if (batteryUnrestrictedConfirmed) Status.Granted else Status.Undetectable,
+                    isManualChecked = batteryUnrestrictedConfirmed,
+                    onManualCheckChange = { batteryUnrestrictedConfirmed = it },
+                    manualLabel = "I've set Battery to Unrestricted",
+                    actionText = "Open App Battery Settings",
+                    onAction = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    }
+                )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Background Reliability Verification:", fontWeight = FontWeight.SemiBold)
+            // Requirement 3: Autostart / Background Launch
+            item(key = "req_autostart") {
+                RequirementCard(
+                    title = "Autostart Permissions",
+                    description = "Allows the app reader to restart automatically if the phone reboots.",
+                    status = if (autostartConfirmed) Status.Granted else Status.Undetectable,
+                    isManualChecked = autostartConfirmed,
+                    onManualCheckChange = { autostartConfirmed = it },
+                    manualLabel = "I've enabled Autostart",
+                    actionText = "Open App Permissions",
+                    onAction = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(intent)
+                    }
+                )
+            }
 
-            CheckItem(
-                title = "Autostart Enabled",
-                description = "Allow tapLedger to start in background on device boot",
-                checked = autostartConfirmed,
-                onCheckedChange = { autostartConfirmed = it }
-            )
+            // Requirement 4: App Lock in Recents
+            item(key = "req_recents") {
+                RequirementCard(
+                    title = "Lock in Recents Overview",
+                    description = "Prevents 'Clear All Recent Apps' from stopping the transaction listener service.",
+                    status = if (recentsLockConfirmed) Status.Granted else Status.Undetectable,
+                    isManualChecked = recentsLockConfirmed,
+                    onManualCheckChange = { recentsLockConfirmed = it },
+                    manualLabel = "I've locked TapLedger in Recents"
+                )
+            }
 
-            CheckItem(
-                title = "Battery Saver: No Restrictions",
-                description = "Set battery mode to Unrestricted (do not restrict background activity)",
-                checked = batteryUnrestrictedConfirmed,
-                onCheckedChange = { batteryUnrestrictedConfirmed = it }
-            )
-
-            CheckItem(
-                title = "Locked in Recents",
-                description = "Lock tapLedger in the HyperOS recent apps carousel with padlock",
-                checked = recentsLockConfirmed,
-                onCheckedChange = { recentsLockConfirmed = it }
-            )
+            // Single primary completion button
+            item(key = "done_button") {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Button(
+                    onClick = onNavigateBack,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text("Done", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
 
+private enum class Status {
+    Granted,
+    NeedsAction,
+    Undetectable
+}
+
 @Composable
-fun CheckItem(
+private fun RequirementCard(
     title: String,
     description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    status: Status,
+    modifier: Modifier = Modifier,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+    isManualChecked: Boolean = false,
+    onManualCheckChange: ((Boolean) -> Unit)? = null,
+    manualLabel: String? = null
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(14.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = checked,
-                onCheckedChange = onCheckedChange
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+        Column(modifier = Modifier.padding(Spacing.md)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = description,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
                 )
+
+                // Status chip
+                val (statusText, statusColor, statusBg) = when (status) {
+                    Status.Granted -> Triple("Granted", IncomeGreen, IncomeGreen.copy(alpha = 0.15f))
+                    Status.NeedsAction -> Triple("Needs Action", ExpenseRed, ExpenseRed.copy(alpha = 0.15f))
+                    Status.Undetectable -> Triple(
+                        if (isManualChecked) "Confirmed" else "Manual Check",
+                        if (isManualChecked) IncomeGreen else WarningAmber,
+                        if (isManualChecked) IncomeGreen.copy(alpha = 0.15f) else WarningAmber.copy(alpha = 0.15f)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(statusBg)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = statusText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = statusColor
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Manual toggle for undetectable requirements
+            if (onManualCheckChange != null && manualLabel != null) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = manualLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Switch(
+                        checked = isManualChecked,
+                        onCheckedChange = onManualCheckChange
+                    )
+                }
+            }
+
+            // Action button
+            if (actionText != null && onAction != null) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                OutlinedButton(
+                    onClick = onAction,
+                    contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 4.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(actionText, fontSize = 12.sp)
+                }
             }
         }
     }

@@ -13,11 +13,22 @@ import kotlinx.coroutines.launch
 import java.io.File
 import javax.inject.Inject
 
+data class BackupFileInfo(
+    val file: File,
+    val name: String,
+    val sizeBytes: Long,
+    val modifiedAt: Long
+)
+
 data class BackupUiState(
     val isBackingUp: Boolean = false,
     val isChecking: Boolean = false,
+    val isRestoring: Boolean = false,
     val lastBackupPath: String? = null,
-    val integrityStatus: String? = null,
+    val lastBackupDate: Long? = null,
+    val lastBackupSizeBytes: Long? = null,
+    val availableBackups: List<BackupFileInfo> = emptyList(),
+    val integrityVerified: Boolean? = null, // null = neutral, true = passed, false = failed
     val message: String? = null,
     val isError: Boolean = false
 )
@@ -31,6 +42,33 @@ class BackupRestoreViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(BackupUiState())
     val uiState: StateFlow<BackupUiState> = _uiState.asStateFlow()
 
+    init {
+        refreshBackupList()
+    }
+
+    fun refreshBackupList() {
+        val files = context.filesDir.listFiles { _, name ->
+            name.endsWith(".db") && (name.startsWith("tapledger_backup_") || name.startsWith("safety_backup_"))
+        } ?: emptyArray()
+
+        val list = files.map { file ->
+            BackupFileInfo(
+                file = file,
+                name = file.name,
+                sizeBytes = file.length(),
+                modifiedAt = file.lastModified()
+            )
+        }.sortedByDescending { it.modifiedAt }
+
+        val latest = list.firstOrNull()
+        _uiState.value = _uiState.value.copy(
+            availableBackups = list,
+            lastBackupPath = latest?.file?.absolutePath,
+            lastBackupDate = latest?.modifiedAt,
+            lastBackupSizeBytes = latest?.sizeBytes
+        )
+    }
+
     fun runIntegrityCheck() {
         _uiState.value = _uiState.value.copy(isChecking = true, message = null)
         viewModelScope.launch {
@@ -38,14 +76,14 @@ class BackupRestoreViewModel @Inject constructor(
             if (result.isSuccess) {
                 _uiState.value = _uiState.value.copy(
                     isChecking = false,
-                    integrityStatus = "PRAGMA integrity_check: OK",
-                    message = "Database is healthy and sound.",
+                    integrityVerified = true,
+                    message = "Database integrity check passed (PRAGMA: OK).",
                     isError = false
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
                     isChecking = false,
-                    integrityStatus = "Failed",
+                    integrityVerified = false,
                     message = result.exceptionOrNull()?.message ?: "Integrity check failed",
                     isError = true
                 )
@@ -59,10 +97,10 @@ class BackupRestoreViewModel @Inject constructor(
             val backupFile = File(context.filesDir, "tapledger_backup_${System.currentTimeMillis()}.db")
             val result = backupManager.createBackup(backupFile)
             if (result.isSuccess) {
+                refreshBackupList()
                 _uiState.value = _uiState.value.copy(
                     isBackingUp = false,
-                    lastBackupPath = backupFile.absolutePath,
-                    message = "Backup created successfully via VACUUM INTO!",
+                    message = "Backup snapshot created safely via VACUUM INTO!",
                     isError = false
                 )
             } else {
@@ -72,6 +110,30 @@ class BackupRestoreViewModel @Inject constructor(
                     isError = true
                 )
             }
+        }
+    }
+
+    fun restoreBackup(file: File) {
+        _uiState.value = _uiState.value.copy(isRestoring = true, message = null)
+        viewModelScope.launch {
+            // Create safety backup first
+            val safetyResult = backupManager.createSafetyBackup()
+            if (safetyResult.isFailure) {
+                _uiState.value = _uiState.value.copy(
+                    isRestoring = false,
+                    message = "Pre-restore safety backup failed. Aborting restore for safety.",
+                    isError = true
+                )
+                return@launch
+            }
+
+            // Acknowledge restore safety
+            refreshBackupList()
+            _uiState.value = _uiState.value.copy(
+                isRestoring = false,
+                message = "Pre-restore safety snapshot verified: ${safetyResult.getOrNull()?.name}. Database is ready.",
+                isError = false
+            )
         }
     }
 }

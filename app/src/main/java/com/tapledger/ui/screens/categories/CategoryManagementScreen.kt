@@ -1,5 +1,6 @@
 package com.tapledger.ui.screens.categories
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,28 +17,27 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -45,43 +45,66 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.model.AdvancePolicy
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.ui.components.EmptyState
+import com.tapledger.ui.components.MoneySemantic
+import com.tapledger.ui.components.MoneyText
+import com.tapledger.ui.components.SectionHeader
+import com.tapledger.ui.components.SkeletonList
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.Spacing
+import com.tapledger.ui.theme.WarningAmber
+import com.tapledger.ui.theme.rememberAnimatedProgress
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryManagementScreen(
-    viewModel: CategoryManagementViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit
+    viewModel: CategoryManagementViewModel = hiltViewModel()
 ) {
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val isExpandedFab by remember {
+        derivedStateOf { listState.firstVisibleItemIndex == 0 }
+    }
+
     var showAddDialog by remember { mutableStateOf(false) }
-    var editingCategory by remember { mutableStateOf<CategoryItemState?>(null) }
     var showTransferDialog by remember { mutableStateOf(false) }
+    var editingCategoryItem by remember { mutableStateOf<CategoryItemState?>(null) }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
@@ -91,153 +114,96 @@ fun CategoryManagementScreen(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text("Categories & Budget") },
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        text = "Categories & Budget",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 actions = {
-                    IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add Category")
-                    }
                     IconButton(onClick = { showTransferDialog = true }) {
-                        Icon(Icons.Default.SwapHoriz, contentDescription = "Transfer Budget")
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = "Transfer Budget"
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.largeTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                scrollBehavior = scrollBehavior
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                text = { Text("New Category") },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                expanded = isExpandedFab,
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        }
     ) { padding ->
         if (state.isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
+                    .padding(padding)
+                    .padding(Spacing.md)
             ) {
-                CircularProgressIndicator()
+                SkeletonList(itemCount = 6)
             }
+        } else if (state.categories.isEmpty()) {
+            EmptyState(
+                title = "No categories yet",
+                subtitle = "Set up your 50/30/20 budget envelopes by creating your first category.",
+                icon = Icons.Default.PieChart,
+                actionLabel = "New Category",
+                onActionClick = { showAddDialog = true },
+                modifier = Modifier.padding(padding)
+            )
         } else {
             val categoriesByBucket = state.categories.groupBy { it.category.defaultBucket }
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = Spacing.md),
+                contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Monthly Budget Allocations",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-                                Text(
-                                    text = "Manage bucket categories, default advance rules, and intra-month budget transfers.",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            OutlinedButton(
-                                onClick = { showTransferDialog = true },
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Transfer", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
+                listOf(BudgetBucket.NEEDS, BudgetBucket.WANTS, BudgetBucket.SAVINGS).forEach { bucket ->
+                    val bucketItems = categoriesByBucket[bucket] ?: emptyList()
+                    if (bucketItems.isNotEmpty()) {
+                        val totalAllocated = bucketItems.sumOf { it.currentAllocationPaise }
+                        val totalSpent = bucketItems.sumOf { it.spentPaise }
+                        val totalRemaining = totalAllocated - totalSpent
 
-                BudgetBucket.entries.forEach { bucket ->
-                    val bucketItems = categoriesByBucket[bucket].orEmpty()
-                    item {
-                        Text(
-                            text = bucket.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    if (bucketItems.isEmpty()) {
-                        item {
-                            Text(
-                                text = "No categories in ${bucket.name}",
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        item(key = "header_${bucket.name}") {
+                            BucketSectionHeader(
+                                bucket = bucket,
+                                totalAllocated = totalAllocated,
+                                totalSpent = totalSpent,
+                                totalRemaining = totalRemaining
                             )
                         }
-                    } else {
-                        items(bucketItems, key = { it.category.id }) { itemState ->
-                            CategoryCard(
+
+                        items(
+                            items = bucketItems,
+                            key = { it.category.id }
+                        ) { itemState ->
+                            CategoryManageRow(
                                 itemState = itemState,
-                                onEdit = { editingCategory = itemState },
-                                onDelete = { viewModel.deactivateCategory(itemState.category.id) }
+                                onEdit = { editingCategoryItem = itemState }
                             )
-                        }
-                    }
-                }
-
-                if (state.adjustments.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Recent Budget Reallocations",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    items(state.adjustments, key = { it.id }) { adj ->
-                        val fromName = state.categories.find { it.category.id == adj.fromCategoryId }?.category?.name ?: "Category ${adj.fromCategoryId}"
-                        val toName = state.categories.find { it.category.id == adj.toCategoryId }?.category?.name ?: "Category ${adj.toCategoryId}"
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(12.dp)
-                                    .fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "$fromName → $toName",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 14.sp
-                                    )
-                                    adj.reason?.let { r ->
-                                        if (r.isNotBlank()) {
-                                            Text(
-                                                text = "Reason: $r",
-                                                fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                                Text(
-                                    text = MoneyFormatter.formatRupees(adj.amountPaise),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
                     }
                 }
@@ -245,9 +211,10 @@ fun CategoryManagementScreen(
         }
     }
 
+    // Add Category Dialog
     if (showAddDialog) {
         AddEditCategoryDialog(
-            title = "Add New Category",
+            title = "New Budget Category",
             initialName = "",
             initialBucket = BudgetBucket.NEEDS,
             initialAdvancePolicy = AdvancePolicy.CARRY_TO_ADVANCE,
@@ -260,14 +227,15 @@ fun CategoryManagementScreen(
         )
     }
 
-    editingCategory?.let { itemState ->
+    // Edit Allocation Dialog
+    editingCategoryItem?.let { itemState ->
         AddEditCategoryDialog(
-            title = "Edit Category",
+            title = "Edit ${itemState.category.name}",
             initialName = itemState.category.name,
             initialBucket = itemState.category.defaultBucket,
             initialAdvancePolicy = itemState.category.defaultAdvancePolicy,
-            initialBudgetRupees = (itemState.currentAllocationPaise / 100.0).let { if (it > 0) "%.2f".format(it) else "" },
-            onDismiss = { editingCategory = null },
+            initialBudgetRupees = (itemState.currentAllocationPaise / 100).toString(),
+            onDismiss = { editingCategoryItem = null },
             onSave = { name, bucket, advancePolicy, budgetRupees ->
                 viewModel.updateCategory(
                     categoryId = itemState.category.id,
@@ -276,14 +244,16 @@ fun CategoryManagementScreen(
                     advancePolicy = advancePolicy,
                     newBudgetRupees = budgetRupees
                 )
-                editingCategory = null
+                editingCategoryItem = null
             }
         )
     }
 
+    // Transfer Budget Dialog
     if (showTransferDialog) {
+        val activeCategories = state.categories.map { it.category }
         TransferBudgetDialog(
-            categories = state.categories.map { it.category },
+            categories = activeCategories,
             onDismiss = { showTransferDialog = false },
             onTransfer = { fromId, toId, amountRupees, reason ->
                 viewModel.transferBudget(fromId, toId, amountRupees, reason)
@@ -294,49 +264,195 @@ fun CategoryManagementScreen(
 }
 
 @Composable
-fun CategoryCard(
-    itemState: CategoryItemState,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+private fun BucketSectionHeader(
+    bucket: BudgetBucket,
+    totalAllocated: Long,
+    totalSpent: Long,
+    totalRemaining: Long
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    val bucketTitle = when (bucket) {
+        BudgetBucket.NEEDS -> "Needs (50%)"
+        BudgetBucket.WANTS -> "Wants (30%)"
+        BudgetBucket.SAVINGS -> "Savings (20%)"
+        BudgetBucket.UNALLOCATED -> "Unallocated Pool"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Spacing.sm, bottom = Spacing.xxs)
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = itemState.category.name,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Policy: ${when(itemState.category.defaultAdvancePolicy) {
-                        AdvancePolicy.CARRY_TO_ADVANCE -> "Carry Forward"
-                        AdvancePolicy.SWEEP_TO_SAVINGS -> "Sweep to Savings"
-                        AdvancePolicy.EXPIRE -> "Expire"
-                    }}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = bucketTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = MoneyFormatter.formatRupees(itemState.currentAllocationPaise),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.primary
+                    text = "Spent ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit Category", tint = MaterialTheme.colorScheme.primary)
+                MoneyText(
+                    amountPaise = totalSpent,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    semantic = MoneySemantic.Expense
+                )
+                Text(
+                    text = " / ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MoneyText(
+                    amountPaise = totalAllocated,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    semantic = MoneySemantic.Neutral
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryManageRow(
+    itemState: CategoryItemState,
+    onEdit: () -> Unit
+) {
+    val totalBudget = itemState.currentAllocationPaise
+    val spent = itemState.spentPaise
+    val remaining = itemState.remainingPaise
+
+    val rawProgress = if (totalBudget > 0L) spent.toFloat() / totalBudget.toFloat() else 0f
+    val animatedProgress by rememberAnimatedProgress(targetFraction = rawProgress.coerceIn(0f, 1f))
+
+    // Default policies per bucket
+    val bucketDefaultPolicy = when (itemState.category.defaultBucket) {
+        BudgetBucket.NEEDS -> AdvancePolicy.CARRY_TO_ADVANCE
+        BudgetBucket.WANTS -> AdvancePolicy.EXPIRE
+        BudgetBucket.SAVINGS -> AdvancePolicy.SWEEP_TO_SAVINGS
+        BudgetBucket.UNALLOCATED -> AdvancePolicy.EXPIRE
+    }
+    val hasCustomPolicy = itemState.category.defaultAdvancePolicy != bucketDefaultPolicy
+
+    val isOverBudget = spent > totalBudget && totalBudget > 0L
+    val progressColor = when {
+        isOverBudget -> ExpenseRed
+        rawProgress >= 0.8f -> WarningAmber
+        else -> IncomeGreen
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onEdit)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${itemState.category.name}: allocated ${totalBudget / 100} rupees, spent ${spent / 100} rupees, remaining ${remaining / 100} rupees"
+            },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Text(
+                        text = itemState.category.name,
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    // Show Policy badge ONLY when it differs from bucket default
+                    if (hasCustomPolicy) {
+                        val policyLabel = when (itemState.category.defaultAdvancePolicy) {
+                            AdvancePolicy.CARRY_TO_ADVANCE -> "Carry"
+                            AdvancePolicy.SWEEP_TO_SAVINGS -> "Sweep"
+                            AdvancePolicy.EXPIRE -> "Expire"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "Policy: $policyLabel",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                MoneyText(
+                    amountPaise = totalBudget,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    semantic = MoneySemantic.Neutral
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            // Single continuous progress track
+            LinearProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp)),
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                strokeCap = StrokeCap.Round
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Spent: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    MoneyText(
+                        amountPaise = spent,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        semantic = MoneySemantic.Expense
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (remaining >= 0) "Left: " else "Exceeded: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    MoneyText(
+                        amountPaise = kotlin.math.abs(remaining),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        semantic = if (remaining >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                    )
                 }
             }
         }
@@ -360,7 +476,13 @@ fun AddEditCategoryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(
                 modifier = Modifier
@@ -408,9 +530,9 @@ fun AddEditCategoryDialog(
                             )
                             Text(
                                 text = when (bucket) {
-                                    BudgetBucket.NEEDS -> "Needs (Essential Living)"
-                                    BudgetBucket.WANTS -> "Wants (Discretionary)"
-                                    BudgetBucket.SAVINGS -> "Savings (Investments & Goals)"
+                                    BudgetBucket.NEEDS -> "Needs (Essential Living - 50%)"
+                                    BudgetBucket.WANTS -> "Wants (Discretionary - 30%)"
+                                    BudgetBucket.SAVINGS -> "Savings (Investments & Goals - 20%)"
                                     else -> bucket.name
                                 },
                                 fontSize = 13.sp
@@ -485,7 +607,13 @@ fun TransferBudgetDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Transfer Intra-Month Budget") },
+        title = {
+            Text(
+                text = "Transfer Intra-Month Budget",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(
                 modifier = Modifier

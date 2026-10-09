@@ -1,8 +1,14 @@
 package com.tapledger.ui.screens.pending
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,238 +16,425 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.BudgetBucket
-import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.core.util.PermissionUtils
 import com.tapledger.ui.components.EmptyState
+import com.tapledger.ui.components.MoneySemantic
 import com.tapledger.ui.components.MoneyText
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.Spacing
+import com.tapledger.ui.theme.WarningAmber
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PendingInboxScreen(
     viewModel: PendingInboxViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToSetup: () -> Unit = {}
 ) {
-    val pendingTxs by viewModel.pendingTransactions.collectAsState()
-    val categories by viewModel.categories.collectAsState()
-    val suggestedMap by viewModel.suggestedCategoryMap.collectAsState()
+    val pendingTxs by viewModel.pendingTransactions.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val suggestedMap by viewModel.suggestedCategoryMap.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val isListenerActive = remember(context) {
+        PermissionUtils.isNotificationListenerGranted(context)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Pending Inbox (${pendingTxs.size})") },
+                title = {
+                    Text(
+                        text = "Pending Inbox (${pendingTxs.size})",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
-                }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToSetup) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Reliability Setup"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         if (pendingTxs.isEmpty()) {
-            EmptyState(
-                title = "Inbox Zero!",
-                subtitle = "All captured transactions have been classified into budget categories.",
-                modifier = Modifier.padding(padding)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                EmptyState(
+                    title = "Inbox Zero",
+                    subtitle = "All captured SMS and UPI transactions are classified into budget envelopes.",
+                    icon = Icons.Default.CheckCircle,
+                    actionLabel = if (!isListenerActive) "Enable Listener Setup" else null,
+                    onActionClick = if (!isListenerActive) onNavigateToSetup else null
+                )
+
+                Spacer(modifier = Modifier.height(Spacing.sm))
+
+                // Listener health indicator
+                Card(
+                    modifier = Modifier.padding(horizontal = Spacing.lg),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isListenerActive) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.errorContainer
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HealthAndSafety,
+                            contentDescription = null,
+                            tint = if (isListenerActive) IncomeGreen else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text(
+                            text = if (isListenerActive) "Financial Notification Listener active" else "Listener inactive — tap to fix",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isListenerActive) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
         } else {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(horizontal = Spacing.md),
+                contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                items(pendingTxs, key = { it.id }) { tx ->
+                items(
+                    items = pendingTxs,
+                    key = { it.id }
+                ) { tx ->
                     val suggestedCat = categories.find { it.id == suggestedMap[tx.id] }
-                    PendingTransactionCard(
-                        tx = tx,
-                        categories = categories,
-                        suggestedCategory = suggestedCat,
-                        onCategorize = { catId ->
-                            viewModel.categorizeTransaction(tx.id, catId, tx.amountPaise)
-                        },
-                        onVoid = {
-                            viewModel.voidTransaction(tx.id)
+
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { dismissValue ->
+                            when (dismissValue) {
+                                SwipeToDismissBoxValue.StartToEnd -> {
+                                    // Swipe right = apply suggested category or first category
+                                    val targetCatId = suggestedCat?.id ?: categories.firstOrNull()?.id
+                                    if (targetCatId != null) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        viewModel.categorizeTransaction(tx.id, targetCatId, tx.amountPaise)
+                                    }
+                                    true
+                                }
+                                SwipeToDismissBoxValue.EndToStart -> {
+                                    // Swipe left = ignore / void with undo snackbar
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    viewModel.voidTransaction(tx.id)
+                                    coroutineScope.launch {
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = "Transaction ignored",
+                                            actionLabel = "Undo",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            // restore
+                                        }
+                                    }
+                                    true
+                                }
+                                else -> false
+                            }
                         }
                     )
+
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        modifier = Modifier.animateItem(),
+                        backgroundContent = {
+                            val color = when (dismissState.targetValue) {
+                                SwipeToDismissBoxValue.StartToEnd -> IncomeGreen.copy(alpha = 0.2f)
+                                SwipeToDismissBoxValue.EndToStart -> ExpenseRed.copy(alpha = 0.2f)
+                                else -> MaterialTheme.colorScheme.surfaceContainer
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(color)
+                                    .padding(horizontal = Spacing.lg),
+                                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd)
+                                    Alignment.CenterStart else Alignment.CenterEnd
+                            ) {
+                                if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Done, contentDescription = "Categorize", tint = IncomeGreen)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Apply Suggestion", fontWeight = FontWeight.Bold, color = IncomeGreen)
+                                    }
+                                } else {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Ignore", fontWeight = FontWeight.Bold, color = ExpenseRed)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(Icons.Default.DeleteSweep, contentDescription = "Ignore", tint = ExpenseRed)
+                                    }
+                                }
+                            }
+                        }
+                    ) {
+                        PendingTransactionCard(
+                            tx = tx,
+                            categories = categories,
+                            suggestedCategory = suggestedCat,
+                            onCategorize = { catId ->
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.categorizeTransaction(tx.id, catId, tx.amountPaise)
+                            },
+                            onVoid = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.voidTransaction(tx.id)
+                            }
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PendingTransactionCard(
+private fun PendingTransactionCard(
     tx: TransactionEntity,
     categories: List<CategoryEntity>,
     suggestedCategory: CategoryEntity? = null,
     onCategorize: (Long) -> Unit,
     onVoid: () -> Unit
 ) {
-    var showCategoryMenu by remember { mutableStateOf(false) }
-    var selectedBucketFilter by remember { mutableStateOf<BudgetBucket?>(null) }
-
-    val filteredCategories = if (selectedBucketFilter != null) {
-        categories.filter { it.defaultBucket == selectedBucketFilter }
-    } else {
-        categories
-    }
+    var expandedBucket by remember { mutableStateOf<BudgetBucket?>(null) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Pending transaction: ${tx.merchantRaw ?: "Transaction"} of ${tx.amountPaise / 100} rupees"
+            },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = tx.merchantRaw ?: "Transaction",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                        text = tx.merchantRaw ?: "Captured Expense",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = DateTimeUtils.formatDateTime(tx.occurredAt),
-                        fontSize = 12.sp,
+                        text = "${DateTimeUtils.formatDateTime(tx.occurredAt)} • ${tx.source.name}",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
                 MoneyText(
                     amountPaise = tx.amountPaise,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    semantic = MoneySemantic.Expense
                 )
             }
 
+            // 1-Tap Suggested Category Apply Button (if suggestion exists)
             if (suggestedCategory != null) {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(Spacing.xs))
                 Button(
                     onClick = { onCategorize(suggestedCategory.id) },
                     modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 ) {
-                    Text("✨ Suggested: ${suggestedCategory.name} (1-Tap Apply)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Assign to bucket:",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            fun onBucketSelected(bucket: BudgetBucket) {
-                val matching = categories.filter { it.defaultBucket == bucket }
-                if (matching.size == 1) {
-                    onCategorize(matching.first().id)
-                } else {
-                    selectedBucketFilter = bucket
-                    showCategoryMenu = true
-                }
-            }
-
-            // Tier 1 Bucket Buttons (Section 41)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = { onBucketSelected(BudgetBucket.NEEDS) },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
-                ) {
-                    Text("Needs", fontSize = 12.sp)
-                }
-                Button(
-                    onClick = { onBucketSelected(BudgetBucket.WANTS) },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
-                ) {
-                    Text("Wants", fontSize = 12.sp)
-                }
-                Button(
-                    onClick = { onBucketSelected(BudgetBucket.SAVINGS) },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
-                ) {
-                    Text("Savings", fontSize = 12.sp)
-                }
-            }
-
-            DropdownMenu(
-                expanded = showCategoryMenu,
-                onDismissRequest = { showCategoryMenu = false }
-            ) {
-                filteredCategories.forEach { cat ->
-                    DropdownMenuItem(
-                        text = { Text(cat.name) },
-                        onClick = {
-                            showCategoryMenu = false
-                            onCategorize(cat.id)
-                        }
+                    Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(Spacing.xs))
+                    Text(
+                        text = "1-Tap Apply: ${suggestedCategory.name} (${suggestedCategory.defaultBucket.name})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(Spacing.xs))
 
-            // Action row (Skip / Void / Ignore)
+            // Bucket Chips (≤ 2 taps categorization)
+            Text(
+                text = "Assign Bucket:",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                listOf(
+                    BudgetBucket.NEEDS to "Needs",
+                    BudgetBucket.WANTS to "Wants",
+                    BudgetBucket.SAVINGS to "Savings"
+                ).forEach { (bucket, label) ->
+                    val isSelected = expandedBucket == bucket
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            val bucketCats = categories.filter { it.defaultBucket == bucket }
+                            if (bucketCats.size == 1) {
+                                // Exactly 1 category in this bucket: 1-tap categorization!
+                                onCategorize(bucketCats.first().id)
+                            } else {
+                                // Toggle bucket subcategory selection
+                                expandedBucket = if (isSelected) null else bucket
+                            }
+                        },
+                        label = { Text(label, fontSize = 12.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            // Expanded Sub-categories under the selected bucket (2nd tap!)
+            AnimatedVisibility(visible = expandedBucket != null) {
+                val bucketCats = categories.filter { it.defaultBucket == expandedBucket }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Spacing.xs)
+                ) {
+                    Text(
+                        text = "Select Category in ${expandedBucket?.name}:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        bucketCats.forEach { cat ->
+                            AssistChip(
+                                onClick = { onCategorize(cat.id) },
+                                label = { Text(cat.name, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            // Ignore action
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                Button(
+                OutlinedButton(
                     onClick = onVoid,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 2.dp)
                 ) {
-                    Text("Ignore / Void", fontSize = 12.sp)
+                    Text("Ignore", fontSize = 11.sp)
                 }
             }
         }

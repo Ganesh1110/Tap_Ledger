@@ -7,6 +7,11 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,65 +33,79 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Backup
-import androidx.compose.material.icons.filled.Category
-import androidx.compose.material.icons.filled.HealthAndSafety
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.tapledger.core.model.MoneyFormatter
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.PermissionUtils
-import com.tapledger.domain.model.AccountBalanceSummary
 import com.tapledger.domain.model.BudgetCategorySummary
-import com.tapledger.ui.components.DonutChart
-import com.tapledger.ui.components.DonutSlice
+import com.tapledger.domain.model.BudgetPeriodSummary
+import com.tapledger.ui.components.AccountCard
+import com.tapledger.ui.components.BucketProgressCard
+import com.tapledger.ui.components.MoneyIndicator
+import com.tapledger.ui.components.MoneySemantic
 import com.tapledger.ui.components.MoneyText
-import com.tapledger.ui.theme.AmberWarning
-import com.tapledger.ui.theme.EmeraldPrimary
+import com.tapledger.ui.components.SectionHeader
+import com.tapledger.ui.components.SkeletonCard
+import com.tapledger.ui.components.SkeletonList
+import com.tapledger.ui.components.StatBlock
+import com.tapledger.ui.components.TransactionRow
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
-import com.tapledger.ui.theme.RoseError
+import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
+import com.tapledger.ui.theme.rememberAnimatedProgress
 
 @Composable
 fun DashboardScreen(
@@ -104,7 +123,7 @@ fun DashboardScreen(
     onNavigateToDiagnostics: () -> Unit
 ) {
     val context = LocalContext.current
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     // Request POST_NOTIFICATIONS runtime permission on Android 13+ (API 33)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -127,243 +146,433 @@ fun DashboardScreen(
         PermissionUtils.isNotificationListenerGranted(context)
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadDashboard()
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
+    val isExpandedFab by remember {
+        derivedStateOf { listState.firstVisibleItemIndex == 0 }
     }
 
-    Scaffold { padding ->
+    Scaffold(
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                text = { Text("Add Transaction") },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                expanded = isExpandedFab,
+                onClick = onNavigateToManualEntry,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        }
+    ) { padding ->
         if (state.isLoading) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
+                    .padding(padding)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                CircularProgressIndicator()
+                SkeletonCard(height = 64.dp)
+                SkeletonCard(height = 140.dp)
+                SkeletonList(itemCount = 3)
             }
         } else {
-            val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
+            var showSettingsMenu by remember { mutableStateOf(false) }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
-                contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = Spacing.md),
+                contentPadding = PaddingValues(top = Spacing.md, bottom = Spacing.listBottomPadding),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                // 1. Month Header & Quick Navigation
-                item {
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = DateTimeUtils.formatMonthYear(state.currentYear, state.currentMonth),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "● Secure (Offline)",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = IncomeGreen
-                            )
-                        }
-                        state.netWorth?.let { nw ->
-                            Text(
-                                text = "Net Worth: ${MoneyFormatter.formatRupees(nw.netWorthPaise)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                    }
-                }
-
-                // Quick Action Pill Bar
-                item {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(horizontal = 2.dp)
-                    ) {
-                        item {
-                            AssistChip(
-                                onClick = onNavigateToPending,
-                                label = { Text("📥 Pending (${state.pendingCount})") }
-                            )
-                        }
-                        item {
-                            AssistChip(
-                                onClick = onNavigateToStatements,
-                                label = { Text("📊 Reconcile") }
-                            )
-                        }
-                        item {
-                            AssistChip(
-                                onClick = onNavigateToMonthClose,
-                                label = { Text("🔒 Month Close") }
-                            )
-                        }
-                        item {
-                            AssistChip(
-                                onClick = onNavigateToDiagnostics,
-                                label = { Text("🛡️ Health") }
-                            )
-                        }
-                        item {
-                            AssistChip(
-                                onClick = onNavigateToBackup,
-                                label = { Text("💾 Backup") }
-                            )
-                        }
-                    }
-                }
-
-                // Permission Warning Banner if Notification Access is missing
-                if (!isListenerGranted) {
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.NotificationsOff,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Notification Access Required",
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                            fontSize = 15.sp
-                                        )
-                                        Text(
-                                            text = "TapLedger needs notification listener access to automatically capture bank SMS/UPI alerts.",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onErrorContainer
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                            context.startActivity(intent)
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.onErrorContainer,
-                                            contentColor = MaterialTheme.colorScheme.errorContainer
-                                        )
-                                    ) {
-                                        Text("Open Settings", fontSize = 11.sp)
-                                    }
-                                    OutlinedButton(
-                                        onClick = onNavigateToSetup,
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text("HyperOS Setup", fontSize = 11.sp)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 2. Pending Inbox Card (Section 44)
-                if (state.pendingCount > 0) {
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onNavigateToPending() },
-                            colors = CardDefaults.cardColors(
-                                containerColor = AmberWarning.copy(alpha = 0.15f)
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(16.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.NotificationsActive,
-                                    contentDescription = null,
-                                    tint = AmberWarning
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "${state.pendingCount} Pending Transactions",
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Affects real account balance; tap to classify",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3. Monthly Budget Summary Card (Section 6, 71)
-                state.budgetSummary?.let { bs ->
-                    item {
-                        BudgetOverviewCard(bs = bs)
-                    }
-                }
-
-                // 4. Account Balances Card (Section 8, 9, 23)
-                item {
-                    Text(
-                        text = "Accounts",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                items(state.accountSummaries) { accSummary ->
-                    AccountBalanceRow(summary = accSummary)
-                }
-
-                // 5. Category Budgets (Section 24, 25)
-                state.budgetSummary?.let { bs ->
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
+                // 1. Month Switcher Header & Quick Navigation
+                item(key = "month_switcher") {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Category Budgets",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(icon = Icons.Default.Category, onClick = onNavigateToCategories)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { viewModel.prevMonth() },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Previous Month"
+                                    )
+                                }
+
+                                AnimatedContent(
+                                    targetState = state.currentYear to state.currentMonth,
+                                    transitionSpec = {
+                                        val isForward = (targetState.first * 12 + targetState.second) >
+                                                (initialState.first * 12 + initialState.second)
+                                        slideInHorizontally { width -> if (isForward) width else -width } togetherWith
+                                                slideOutHorizontally { width -> if (isForward) -width else width }
+                                    },
+                                    label = "monthTransition"
+                                ) { (year, month) ->
+                                    Text(
+                                        text = DateTimeUtils.formatMonthYear(year, month),
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = Spacing.xs)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.nextMonth() },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = "Next Month"
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                        .clickable { onNavigateToSetup() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = "Offline Vault",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(Spacing.xs))
+                                Box {
+                                    IconButton(
+                                        onClick = { showSettingsMenu = true },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = "Settings",
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = showSettingsMenu,
+                                        onDismissRequest = { showSettingsMenu = false }
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Backup & Restore") },
+                                            onClick = {
+                                                showSettingsMenu = false
+                                                onNavigateToBackup()
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Save, contentDescription = null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Data Diagnostics") },
+                                            onClick = {
+                                                showSettingsMenu = false
+                                                onNavigateToDiagnostics()
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Reliability Setup") },
+                                            onClick = {
+                                                showSettingsMenu = false
+                                                onNavigateToSetup()
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Notification Listener Warning (if not granted)
+                        if (!isListenerGranted) {
+                            Spacer(modifier = Modifier.height(Spacing.xs))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(Spacing.sm)) {
+                                    Text(
+                                        text = "Notification Listener Inactive",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Text(
+                                        text = "Allow SMS and UPI notifications for automatic expense tracking.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Spacer(modifier = Modifier.height(Spacing.xs))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                                        Button(
+                                            onClick = {
+                                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                                context.startActivity(intent)
+                                            },
+                                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                                containerColor = MaterialTheme.colorScheme.onErrorContainer,
+                                                contentColor = MaterialTheme.colorScheme.errorContainer
+                                            )
+                                        ) {
+                                            Text("Enable", fontSize = 11.sp)
+                                        }
+                                        OutlinedButton(onClick = onNavigateToSetup) {
+                                            Text("Setup Guide", fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(Spacing.xs))
+
+                        // Quick Actions (Fixed row that doesn't clip)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        ) {
+                            // 1. Pending Button
+                            Surface(
+                                onClick = onNavigateToPending,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    if (state.pendingCount > 0) {
+                                        BadgedBox(
+                                            badge = {
+                                                Badge { Text("${state.pendingCount}") }
+                                            }
+                                        ) {
+                                            Icon(
+                                                Icons.Default.NotificationsActive,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = WarningAmber
+                                            )
+                                        }
+                                    } else {
+                                        Icon(
+                                            Icons.Default.NotificationsActive,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Pending",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (state.pendingCount > 0) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (state.pendingCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            // 2. Reconcile Button
+                            Surface(
+                                onClick = onNavigateToStatements,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Sync,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Reconcile",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            // 3. Close Month Button
+                            Surface(
+                                onClick = onNavigateToMonthClose,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PointOfSale,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Close Month",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
                         }
                     }
+                }
 
-                    items(bs.categorySummaries) { catSummary ->
-                        CategoryBudgetRow(summary = catSummary)
+                // 2. Hero Card: Spent ÷ Budget Progress & Net Worth
+                state.budgetSummary?.let { bs ->
+                    item(key = "budget_hero") {
+                        DashboardHeroCard(
+                            budgetSummary = bs,
+                            netWorthPaise = state.netWorth?.netWorthPaise
+                        )
+                    }
+                }
+
+                // 3. Needs / Wants / Savings / Unallocated Bucket Progress
+                state.budgetSummary?.let { bs ->
+                    item(key = "buckets_header") {
+                        SectionHeader(
+                            title = "Budget Buckets",
+                            subtitle = "50/30/20 Allocation Rule",
+                            actionText = "Manage",
+                            onActionClick = onNavigateToCategories
+                        )
+                    }
+
+                    item(key = "bucket_needs") {
+                        BucketProgressCard(
+                            bucket = BudgetBucket.NEEDS,
+                            allocatedPaise = bs.bucketTotals[BudgetBucket.NEEDS] ?: 0L,
+                            spentPaise = bs.bucketSpent[BudgetBucket.NEEDS] ?: 0L
+                        )
+                    }
+
+                    item(key = "bucket_wants") {
+                        BucketProgressCard(
+                            bucket = BudgetBucket.WANTS,
+                            allocatedPaise = bs.bucketTotals[BudgetBucket.WANTS] ?: 0L,
+                            spentPaise = bs.bucketSpent[BudgetBucket.WANTS] ?: 0L
+                        )
+                    }
+
+                    item(key = "bucket_savings") {
+                        BucketProgressCard(
+                            bucket = BudgetBucket.SAVINGS,
+                            allocatedPaise = bs.bucketTotals[BudgetBucket.SAVINGS] ?: 0L,
+                            spentPaise = bs.bucketSpent[BudgetBucket.SAVINGS] ?: 0L
+                        )
+                    }
+
+                    if (bs.unallocatedBudgetPaise > 0L) {
+                        item(key = "bucket_unallocated") {
+                            BucketProgressCard(
+                                bucket = BudgetBucket.UNALLOCATED,
+                                allocatedPaise = bs.unallocatedBudgetPaise,
+                                spentPaise = 0L
+                            )
+                        }
+                    }
+                }
+
+                // 4. Category Budgets
+                state.budgetSummary?.let { bs ->
+                    item(key = "category_budgets_header") {
+                        SectionHeader(
+                            title = "Category Budgets",
+                            subtitle = "${bs.categorySummaries.size} active categories",
+                            actionText = "Manage",
+                            onActionClick = onNavigateToCategories
+                        )
+                    }
+
+                    items(
+                        items = bs.categorySummaries,
+                        key = { "cat_${it.allocation.categoryId}" }
+                    ) { catSummary ->
+                        DashboardCategoryRow(summary = catSummary)
+                    }
+                }
+
+                // 5. Accounts (Compact cards)
+                if (state.accountSummaries.isNotEmpty()) {
+                    item(key = "accounts_header") {
+                        SectionHeader(
+                            title = "Accounts",
+                            subtitle = "Available balances & credit owed",
+                            actionText = "View All",
+                            onActionClick = onNavigateToAccounts
+                        )
+                    }
+
+                    items(
+                        items = state.accountSummaries,
+                        key = { "acc_${it.account.id}" }
+                    ) { accSummary ->
+                        AccountCard(
+                            summary = accSummary,
+                            onClick = onNavigateToAccounts
+                        )
+                    }
+                }
+
+                // 6. Recent Activity
+                if (state.recentTransactions.isNotEmpty()) {
+                    item(key = "recent_activity_header") {
+                        SectionHeader(
+                            title = "Recent Activity",
+                            subtitle = "Latest ledger entries",
+                            actionText = "View All",
+                            onActionClick = onNavigateToTransactions
+                        )
+                    }
+
+                    items(
+                        items = state.recentTransactions,
+                        key = { "tx_${it.id}" }
+                    ) { tx ->
+                        TransactionRow(
+                            tx = tx,
+                            onClick = onNavigateToTransactions
+                        )
                     }
                 }
             }
@@ -371,178 +580,269 @@ fun DashboardScreen(
     }
 }
 
+/**
+ * Modern Hero Card replacing the old donut chart with a high-readability progress bar and Net Worth stat.
+ */
 @Composable
-fun IconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+private fun DashboardHeroCard(
+    budgetSummary: BudgetPeriodSummary,
+    netWorthPaise: Long?,
+    modifier: Modifier = Modifier
+) {
+    val totalBudget = budgetSummary.totalBudgetedPaise
+    val totalSpent = budgetSummary.totalSpentPaise
+    val remainingPaise = totalBudget - totalSpent
+
+    val rawProgress = if (totalBudget > 0L) totalSpent.toFloat() / totalBudget.toFloat() else 0f
+    val animatedProgress by rememberAnimatedProgress(targetFraction = rawProgress.coerceIn(0f, 1f))
+    val percentUsed = (rawProgress * 100).toInt()
+
+    val isOverBudget = totalSpent > totalBudget && totalBudget > 0L
+    val isWarning = rawProgress >= 0.8f && !isOverBudget
+
+    val progressColor = when {
+        isOverBudget -> ExpenseRed
+        isWarning -> WarningAmber
+        else -> MaterialTheme.colorScheme.primary
     }
-}
-
-@Composable
-fun BudgetOverviewCard(bs: com.tapledger.domain.model.BudgetPeriodSummary) {
-    val palette = listOf(
-        MaterialTheme.colorScheme.primary,
-        MaterialTheme.colorScheme.secondary,
-        MaterialTheme.colorScheme.tertiary,
-        IncomeGreen,
-        WarningAmber,
-        ExpenseRed
-    )
-
-    val slices = bs.categorySummaries
-        .filter { it.netSpentPaise > 0L }
-        .mapIndexed { idx, cat ->
-            DonutSlice(
-                label = cat.allocation.categoryNameSnapshot,
-                amountPaise = cat.netSpentPaise,
-                color = palette[idx % palette.size]
-            )
-        }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Monthly budget: spent ${totalSpent / 100} of ${totalBudget / 100} rupees, remaining ${remainingPaise / 100} rupees"
+            },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        shape = RoundedCornerShape(20.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.lg)
+        ) {
+            // Net Worth Stat
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                DonutChart(
-                    slices = slices,
-                    totalAmountPaise = bs.totalSpentPaise,
-                    chartSize = 130.dp,
-                    strokeWidth = 18.dp
-                )
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Monthly Overview", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Income", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        MoneyText(amountPaise = bs.totalIncomePaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Budgeted", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        MoneyText(amountPaise = bs.totalBudgetedPaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Spent", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        MoneyText(amountPaise = bs.totalSpentPaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = ExpenseRed)
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Remaining", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        MoneyText(amountPaise = bs.totalRemainingPaise, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = if (bs.totalRemainingPaise >= 0) IncomeGreen else ExpenseRed)
+                Column {
+                    Text(
+                        text = "Net Worth",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (netWorthPaise != null) {
+                        MoneyText(
+                            amountPaise = netWorthPaise,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            semantic = if (netWorthPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                        )
                     }
                 }
-            }
-        }
-    }
-}
 
-@Composable
-fun AccountBalanceRow(summary: AccountBalanceSummary) {
-    val isCreditCard = summary.account.type == com.tapledger.core.model.AccountType.CREDIT_CARD
-    val displayPaise = if (isCreditCard) kotlin.math.abs(summary.currentBalancePaise) else summary.currentBalancePaise
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(14.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = summary.account.name,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 15.sp
-                )
-                Text(
-                    text = if (isCreditCard) "Outstanding Liability ${summary.account.identifierLast4?.let { "•••• $it" } ?: ""}"
-                           else "Available Balance ${summary.account.identifierLast4?.let { "•••• $it" } ?: ""}",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Budget Remaining",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    MoneyText(
+                        amountPaise = kotlin.math.abs(remainingPaise),
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        semantic = if (remainingPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                    )
+                }
             }
-            MoneyText(
-                amountPaise = displayPaise,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                color = if (isCreditCard && displayPaise > 0L) RoseError else MaterialTheme.colorScheme.onSurface
+
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            // Progress bar
+            LinearProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp)),
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                strokeCap = StrokeCap.Round
             )
-        }
-    }
-}
 
-@Composable
-fun CategoryBudgetRow(summary: BudgetCategorySummary) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            // Spend detail text: "₹850 of ₹50,000 · 1.7%"
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = summary.allocation.categoryNameSnapshot,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 14.sp
+                    MoneyText(
+                        amountPaise = totalSpent,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        semantic = MoneySemantic.Expense
                     )
-                    if (summary.isExceeded) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = "Overspent",
-                            modifier = Modifier.size(16.dp),
-                            tint = RoseError
-                        )
-                    }
+                    Text(
+                        text = " of ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    MoneyText(
+                        amountPaise = totalBudget,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        semantic = MoneySemantic.Neutral
+                    )
+                    Text(
+                        text = " · $percentUsed%",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = progressColor
+                    )
                 }
+
                 Text(
-                    text = "${MoneyFormatter.formatRupees(summary.netSpentPaise)} / ${MoneyFormatter.formatRupees(summary.adjustedBudgetPaise)}",
-                    fontSize = 13.sp,
-                    color = if (summary.isExceeded) RoseError else MaterialTheme.colorScheme.onSurfaceVariant
+                    text = if (remainingPaise >= 0) "${MoneyFormatter.formatRupees(remainingPaise)} left" else "${MoneyFormatter.formatRupees(kotlin.math.abs(remainingPaise))} over",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = if (remainingPaise >= 0) IncomeGreen else ExpenseRed
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            val progress = (summary.percentageUsed.toFloat() / 100f).coerceIn(0f, 1f)
+        }
+    }
+}
+
+/**
+ * Category Row on Dashboard: ₹spent / ₹budget, % used, single continuous bar, no stray end dot.
+ */
+@Composable
+private fun DashboardCategoryRow(
+    summary: BudgetCategorySummary,
+    modifier: Modifier = Modifier
+) {
+    val totalBudget = summary.adjustedBudgetPaise
+    val netSpent = summary.netSpentPaise
+    val remaining = summary.remainingPaise
+
+    val rawProgress = if (totalBudget > 0L) netSpent.toFloat() / totalBudget.toFloat() else 0f
+    val animatedProgress by rememberAnimatedProgress(targetFraction = rawProgress.coerceIn(0f, 1f))
+
+    val progressColor = when {
+        summary.isExceeded -> ExpenseRed
+        summary.isWarning -> WarningAmber
+        else -> IncomeGreen
+    }
+
+    val statusIcon = when {
+        summary.isExceeded -> Icons.Default.Error
+        summary.isWarning -> Icons.Default.Warning
+        else -> Icons.Default.CheckCircle
+    }
+
+    val statusText = when {
+        summary.isExceeded -> "Over"
+        summary.isWarning -> "≥80%"
+        else -> "OK"
+    }
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${summary.allocation.categoryNameSnapshot}: spent ${netSpent / 100} of ${totalBudget / 100} rupees, remaining ${remaining / 100} rupees"
+            },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(
+            1.dp,
+            if (summary.isExceeded) ExpenseRed.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        ),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = summary.allocation.categoryNameSnapshot,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = statusIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = progressColor
+                    )
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = progressColor
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            // Single continuous progress track
             LinearProgressIndicator(
-                progress = { progress },
+                progress = { animatedProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color = when {
-                    summary.isExceeded -> RoseError
-                    summary.isWarning -> AmberWarning
-                    else -> EmeraldPrimary
-                },
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                strokeCap = StrokeCap.Round
             )
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    MoneyText(
+                        amountPaise = netSpent,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        semantic = MoneySemantic.Expense
+                    )
+                    Text(
+                        text = " / ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    MoneyText(
+                        amountPaise = totalBudget,
+                        style = MaterialTheme.typography.bodySmall,
+                        semantic = MoneySemantic.Neutral
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (remaining >= 0) "Left: " else "Exceeded: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    MoneyText(
+                        amountPaise = kotlin.math.abs(remaining),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        semantic = if (remaining >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                    )
+                }
+            }
         }
     }
 }

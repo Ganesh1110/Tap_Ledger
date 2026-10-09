@@ -8,5 +8,6 @@ data class DataDiagnosticsUiState(
     val issues: List<IntegrityIssue> = emptyList(),
     val auditLogs: List<AuditLogEntity> = emptyList(),
     val isAuditRunning: Boolean = false,
+    val lastScannedAt: Long? = null,
     val errorMessage: String? = null
 )
