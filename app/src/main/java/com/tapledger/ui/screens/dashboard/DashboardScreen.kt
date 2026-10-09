@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -136,8 +138,6 @@ fun DashboardScreen(
                 CircularProgressIndicator()
             }
         } else {
-            var showMoreMenu by remember { mutableStateOf(false) }
-
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -148,72 +148,68 @@ fun DashboardScreen(
             ) {
                 // 1. Month Header & Quick Navigation
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = DateTimeUtils.formatMonthYear(state.currentYear, state.currentMonth),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
-                            state.netWorth?.let { nw ->
-                                Text(
-                                    text = "Net Worth: ${MoneyFormatter.formatRupees(nw.netWorthPaise)}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.secondary
-                                )
-                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "● Secure (Offline)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = IncomeGreen
+                            )
                         }
-                        Box {
-                            IconButton(icon = Icons.Default.MoreVert, onClick = { showMoreMenu = true })
-                            DropdownMenu(
-                                expanded = showMoreMenu,
-                                onDismissRequest = { showMoreMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Statement Reconciliation") },
-                                    leadingIcon = { Icon(Icons.Default.ReceiptLong, contentDescription = null) },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onNavigateToStatements()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Month Close & Lock") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onNavigateToMonthClose()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Data Diagnostics & Health") },
-                                    leadingIcon = { Icon(Icons.Default.HealthAndSafety, contentDescription = null) },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onNavigateToDiagnostics()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Backup & Restore") },
-                                    leadingIcon = { Icon(Icons.Default.Backup, contentDescription = null) },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onNavigateToBackup()
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("HyperOS Setup Checklist") },
-                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onNavigateToSetup()
-                                    }
-                                )
-                            }
+                        state.netWorth?.let { nw ->
+                            Text(
+                                text = "Net Worth: ${MoneyFormatter.formatRupees(nw.netWorthPaise)}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+                }
+
+                // Quick Action Pill Bar
+                item {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp)
+                    ) {
+                        item {
+                            AssistChip(
+                                onClick = onNavigateToPending,
+                                label = { Text("📥 Pending (${state.pendingCount})") }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = onNavigateToStatements,
+                                label = { Text("📊 Reconcile") }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = onNavigateToMonthClose,
+                                label = { Text("🔒 Month Close") }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = onNavigateToDiagnostics,
+                                label = { Text("🛡️ Health") }
+                            )
+                        }
+                        item {
+                            AssistChip(
+                                onClick = onNavigateToBackup,
+                                label = { Text("💾 Backup") }
+                            )
                         }
                     }
                 }
