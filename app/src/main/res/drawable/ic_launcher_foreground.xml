@@ -1,13 +1,106 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- 1. Ledger Body Shadow / Ambient Layer -->
     <path
-        android:fillColor="#38BDF8"
-        android:pathData="M34,28 h40 c4.4,0 8,3.6 8,8 v36 c0,4.4 -3.6,8 -8,8 h-40 c-4.4,0 -8,-3.6 -8,-8 v-36 c0,-4.4 3.6,-8 8,-8 z" />
+        android:fillColor="#0D192E"
+        android:pathData="M30,28 h22 c3.31,0 6,2.69 6,6 v40 c0,3.31 -2.69,6 -6,6 h-22 c-3.31,0 -6,-2.69 -6,-6 v-40 c0,-3.31 2.69,-6 6,-6 z" />
+
+    <!-- 2. Ledger Outline with Cyan to Emerald Gradient Stroke -->
     <path
-        android:fillColor="#0F172A"
-        android:pathData="M42,40 h24 v6 h-24 z M42,50 h24 v6 h-24 z M42,60 h16 v6 h-16 z" />
+        android:pathData="M30,28 h22 c3.31,0 6,2.69 6,6 v40 c0,3.31 -2.69,6 -6,6 h-22 c-3.31,0 -6,-2.69 -6,-6 v-40 c0,-3.31 2.69,-6 6,-6 z"
+        android:strokeWidth="2.5"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="24"
+                android:startY="28"
+                android:endX="58"
+                android:endY="80">
+                <item android:offset="0.0" android:color="#00E5FF" />
+                <item android:offset="1.0" android:color="#10B981" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 3. Ledger Book Spine Accent -->
+    <path
+        android:pathData="M24,34 c0,-3.31 2.69,-6 6,-6 v52 c-3.31,0 -6,-2.69 -6,-6 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="24"
+                android:startY="28"
+                android:endX="30"
+                android:endY="80">
+                <item android:offset="0.0" android:color="#38BDF8" />
+                <item android:offset="1.0" android:color="#0284C7" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- 4. Ledger Data Lines -->
+    <path
+        android:pathData="M36,38 h14"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M36,45 h10"
+        android:strokeColor="#7DD3FC"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+
+    <!-- 5. Indian Rupee Symbol (₹) inside Ledger -->
+    <!-- Top Bar -->
+    <path
+        android:pathData="M35,54 h14"
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+
+    <!-- Second Bar -->
+    <path
+        android:pathData="M35,59 h12"
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+
+    <!-- Rupee Curve and Diagonal Leg -->
+    <path
+        android:pathData="M35,54 c7,0 9.5,8 0,8 l9,10"
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- 6. Radiating Contactless Tap Waves -->
+    <!-- Inner Wave Arc -->
+    <path
+        android:pathData="M65,46 a11,11 0 0,1 0,16"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3.0"
+        android:strokeLineCap="round" />
+
+    <!-- Middle Wave Arc -->
+    <path
+        android:pathData="M72,40 a19,19 0 0,1 0,28"
+        android:strokeColor="#10B981"
+        android:strokeWidth="3.0"
+        android:strokeLineCap="round" />
+
+    <!-- Outer Wave Arc -->
+    <path
+        android:pathData="M79,34 a27,27 0 0,1 0,40"
+        android:strokeColor="#34D399"
+        android:strokeWidth="3.0"
+        android:strokeLineCap="round" />
+
 </vector>
