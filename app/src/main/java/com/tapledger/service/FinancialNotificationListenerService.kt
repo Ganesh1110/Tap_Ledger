@@ -93,7 +93,13 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         val extras = sbn.notification.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+
+        val effectiveText = when {
+            bigText.isNotBlank() && bigText.length > text.length -> bigText
+            else -> text
+        }
 
         // Section 20: Extract EXTRA_MESSAGES for grouped notifications
         val messagesList = mutableListOf<String>()
@@ -105,13 +111,13 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         val event = NotificationEvent(
             packageName = pkg,
             title = title,
-            text = text,
+            text = effectiveText,
             subText = subText,
             messages = messagesList,
             postTime = sbn.postTime
         )
 
-        Log.d("TapLedgerListener", "Notification received from pkg='$pkg' | title='$title' | text='$text'")
+        Log.d("TapLedgerListener", "Notification received from pkg='$pkg' | title='$title' | text='$effectiveText'")
 
         val parsed = FinancialNotificationParser.parse(event)
         if (parsed == null) {

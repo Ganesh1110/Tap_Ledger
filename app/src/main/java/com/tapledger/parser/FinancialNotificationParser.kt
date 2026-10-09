@@ -77,8 +77,8 @@ object FinancialNotificationParser {
         // Debit vs Credit vs Reversal detection
         val lower = combinedText.lowercase()
         val isReversal = lower.contains("reversed") || lower.contains("credited back") || lower.contains("refund")
-        val isCredit = lower.contains("credited") || lower.contains("deposited") || lower.contains("received") || isReversal
-        val isDebit = lower.contains("debited") || lower.contains("spent") || lower.contains("paid") || lower.contains("withdrawn") || lower.contains("sent")
+        val isCredit = lower.contains("credited") || lower.contains("credit") || lower.contains("deposited") || lower.contains("received") || lower.contains("added") || isReversal
+        val isDebit = lower.contains("debited") || lower.contains("debit") || lower.contains("spent") || lower.contains("paid") || lower.contains("withdrawn") || lower.contains("sent") || lower.contains("transferred") || lower.contains("purchase")
 
         if (!isCredit && !isDebit) {
             // Amount present without financial movement verb -> discard to prevent false alerts
