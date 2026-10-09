@@ -1,5 +1,6 @@
 package com.tapledger.ui.screens.setup
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -75,9 +76,19 @@ fun SetupScreen(
         PermissionUtils.isNotificationListenerGranted(context)
     }
 
-    var autostartConfirmed by remember { mutableStateOf(false) }
-    var batteryUnrestrictedConfirmed by remember { mutableStateOf(false) }
-    var recentsLockConfirmed by remember { mutableStateOf(false) }
+    val prefs = remember(context) {
+        context.getSharedPreferences("tapledger_setup_prefs", Context.MODE_PRIVATE)
+    }
+
+    var autostartConfirmed by remember {
+        mutableStateOf(prefs.getBoolean("autostart_confirmed", false))
+    }
+    var batteryUnrestrictedConfirmed by remember {
+        mutableStateOf(prefs.getBoolean("battery_unrestricted_confirmed", false))
+    }
+    var recentsLockConfirmed by remember {
+        mutableStateOf(prefs.getBoolean("recents_lock_confirmed", false))
+    }
 
     Scaffold(
         topBar = {
@@ -162,7 +173,10 @@ fun SetupScreen(
                     description = "Prevents Android from putting TapLedger to sleep when your phone is locked.",
                     status = if (batteryUnrestrictedConfirmed) Status.Granted else Status.Undetectable,
                     isManualChecked = batteryUnrestrictedConfirmed,
-                    onManualCheckChange = { batteryUnrestrictedConfirmed = it },
+                    onManualCheckChange = {
+                        batteryUnrestrictedConfirmed = it
+                        prefs.edit().putBoolean("battery_unrestricted_confirmed", it).apply()
+                    },
                     manualLabel = "I've set Battery to Unrestricted",
                     actionText = "Open App Battery Settings",
                     onAction = {
@@ -181,7 +195,10 @@ fun SetupScreen(
                     description = "Allows the app reader to restart automatically if the phone reboots.",
                     status = if (autostartConfirmed) Status.Granted else Status.Undetectable,
                     isManualChecked = autostartConfirmed,
-                    onManualCheckChange = { autostartConfirmed = it },
+                    onManualCheckChange = {
+                        autostartConfirmed = it
+                        prefs.edit().putBoolean("autostart_confirmed", it).apply()
+                    },
                     manualLabel = "I've enabled Autostart",
                     actionText = "Open App Permissions",
                     onAction = {
@@ -200,7 +217,10 @@ fun SetupScreen(
                     description = "Prevents 'Clear All Recent Apps' from stopping the transaction listener service.",
                     status = if (recentsLockConfirmed) Status.Granted else Status.Undetectable,
                     isManualChecked = recentsLockConfirmed,
-                    onManualCheckChange = { recentsLockConfirmed = it },
+                    onManualCheckChange = {
+                        recentsLockConfirmed = it
+                        prefs.edit().putBoolean("recents_lock_confirmed", it).apply()
+                    },
                     manualLabel = "I've locked TapLedger in Recents"
                 )
             }
