@@ -1,6 +1,6 @@
-# tapLedger
+# Tap Ledger
 
-**tapLedger** is a personal, offline-first Android monthly budget and expense tracking application designed for one user.
+**Tap Ledger** is a personal, offline-first Android monthly budget and expense tracking application designed for one user.
 
 Its primary purpose is to capture bank/UPI payment notifications quickly, classify spending with minimal interaction, maintain accurate account balances independently from budget categories, reconcile the app against bank statements, and close each month with controlled carry-forward/advance handling.
 
@@ -30,33 +30,33 @@ Its primary purpose is to capture bank/UPI payment notifications quickly, classi
 
 ## Tech Stack
 
-| Area | Technology |
-|---|---|
-| Language | Kotlin 2.0 |
-| UI | Jetpack Compose + Material 3 |
-| Architecture | MVVM + Repository |
-| Database | Room 2.6.1 + SQLite (Schema Export Enabled) |
-| Dependency Injection | Hilt 2.52 |
-| Annotation Processing | KSP |
-| Min / Target SDK | 29 / 35 |
-| Async | Coroutines & Flow |
-| Background Jobs | WorkManager |
-| Timezone | `Asia/Kolkata` |
-| Monies | `Long` paise |
+| Area                  | Technology                                  |
+| --------------------- | ------------------------------------------- |
+| Language              | Kotlin 2.0                                  |
+| UI                    | Jetpack Compose + Material 3                |
+| Architecture          | MVVM + Repository                           |
+| Database              | Room 2.6.1 + SQLite (Schema Export Enabled) |
+| Dependency Injection  | Hilt 2.52                                   |
+| Annotation Processing | KSP                                         |
+| Min / Target SDK      | 29 / 35                                     |
+| Async                 | Coroutines & Flow                           |
+| Background Jobs       | WorkManager                                 |
+| Timezone              | `Asia/Kolkata`                              |
+| Monies                | `Long` paise                                |
 
 ---
 
 ## Directory Structure
 
 ```text
-TapLedger/
+Tap Ledger/
 ├── .github/workflows/
 │   └── android.yml                # CI testing and manifest INTERNET check
 ├── app/
 │   ├── src/main/
-│   │   ├── java/com/tapledger/
+│   │   ├── java/com/Tap Ledger/
 │   │   │   ├── core/
-│   │   │   │   ├── database/     # TapLedgerDatabase, Entities, DAOs, Converters, Seeder
+│   │   │   │   ├── database/     # Tap LedgerDatabase, Entities, DAOs, Converters, Seeder
 │   │   │   │   ├── model/        # Enums, MoneyFormatter (paise & lakh formatting)
 │   │   │   │   └── util/         # DateTimeUtils (Asia/Kolkata epoch calculation)
 │   │   │   ├── data/
@@ -72,7 +72,7 @@ TapLedger/
 │   │   │   ├── service/          # FinancialNotificationListenerService
 │   │   │   └── ui/               # Compose Material 3 screens, theme, navigation
 │   └── src/test/
-│       └── java/com/tapledger/   # Unit test suite (Money, Dates, Calculators, Parser, Reconciliation)
+│       └── java/com/Tap Ledger/   # Unit test suite (Money, Dates, Calculators, Parser, Reconciliation)
 ├── decisions.md                  # Architectural decision log (D001-D010)
 └── build.gradle.kts / settings.gradle.kts
 ```
@@ -101,45 +101,55 @@ TapLedger/
 ## Testing & Notification Simulation
 
 ### 1. Running Unit Tests
+
 To execute all local unit tests (parsers, calculators, validators, and reconciliation engine):
+
 ```bash
 ./gradlew testDebugUnitTest
 ```
 
 ### 2. Enabling Notification Listener Permission
+
 To enable notification capturing on a connected device or emulator:
-- Navigate to **Settings** $\rightarrow$ **Apps** $\rightarrow$ **Special App Access** $\rightarrow$ **Notification Access** $\rightarrow$ Enable **TapLedger**.
+
+- Navigate to **Settings** $\rightarrow$ **Apps** $\rightarrow$ **Special App Access** $\rightarrow$ **Notification Access** $\rightarrow$ Enable **Tap Ledger**.
 
 ### 3. Simulating Financial Notifications via ADB
+
 You can push simulated bank notifications directly to an emulator or connected device using `adb shell cmd notification post`:
 
 #### HDFC Bank UPI Debit
+
 ```bash
 adb shell 'cmd notification post -t "HDFC Bank" tag "Sent Rs. 850.00 from HDFC Bank A/C **1234 to SWIGGY on 08-10-26 via UPI Ref 428192837482. Avl Bal: Rs 49,150.00"'
 ```
 
 #### SBI UPI Debit
+
 ```bash
 adb shell 'cmd notification post -t "SBI" tag "Dear UPI user A/C 5678 debited by 1,200.00 on 08Oct26 tran id 429182374928"'
 ```
 
 #### HDFC Credit Card Purchase
+
 ```bash
 adb shell 'cmd notification post -t "HDFC Bank Alert" tag "Alert: Rs. 2,000.00 spent on your HDFC Bank Card ending 9012 at AMAZON on 08-OCT-26"'
 ```
 
 #### Google Pay Payment
+
 ```bash
 adb shell 'cmd notification post -t "Google Pay" tag "Paid ₹850 to Swiggy"'
 ```
 
 #### UPI Transaction Reversal / Refund
+
 ```bash
 adb shell 'cmd notification post -t "HDFC Bank" tag "Rs. 500.00 credited back to your A/C 1234. UPI transaction failed/reversed on 08-10-26"'
 ```
 
 #### OTP / Non-Financial Notification (Filtered Out)
+
 ```bash
 adb shell 'cmd notification post -t "HDFC Bank" tag "123456 is your secret OTP for transaction of Rs. 500.00. Do not share."'
 ```
-
