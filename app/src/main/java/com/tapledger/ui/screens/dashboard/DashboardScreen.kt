@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -41,11 +42,13 @@ import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.material3.FloatingActionButton
@@ -88,6 +91,7 @@ import com.tapledger.ui.theme.WarningAmber
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
+    initialScrollIndex: Int = 0,
     onNavigateToManualEntry: () -> Unit,
     onNavigateToTransactions: () -> Unit,
     onNavigateToPending: () -> Unit,
@@ -138,7 +142,9 @@ fun DashboardScreen(
                 CircularProgressIndicator()
             }
         } else {
+            val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
@@ -218,39 +224,60 @@ fun DashboardScreen(
                 if (!isListenerGranted) {
                     item {
                         Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                    context.startActivity(intent)
-                                },
+                            modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer
                             )
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(16.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.NotificationsOff,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Notification Access Required",
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.NotificationsOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer
                                     )
-                                    Text(
-                                        text = "Tap here to enable Notification Listener permission in System Settings so tapLedger can capture bank notifications.",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Notification Access Required",
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                            fontSize = 15.sp
+                                        )
+                                        Text(
+                                            text = "TapLedger needs notification listener access to automatically capture bank SMS/UPI alerts.",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                            context.startActivity(intent)
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.onErrorContainer,
+                                            contentColor = MaterialTheme.colorScheme.errorContainer
+                                        )
+                                    ) {
+                                        Text("Open Settings", fontSize = 11.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = onNavigateToSetup,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("HyperOS Setup", fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }

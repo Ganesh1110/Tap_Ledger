@@ -36,6 +36,7 @@ sealed class Screen(val route: String) {
 fun TapLedgerNavGraph(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Screen.Dashboard.route,
+    initialDashboardScrollIndex: Int = 0,
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -45,6 +46,7 @@ fun TapLedgerNavGraph(
     ) {
         composable(Screen.Dashboard.route) {
             DashboardScreen(
+                initialScrollIndex = initialDashboardScrollIndex,
                 onNavigateToManualEntry = { navController.navigate(Screen.ManualEntry.route) },
                 onNavigateToTransactions = { navController.navigate(Screen.Transactions.route) },
                 onNavigateToPending = { navController.navigate(Screen.PendingInbox.route) },

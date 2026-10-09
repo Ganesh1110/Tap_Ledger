@@ -18,13 +18,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val startDestination = intent?.getStringExtra("start_destination") ?: com.tapledger.ui.navigation.Screen.Dashboard.route
+        val initialScrollIndex = intent?.getIntExtra("scroll_index", 0) ?: 0
         setContent {
             TapLedgerTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScaffold()
+                    MainScaffold(
+                        startDestination = startDestination,
+                        initialDashboardScrollIndex = initialScrollIndex
+                    )
                 }
             }
         }

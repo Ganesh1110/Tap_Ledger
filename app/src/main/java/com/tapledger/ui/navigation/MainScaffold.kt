@@ -37,7 +37,10 @@ val BOTTOM_NAV_ITEMS = listOf(
 )
 
 @Composable
-fun MainScaffold() {
+fun MainScaffold(
+    startDestination: String = Screen.Dashboard.route,
+    initialDashboardScrollIndex: Int = 0
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -87,6 +90,8 @@ fun MainScaffold() {
     ) { padding ->
         TapLedgerNavGraph(
             navController = navController,
+            startDestination = startDestination,
+            initialDashboardScrollIndex = initialDashboardScrollIndex,
             modifier = Modifier.padding(padding)
         )
     }
