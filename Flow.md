@@ -1,6 +1,6 @@
 # TapLedger: Complete System Flows & Mathematical Specification
 
-> **Version:** 2.4 (Formal Specification & Production Engine Architecture)  
+> **Version:** 2.5 (Formal Specification & Production Engine Architecture)  
 > **Target OS:** Android 10+ (API 29–36, Android 16 Ready), Optimized for Xiaomi/HyperOS, Samsung OneUI, and Pixel  
 > **Core Architectural Principles:** Single-user, 100% offline-first, Zero floating-point arithmetic (`Long` paise only), Transfer-level double-entry and envelope integrity, Asia/Kolkata (`IST`) timezone.
 
@@ -41,8 +41,8 @@ To prevent floating-point inaccuracies, parse currency strings robustly, reject 
 
 ```kotlin
 fun parseRupeesStringToPaise(raw: String): Long {
-    // 1. Strip trailing sentence punctuation, Indian '/-' suffix (e.g. "Rs. 500/-"), symbols, and whitespace
-    var cleaned = raw.trim().replace(Regex("/-\\s*$"), "").trimEnd('.')
+    // 1. Strip trailing sentence punctuation, Indian '/-' suffix (e.g. "Rs. 500/-."), symbols, and whitespace
+    var cleaned = raw.trim().trimEnd('.').replace(Regex("/-\\s*$"), "").trimEnd('.')
     cleaned = cleaned.replace(Regex("[₹,\\s]|Rs\\.?|INR", RegexOption.IGNORE_CASE), "").trim()
     if (cleaned.isEmpty()) throw IllegalArgumentException("Empty amount: $raw")
 
@@ -147,16 +147,25 @@ erDiagram
   `id` (PK), `package_name`, `title`, `raw_text`, `occurred_at`, `error_reason`, `created_at`. _(Purged after 30 days)._
 - **`merchant_map`**:
   `id` (PK), `merchant_normalized`, `category_id` (FK), `times_confirmed`, `times_overridden`, `last_used_at`.  
-  _Unique Composite Index:_ `(merchant_normalized, category_id)`.
+  _Unique Composite Index:_ `(merchant_normalized, category_id)`.  
+  _Storage Invariant:_ `merchant_normalized` stores the full canonical merchant VPA (e.g. `swiggy.bangalore@icici`) or normalized retail descriptor, never truncated wildcard patterns (e.g. `paytmqr*`), preventing distinct vendors from colliding.
 - **`transaction_audit_log`**:
-  `id` (PK), `transaction_id` (FK, Nullable), `action` (`CREATED`, `UPDATED`, `CATEGORIZED`, `SPLIT`, `TRANSFER_LINKED`, `REFUND_LINKED`, `VOIDED`, `RESTORED`, `PERIOD_CLOSED`, `PERIOD_REOPENED`, `DB_RESTORED`), `before_snapshot_json` (Nullable), `after_snapshot_json` (Nullable), `reason`, `created_at`.
+  `id` (PK), `transaction_id` (FK, Nullable), `action` (`CREATED`, `UPDATED`, `CATEGORIZED`, `UNCATEGORIZED`, `SPLIT`, `TRANSFER_LINKED`, `REFUND_LINKED`, `VOIDED`, `IGNORED`, `RESTORED`, `DUPLICATE_DROPPED`, `PERIOD_CLOSED`, `PERIOD_REOPENED`, `DB_RESTORED`), `before_snapshot_json` (Nullable), `after_snapshot_json` (Nullable), `reason`, `created_at`.
 
 ### Database Integrity Triggers (Rule M1 Hard Prevention)
 
 To guarantee immutability of closed budget periods without relying solely on application-layer checks:
 
-- SQLite `BEFORE INSERT / UPDATE / DELETE` triggers on `budget_allocations`, `transaction_allocations`, `budget_adjustments`, and `advance_ledger` execute `SELECT RAISE(ABORT, 'Cannot mutate closed budget period')` whenever the target period has `status = 'CLOSED'`.
-- A trigger on `transactions` executes `SELECT RAISE(ABORT, 'Cannot alter transaction in closed period')` if any update attempts to modify `amount_paise`, `direction`, `account_id`, or `occurred_at` of a transaction whose `occurred_at` falls inside a closed period.
+- **Transactions Table (`transactions`):**
+  - `BEFORE UPDATE`: Raises `RAISE(ABORT, 'Cannot alter transaction in closed period')` if any update attempts to modify `amount_paise`, `direction`, `account_id`, `occurred_at`, `status`, or `kind` when the period containing `occurred_at` has `status = 'CLOSED'`.
+  - `BEFORE INSERT`: Raises abort if a back-dated transaction is inserted with `occurred_at` falling inside a closed period.
+  - `BEFORE DELETE`: Raises abort if attempting to delete any transaction residing in a closed period.
+- **Advance Ledger Table (`advance_ledger`):**
+  - Keyed strictly on `applied_to_period_id` (not `source_period_id`, allowing historical closed source months to generate new absorption rows into open target months):
+  - When `applied_to_period_id IS NOT NULL`: `BEFORE INSERT / UPDATE / DELETE` triggers abort if the target applied period is `CLOSED`.
+  - When `applied_to_period_id IS NULL` (unassigned deficit pool): Append-only `INSERT` is permitted; `BEFORE UPDATE` and `BEFORE DELETE` triggers strictly abort modifications.
+- **Budget Envelopes & Allocations (`budget_allocations`, `transaction_allocations`, `budget_adjustments`):**
+  - SQLite `BEFORE INSERT / UPDATE / DELETE` triggers raise abort whenever the associated budget period has `status = 'CLOSED'`.
 
 ---
 
@@ -186,15 +195,15 @@ flowchart TD
     L --> P{"Step 2: Deduplication Check"}
     N --> P
 
-    P -->|"Exact Match (Assigned):\naccount_id + upi_ref + direction + amount"| Q["Drop Duplicate & Log to Audit Trail"]
-    P -->|"Exact Match (Unassigned account_id == NULL):\nupi_ref + direction + amount across all accounts"| Q
-    P -->|"Fuzzy Match Across Packages:\nsame amount + direction + Δt ≤ 10 min + same merchant"| Q
-    P -->|"Fuzzy Match Without Merchant / Same App"| R["Mark flag: possible_duplicate_of_id = matchedTx.id"]
+    P -->|"Exact Match (Assigned, non-null upi_ref):\naccount_id + upi_ref + direction + amount"| Q["Drop Duplicate & Log to Audit Trail"]
+    P -->|"Exact Match (Unassigned, non-null upi_ref):\nupi_ref + direction + amount across all accounts"| Q
+    P -->|"Dedupe without upi_ref (Δt ≤ 60s, same amount+direction):\nDifferent package + same merchant"| Q
+    P -->|"Candidate Duplicate (Same app / missing merchant):\nΔt ≤ 10 min + same amount + same direction"| R["Mark flag: possible_duplicate_of_id = matchedTx.id"]
     P -- Clean --> S["Proceed to Ingestion"]
     R --> S
 
-    S --> T["Step 3: Get or Create Contiguous Period\n(Ensure period containing occurred_at exists)"]
-    T --> U{"Is Period containing occurred_at CLOSED?"}
+    S --> T["Step 3: Get or Create Contiguous Period\n(Bounded: now - history ≤ target ≤ now + 3 months)"]
+    T --> U{"Is Period containing occurred_at CLOSED\nor Out of Bounds?"}
     U -- Yes --> V["Book into Earliest OPEN Period containing now:\nset occurred_at = now\nrecord original_occurred_at"]
     U -- No --> W["Keep parsed occurred_at"]
 
@@ -208,8 +217,12 @@ flowchart TD
 
 - **Non-Null Direction:** Every transaction stores a non-null `direction` (`IN` for credits, deposits, refunds, interest earned, transfer in; `OUT` for debits, expenses, fees, interest charged, transfer out). This ensures SQLite unique indexes and equality queries never evaluate `NULL = NULL`.
 - **Deduplication Key Formulations:**
-  1. **Assigned Transactions (`account_id IS NOT NULL`):** Matches on `(account_id, upi_reference, direction, amount_paise)` or `(account_id, amount_paise, direction, occurred_at)`.
-  2. **Unassigned Transactions (`account_id IS NULL`):** Matches on `(upi_reference, direction, amount_paise)` globally across all transactions.
+  1. **Exact Key with Non-Null `upi_reference`:**
+     - Assigned (`account_id IS NOT NULL`): Matches on `(account_id, upi_reference, direction, amount_paise)`.
+     - Unassigned (`account_id IS NULL`): Matches on `(upi_reference, direction, amount_paise)` globally across all transactions.
+  2. **Deduplication Without `upi_reference` (Preventing False Drop of Legitimate Rapid Purchases):**
+     - Matches on `(account_id, amount_paise, direction, occurred_at)` within $\Delta t \le 60\text{s}$ are treated as exact duplicates **only if** both alerts share the exact same merchant string AND originate from **different source packages** (e.g. Bank SMS vs. UPI push notification).
+     - If both alerts originate from the same app or lack merchant metadata, the alert is **not silently dropped**; instead, it is ingested with `possible_duplicate_of_id = matchedTx.id` for user review (preventing accidental loss of two legitimate identical ₹50 transit fares tapped within the same minute).
 - **Account Nullability & Quarantine:**
   - If an account cannot be resolved unequivocally, `account_id` remains `NULL`.
   - **Invariant:** A transaction **cannot transition to `CONFIRMED` or `CATEGORIZED`** while `account_id` is `NULL`.
@@ -217,8 +230,12 @@ flowchart TD
   - Unassigned transactions do not hit any account balance and are exempted from rule `T1`.
   - The Pending Inbox displays an amber warning banner: `"Unassigned Account — Tap to resolve"`.
   - Month-close for period $M$ is strictly blocked if any unassigned transaction exists with `occurred_at < M.end_at`.
-- **Contiguous Period Get-or-Create:**
-  - When `occurred_at` falls into a month that does not yet exist in `budget_periods`, the database atomically initializes all contiguous intervening months from the latest existing period up through the required period. Base allocations and income are copied forward from the latest existing period with `is_reviewed = false`.
+- **Bounded Contiguous Period Get-or-Create:**
+  - To prevent runaway row generation caused by malformed notification years (e.g. year 2099), period seeding is strictly bounded:
+    $$\text{occurred\_at} \le \text{now} + 1 \text{ day} \quad \land \quad \text{Month}(\text{occurred\_at}) \le \text{Month}(\text{now}) + 3$$
+  - If a transaction arrives with $\text{occurred\_at} > \text{now} + 1 \text{ day}$ or $> 3 \text{ months ahead}$, the engine clamps $\text{occurred\_at} = \text{now}$ and records `original_occurred_at = parsed`.
+  - Similarly, if `occurred_at < FirstPeriod.start_at`, it is clamped to `now` with `original_occurred_at` preserved.
+  - **Transient UI Browsing:** Navigating to future months in the UI displays a transient in-memory preview without writing rows to `budget_periods` until transactions arrive or the user taps "Initialize Budget".
 
 ---
 
@@ -245,6 +262,7 @@ stateDiagram-v2
     VOIDED --> PENDING: User restores (previous_status == PENDING)
     VOIDED --> CATEGORIZED: User restores (previous_status == CATEGORIZED)
     VOIDED --> CONFIRMED: User restores (previous_status == CONFIRMED)
+    VOIDED --> IGNORED: User restores (previous_status == IGNORED)
 
     IGNORED --> VOIDED: User voids ignored item
     IGNORED --> PENDING: User un-ignores
@@ -272,7 +290,7 @@ $$\text{IsHighConfidence}(M) \iff (\text{times\_confirmed}(M) \times 100\text{L}
 - **1-Tap Shortcut Displayed:** Shown only when `IsHighConfidence` evaluates to `true`.
 - **Strict Guard against P2P & Data Poisoning:**
   1. **P2P Rejection:** VPAs with telephone numbers (e.g. `9876543210@paytm`) or individual personal names (e.g. `rahul.verma@okhdfcbank`) denote peer-to-peer transfers and are **strictly excluded** from learning.
-  2. **Merchant Qualification:** Learning is applied strictly to verified commercial patterns: QR merchant handles (`*.merchant@*`, `paytmqr*`, `bharatpe*`), branded service VPAs (`swiggy@*`, `uber@*`, `zomato@*`), or card POS clearing descriptors with commercial MCC codes.
+  2. **Merchant Qualification & Canonical Key:** Learning is applied strictly to verified commercial patterns: QR merchant handles, branded service VPAs (`swiggy@*`, `uber@*`, `zomato@*`), or card POS clearing descriptors with commercial MCC codes. In `merchant_map`, `merchant_normalized` stores the full distinct VPA / merchant descriptor (e.g. `paytmqr2810050501011@paytm` or `SWIGGY_BANGALORE`), never truncated wildcard patterns (e.g. `paytmqr*`), preventing distinct vendors from colliding into a single mapping.
   3. **No Learning from Splits:** Multi-category split allocations are ambiguous and never increment `times_confirmed`.
   4. **Override Penalty:** User overrides increment `times_overridden`, instantly suppressing the 1-tap shortcut below the $80\%$ threshold.
 
@@ -362,18 +380,20 @@ flowchart LR
 
 ### 7.1 Transfer Ingestion, Candidate Pairing & Lifecycle Synchronization
 
-1. **Candidate Transfer Detection (No Silent Auto-Link):** When a transaction arrives, the engine queries for existing unlinked `PENDING` transactions in different accounts with:
+1. **Candidate Transfer Detection & Reciprocal Pairing:** When a transaction arrives, the engine queries for existing unlinked `PENDING` transactions in different accounts with:
    - Equal `amount_paise`.
    - Opposite `direction` (`OUT` vs `IN`).
    - $|t.\text{occurred\_at} - \text{candidate}.\text{occurred\_at}| \le 24 \text{ hours}$.
    - To prevent silent collisions (e.g. accidentally fusing a salary credit with an unrelated same-day rent payment), the engine surfaces a **Candidate Transfer Pair** card in the Pending Inbox:
      `"Potential Transfer: HDFC (-₹10,000) ↔ SBI (+₹10,000) — Tap to Confirm Link"`.
-   - Upon user confirmation, Room atomically links both rows: assigns a shared `transfer_group_id`, sets `counterparty_account_id` reciprocally, updates `kind = TRANSFER`, and transitions standard transfers to `CONFIRMED`.
+   - Upon user confirmation, Room atomically links both rows: assigns a shared `transfer_group_id`, sets `counterparty_account_id` reciprocally (`Leg1.counterparty_account_id = Leg2.account_id` and vice-versa), updates `kind = TRANSFER`, and transitions standard transfers to `CONFIRMED`.
+   - **Savings Category Prompt:** If the destination account is flagged `is_savings = true` or `type = INVESTMENT`, the confirmation flow prompts the user to select a `SAVINGS` category. Until selected, the `OUT` leg remains `PENDING` while the `IN` leg becomes `CONFIRMED`. Upon selection, the `OUT` leg transitions to `CATEGORIZED`.
 2. **Manual Leg Creation:** If only one leg was captured via SMS/Notification, user taps "Mark as Transfer" in Inbox:
    - Leg 1 (`OUT`) is assigned to the source account.
-   - Leg 2 (`IN`) is atomically generated in destination account with matching `amount_paise`, inverted `direction = IN`, and shared `transfer_group_id`.
-3. **Lifecycle Synchronization & Savings Exemption:**
-   - Voiding, ignoring, restoring, or editing `amount_paise` on one transfer leg automatically updates the counterparty leg.
+   - Leg 2 (`IN`) is atomically generated in destination account with matching `amount_paise`, inverted `direction = IN`, reciprocal `counterparty_account_id`, and shared `transfer_group_id`.
+3. **Lifecycle Synchronization & Split Adjustment Protection:**
+   - Voiding, ignoring, or restoring one transfer leg automatically updates the counterparty leg.
+   - **Amount Edit & Re-Split Guard:** If the user edits `amount_paise` on a transfer leg whose counterpart `OUT` leg is `CATEGORIZED`, the change synchronizes to the counterparty amount, and the app immediately forces a **Split Adjustment Sheet** to adjust the category allocations to match the new `amount_paise`, preventing violation of Rule `A1`.
    - **Savings Transfer Status Exemption:** For transfers directed to savings accounts (§8.3), the `OUT` leg carries `status = CATEGORIZED` (with its `SAVINGS` envelope split) while the `IN` leg carries `status = CONFIRMED`. Status changes from normal envelope edits do not alter the `IN` leg's `CONFIRMED` status.
 4. **Credit Card Bill Payments:**
    - $HDFC \rightarrow Card$: HDFC decreases (`direction = OUT`); Card increases from $-\text{₹}8,000$ to $\text{₹}0$ (`direction = IN`).
@@ -404,7 +424,7 @@ $$\text{AdjustedBudget}(C) = \text{BaseAllocated}(C) + \text{AdjIn}(C) - \text{A
 - **DAO Guard (Rule B2 Protection):** To guarantee $\text{AdjustedBudget}(C) \ge 0\text{L}$ at all times without relying on retroactive checks, every base allocation write and envelope adjustment insertion is verified against:
   $$\text{BaseAllocated}(C) \ge \text{AdvanceNegative}(C) + \text{AdjOut}(C) - \text{AdjIn}(C) - \text{AdvancePositive}(C)$$
   Any user action violating this boundary is rejected at the DAO layer with an `IllegalArgumentException`.
-- **Sweep Policy Invariant:** Categories using `SWEEP_TO_SAVINGS` require a valid active `sweep_target_category_id` residing in the `SAVINGS` bucket. If the target category has no base allocation in Month $M+1$, the engine automatically seeds an allocation row with `amount_paise = 0L` to hold the transferred advance.
+- **Universal Zero-Base Seeding Invariant:** Whenever any category receives an advance ledger row in Month $M+1$ (whether through `SWEEP_TO_SAVINGS` or `CARRY_TO_ADVANCE`) but lacks an active `budget_allocations` row in that period, the engine automatically seeds an allocation row with `amount_paise = 0L` to anchor the advance. Categories using `SWEEP_TO_SAVINGS` must target an active category residing in the `SAVINGS` bucket.
 
 ### 8.3 Net Spending Formulation & Savings Envelope Tracking
 
@@ -414,11 +434,11 @@ Where transactions must satisfy:
 
 1. $t.\text{status} = \text{CATEGORIZED}$.
 2. $t.\text{occurred\_at} \in [\text{Period.start\_at}, \text{Period.end\_at})$ (Half-open).
-3. **Savings Transfer Allocation Rule:**
-   - When money transfers to a savings vehicle (`destAccount.is_savings == true` or `type == INVESTMENT`):
-   - The **OUT leg** is set to `status = CATEGORIZED` and carries the category allocation under the `SAVINGS` bucket.
-   - The **IN leg** remains `status = CONFIRMED` with zero allocations.
-   - This counts in that Savings envelope's $\text{NetSpent}$ progress while remaining excluded from regular spending expenses.
+3. **Savings Contributions & Withdrawals:**
+   - **Contributions (Transfers to Savings):** Money transferred to a savings vehicle (`destAccount.is_savings == true` or `type == INVESTMENT`) has its `OUT` leg categorized under the `SAVINGS` bucket. The `IN` leg remains `status = CONFIRMED` with zero allocations. This increments the Savings envelope's $\text{NetSpent}$.
+   - **Withdrawals (Transfers from Savings):** Money transferred from a savings account back to operational checking accounts can carry a negative category allocation to that `SAVINGS` envelope, decrementing $\text{NetSpent}$:
+     $$\text{NetSpent}(C_{\text{SAVINGS}}) = \sum \text{Allocated}(T_{\text{to\_savings}}, C) - \sum \text{Allocated}(T_{\text{from\_savings}}, C)$$
+     This ensures withdrawals from emergency funds or deposits accurately reflect net savings reduction.
 4. **Fees and Interest:** Bank fees (`FEE`) and interest charged (`INTEREST_CHARGED`) map to a system-protected Needs category (`system_key = "SYS_BANK_CHARGES"`).
 
 ### 8.4 Budget Evaluation Order & Savings Goal Semantics
@@ -440,6 +460,7 @@ val isGoalAchieved = isSavings && percentageUsed >= 100
 ```
 
 - **Surplus Savings:** Stashing more than the target in a `SAVINGS` envelope never triggers an "Exceeded" warning and never carries an overspending deficit into Month $M+1$.
+- **Under-Saved Remainder Semantics:** When net savings fall below the target ($\text{NetSpent} < \text{AdjustedBudget}$), the unfulfilled portion is an unrealized target, not a monetary debt. It never carries forward as a negative deficit. Under `EXPIRE` (default), the shortfall simply lapses. If configured as `CARRY_TO_ADVANCE`, it accumulates forward as an unfulfilled savings goal without debiting the next month's available cash.
 
 ### 8.5 Dashboard Hero vs. Actual Savings Metrics
 
@@ -493,20 +514,20 @@ When a transaction $T$ with $k$ category splits is partially refunded by $R$ pai
 ```mermaid
 flowchart TD
     A["Trigger Month Close for Period M"] --> B["Pre-Close Checklist Evaluation (Scoped to M)"]
-    B --> C{"Checklist Gates Passed?\n1. now ≥ Period M.end_at\n2. Previous Period M-1 is CLOSED\n3. Scoped Pending == 0 (occurred_at < M.end_at)\n4. Scoped Unassigned == 0 (occurred_at < M.end_at)\n5. Auditor Critical/Error == 0 for Period M"}
+    B --> C{"Checklist Gates Passed?\n1. now ≥ Period M.end_at\n2. Previous Period M-1 is CLOSED\n3. is_reviewed == true for Period M\n4. Scoped Pending == 0 (occurred_at < M.end_at)\n5. Scoped Unassigned == 0 (occurred_at < M.end_at)\n6. Auditor Critical/Error == 0 for Period M"}
     C -- No --> D["Block Month Close CTA"]
     C -- Yes --> E{"Statement Rec Unfinished?"}
     E -- Yes --> F["Show Non-blocking Warning (Prompt Override Reason)"]
     E -- No --> G["Execute Month-Close Room Transaction"]
 
-    G --> H["Step 1: Ensure Next Period M+1 Exists\n(Compute NextBase allocations)"]
-    G --> I["Step 2: Loop Categories Active in M\n(BaseAlloc > 0 OR Advance Active OR NetSpent != 0)"]
+    G --> H["Step 1: Ensure Next Period M+1 Exists\n(Initialize NextBase & determine Headroom)"]
+    H --> I["Step 2: Loop Categories Active in M\n(BaseAlloc > 0 OR Advance Active OR NetSpent != 0)"]
 
     I --> J{"Category Bucket?"}
     J -- SAVINGS --> K["Savings Envelope:\nSurplus or 100%+ is Goal Met\nNo Deficit Carry-Forward"]
     J -- NEEDS or WANTS --> L{"Remaining < 0?\n(Overspent)"}
 
-    L -- Yes --> M["Deficit Handling:\nAppliedDeficit = min(Deficit, NextBase)\nRemainingDeficit = Deficit - AppliedDeficit\nInsert AdvanceLedger(direction=NEGATIVE, applied_to=M+1)\nIf RemainingDeficit > 0: Insert AdvanceLedger(applied_to=NULL)"]
+    L -- Yes --> M["Headroom-Capped Deficit Handling:\nHeadroom = AdjustedBudget(M+1)\nAppliedDeficit = min(Deficit, Headroom)\nRemainingDeficit = Deficit - AppliedDeficit\nInsert AdvanceLedger(direction=NEGATIVE, applied_to=M+1)\nIf RemainingDeficit > 0: Insert AdvanceLedger(applied_to=NULL)"]
 
     L -- No --> N{"Remaining > 0?"}
     N -- No (== 0) --> O["Skip Advance Insert"]
@@ -525,19 +546,33 @@ flowchart TD
     T --> U["Insert month_closes Snapshot Record\n(closing planned & actual income, budget, net spent, total_saved_paise, closing balances)"]
 ```
 
-### 10.3 Append-Only Uncovered Deficit Absorption
+### 10.3 Headroom-Capped Append-Only Deficit Absorption & Priority
 
 Uncovered deficits from previous closed months (`applied_to_period_id = NULL`) form an unassigned deficit pool:
 $$\text{UncoveredPool}(C) = \sum_{r \in \text{Ledger}(applied\_to = \text{NULL}, direction = \text{NEGATIVE}, C)} r.\text{amount\_paise} - \sum_{r \in \text{Ledger}(applied\_to = \text{NULL}, direction = \text{POSITIVE}, C)} r.\text{amount\_paise}$$
 
-When Month $M+1$ base allocations are established, absorption is calculated:
-$$\text{Absorbed} = \min(\text{UncoveredPool}(C), \text{NextBase}(C))$$
+#### Headroom Definition:
 
-- **Schema-Compliant Append-Only Encoding (strictly `amount_paise > 0`):**
-  If $\text{Absorbed} > 0$, the engine inserts two rows:
-  1. **Offset Row:** `AdvanceLedger(source = M, applied_to = NULL, direction = POSITIVE, amount_paise = Absorbed)` to decrement the unassigned pool.
-  2. **Application Row:** `AdvanceLedger(source = M, applied_to = M+1, direction = NEGATIVE, amount_paise = Absorbed)` to apply the deficit to Month $M+1$.
-- Combined with the §8.2 DAO guard ($\text{BaseAllocated} \ge \text{AdvNeg} + \text{AdjOut} - \text{AdjIn} - \text{AdvPos}$), this guarantees $\text{NextAdjustedBudget}(C) \ge 0\text{L}$ at all times, satisfying Rule `B2`.
+To prevent deficits from overshooting the budget and triggering DAO aborts when Month $M+1$ already contains adjustments or other advances, absorption is capped strictly by **available envelope headroom** (the period's current `AdjustedBudget`):
+$$\text{Headroom}(C, M+1) = \text{BaseAllocated}(C, M+1) + \text{AdjIn}(C, M+1) - \text{AdjOut}(C, M+1) + \text{AdvPos}(C, M+1) - \text{AdvNeg}(C, M+1)$$
+
+#### Ordered Absorption Protocol across Open Downstream Periods:
+
+At **every** month-close, absorption runs sequentially across all currently `OPEN` downstream periods ($M+1, \dots$), drawing on available headroom with strict two-tier priority:
+
+1. **Priority 1 (Historical Uncovered Pool):** Older debts are retired first:
+   $$\text{AbsorbedFromPool} = \min(\text{UncoveredPool}(C), \text{Headroom}(C, M+1))$$
+   If $\text{AbsorbedFromPool} > 0$:
+   - **Offset Row:** Inserts `AdvanceLedger(source = M, applied_to = NULL, direction = POSITIVE, amount_paise = AbsorbedFromPool)` to reduce the unassigned pool.
+   - **Application Row:** Inserts `AdvanceLedger(source = M, applied_to = M+1, direction = NEGATIVE, amount_paise = AbsorbedFromPool)`.
+   - Update remaining headroom: $\text{Headroom}(C, M+1) \leftarrow \text{Headroom}(C, M+1) - \text{AbsorbedFromPool}$.
+2. **Priority 2 (Newly Created Deficit from Month $M$):**
+   $$\text{AppliedFromNew} = \min(\text{NewDeficit}(C, M), \text{Headroom}(C, M+1))$$
+   $$\text{UncoveredNew} = \text{NewDeficit}(C, M) - \text{AppliedFromNew}$$
+   - If $\text{AppliedFromNew} > 0$: Inserts `AdvanceLedger(source = M, applied_to = M+1, direction = NEGATIVE, amount_paise = AppliedFromNew)`.
+   - If $\text{UncoveredNew} > 0$: Inserts `AdvanceLedger(source = M, applied_to = NULL, direction = NEGATIVE, amount_paise = UncoveredNew)` into the unassigned pool.
+
+This ensures $\text{AdjustedBudget}(C, M+1) \ge 0\text{L}$ by construction, guaranteeing that the §8.2 DAO guard will never reject a valid month-close transaction.
 
 ---
 
@@ -558,11 +593,15 @@ $$\text{ExpectedClosing} = \text{OpeningBalance} + \sum \text{Payments/Credits} 
 1. **Phase 1 (UPI / Reference Matching):**
    - Matches `line.reference` against `tx.upi_reference`.
    - If references match but amounts differ: Flagged as `MATCHED_WITH_DISCREPANCY`.
-2. **Phase 2 (Global Minimal Delta Matching):**
-   - Candidate pairs within $[period\_start - 2 \text{ days}, period\_end + 2 \text{ days}]$ with matching amount and direction are scored:
-     $$\Delta t = |t.\text{occurred\_at} - \text{line}.\text{transaction\_date}| \le 2 \text{ days} \, (172,800,000 \text{ ms})$$
+2. **Phase 2 (Global Minimal Delta Matching & Effective Timestamps):**
+   - Because late-booked transactions might have their `occurred_at` clamped to `now` (§3.1), candidate matching evaluates delta using the original clearance timestamp:
+     $$t_{\text{effective}} = \text{COALESCE}(t.\text{original\_occurred\_at}, t.\text{occurred\_at})$$
+     $$\Delta t = |t_{\text{effective}} - \text{line}.\text{transaction\_date}| \le 2 \text{ days} \, (172,800,000 \text{ ms})$$
    - **Cross-Boundary Timing Difference:** Candidate pairs where the transaction date lies **outside the statement window $[period\_start, period\_end]$** (which follows `statement_day`, not calendar month boundaries) are classified as `TIMING_DIFFERENCE`.
    - Pairs are sorted globally by $\Delta t$ and assigned greedily, eliminating collision theft.
+3. **Handling Unmatched Statement Lines (`MISSING_IN_APP`):**
+   - Statement lines without matches can be imported as new app transactions, seeded with `status = PENDING`.
+   - **Closed Period Guard:** If an unmatched statement line's date falls within an already `CLOSED` month, inserting into that closed period is blocked by the Rule `M1` trigger. Instead, the transaction is booked into the earliest `OPEN` period with `occurred_at = now` and `original_occurred_at = line.transaction_date`, linked to a reconciliation adjustment audit entry.
 
 ### 11.3 The Exact Mathematical Proof of Reconciliation
 
@@ -573,7 +612,9 @@ $$\mathbf{StmtClosing} - \mathbf{AppBalance}(\text{EndOfDayIST}(period\_end)) \e
 Where:
 $$s(x) = \begin{cases} +x.\text{amount\_paise}, & \text{if credit / income} \\ -x.\text{amount\_paise}, & \text{if debit / expense} \end{cases}$$
 
-- **Proof Rationale for Timing Difference:** If a statement line within $[period\_start, period\_end]$ is matched with an app transaction occurring _outside_ $[period\_start, period\_end]$, the statement line is incorporated in $\mathbf{StmtClosing}$, but the app transaction does not exist in $\mathbf{AppBalance}(\text{EndOfDayIST}(period\_end))$. Adding $+ \sum_{k \in \text{TIMING\_DIFFERENCE}} s(k.\text{line})$ closes the algebraic proof exactly.
+- **Proof Rationale Across Window Boundaries:**
+  1. **Before Window Start ($t < period\_start$):** Transactions occurring before the statement cycle are completely absorbed by the opening-balance differential term $(\mathbf{StmtOpening} - \mathbf{AppBalance}(\text{StartOfDayIST}^-(period\_start)))$.
+  2. **After Window End ($t > period\_end$):** When a statement line within $[period\_start, period\_end]$ is matched with an app transaction occurring *after* $period\_end$ (`TIMING_DIFFERENCE`), the statement line is included in $\mathbf{StmtClosing}$, but the app transaction does not exist in $\mathbf{AppBalance}(\text{EndOfDayIST}(period\_end))$. Adding $+ \sum_{k \in \text{TIMING\_DIFFERENCE}} s(k.\text{line})$ closes the algebraic proof exactly.
 
 ---
 
@@ -583,25 +624,25 @@ The `DataIntegrityChecker` audits the Room database against 19 formal rules:
 
 | Rule Code                            | Invariant Condition                                                                                                                                |   Severity   | Description                                                  |
 | :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- | :----------: | :----------------------------------------------------------- |
-| **`T1_INVALID_ACCOUNT`**             | $\forall t \text{ with status} \notin \{\text{PENDING}, \text{IGNORED}, \text{VOIDED}\}, t.\text{account\_id} \in \text{Accounts.id}$              | **CRITICAL** | Orphaned transaction without account                         |
-| **`T2_NON_POSITIVE_AMOUNT`**         | $\forall t, t.\text{amount\_paise} > 0$                                                                                                            |  **ERROR**   | Non-positive transaction amount                              |
-| **`T3_UNPAIRED_TRANSFER`**           | Every paired transfer has linked counterpart with matching amount and opposite direction                                                           | **CRITICAL** | One-legged or unbalanced transfer                            |
-| **`T4_DUPLICATE_UPI_REF`**           | Unique non-null `(account_id, upi_reference, direction, amount_paise)`; if `account_id IS NULL`: unique `(upi_reference, direction, amount_paise)` |  **ERROR**   | Duplicate transaction captured                               |
-| **`A1_SPLIT_SUM_MISMATCH`**          | For categorized $t$: $\sum \text{Allocations} \equiv t.\text{amount\_paise}$                                                                       | **CRITICAL** | Split allocation does not match transaction                  |
-| **`A2_INVALID_CATEGORY`**            | $\forall a, a.\text{category\_id} \in \text{Categories.id}$                                                                                        |  **ERROR**   | Allocation references non-existent category                  |
-| **`A3_NON_POSITIVE_ALLOCATION`**     | $\forall a, a.\text{amount\_paise} > 0$                                                                                                            |  **ERROR**   | Split allocation $\le 0$ paise                               |
-| **`A4_DUPLICATE_CATEGORY_IN_SPLIT`** | Unique `(transaction_id, category_id)`                                                                                                             |  **ERROR**   | Category repeated in same split                              |
-| **`B1_INVALID_ADJUSTMENT`**          | $\text{from\_cat} \in \text{Cat} \land \text{to\_cat} \in \text{Cat}$                                                                              |  **ERROR**   | Invalid category reference in transfer                       |
-| **`B2_NEGATIVE_BUDGET`**             | $\forall b, \text{AdjustedBudget}(b) \ge 0$ (enforced at DAO boundary)                                                                             | **CRITICAL** | Category adjusted budget dropped negative                    |
-| **`B3_BUCKET_OVERALLOCATION`**       | $\sum \text{BaseAllocations} \le \text{BucketTarget}$                                                                                              | **WARNING**  | Base envelopes exceed bucket target                          |
-| **`B4_BUDGET_EQUILIBRIUM`**          | $\sum \text{AdjustedBudget} \le \text{Period.income} + \text{NetAdvances}$                                                                         | **WARNING**  | Budget envelope equilibrium exceeded                         |
-| **`C1_DUPLICATE_CATEGORY`**          | Unique active category names                                                                                                                       | **WARNING**  | Ambiguous duplicate categories                               |
-| **`P1_PERIOD_OVERLAP`**              | No overlapping $[\text{start\_at}, \text{end\_at})$ intervals                                                                                      | **CRITICAL** | Corrupted budget period boundaries                           |
-| **`M1_LOCKED_MODIFICATION`**         | No row mutations targeting closed periods; enforced via SQLite `BEFORE` triggers raising abort                                                     | **CRITICAL** | Violation of historical ledger immutability                  |
-| **`M2_CLOSE_TOTALS_MISMATCH`**       | `month_closes` matches recomputed historical totals                                                                                                |  **ERROR**   | Historical close record tampering                            |
-| **`S1_STATEMENT_MISMATCH`**          | Internal statement arithmetic equals reported closing                                                                                              | **WARNING**  | Bank CSV arithmetic mismatch                                 |
-| **`R1_CUMULATIVE_REFUND_EXCEEDED`**  | $\sum \text{Refunds}(T) \le T.\text{amount\_paise}$                                                                                                |  **ERROR**   | Refunds exceed original charge                               |
-| **`R2_REFUND_EXCEEDS_CATEGORY_CAP`** | $\forall \text{refund splits } i, \text{Refund}_i \le \text{cap}_i$                                                                                |  **ERROR**   | Refund allocated to category exceeds original spend capacity |
+| **`T1_INVALID_ACCOUNT`**             | $\forall t \text{ with status} \notin \{\text{PENDING}, \text{IGNORED}, \text{VOIDED}\}, t.\text{account\_id} \in \text{Accounts.id}$              | **CRITICAL** | Orphaned transaction without account                                            |
+| **`T2_NON_POSITIVE_AMOUNT`**         | $\forall t, t.\text{amount\_paise} > 0$                                                                                                            |  **ERROR**   | Non-positive transaction amount                                                 |
+| **`T3_UNPAIRED_TRANSFER`**           | Every paired transfer has linked counterpart with equal amount, opposite direction, and reciprocal `counterparty_account_id`                      | **CRITICAL** | One-legged, unbalanced, or unlinked reciprocal transfer                         |
+| **`T4_DUPLICATE_UPI_REF`**           | Unique non-null `(account_id, upi_reference, direction, amount_paise)`; if `account_id IS NULL`: unique `(upi_reference, direction, amount_paise)` |  **ERROR**   | Duplicate transaction captured                                                  |
+| **`A1_SPLIT_SUM_MISMATCH`**          | For categorized $t$: $\sum \text{Allocations} \equiv t.\text{amount\_paise}$                                                                       | **CRITICAL** | Split allocation does not match transaction                                     |
+| **`A2_INVALID_CATEGORY`**            | $\forall a, a.\text{category\_id} \in \text{Categories.id}$                                                                                        |  **ERROR**   | Allocation references non-existent category                                     |
+| **`A3_NON_POSITIVE_ALLOCATION`**     | $\forall a, a.\text{amount\_paise} > 0$                                                                                                            |  **ERROR**   | Split allocation $\le 0$ paise                                                  |
+| **`A4_DUPLICATE_CATEGORY_IN_SPLIT`** | Unique `(transaction_id, category_id)`                                                                                                             |  **ERROR**   | Category repeated in same split                                                 |
+| **`B1_INVALID_ADJUSTMENT`**          | $\text{from\_cat} \in \text{Cat} \land \text{to\_cat} \in \text{Cat}$                                                                              |  **ERROR**   | Invalid category reference in transfer                                          |
+| **`B2_NEGATIVE_BUDGET`**             | $\forall b, \text{AdjustedBudget}(b) \ge 0$ (enforced at DAO boundary)                                                                             | **CRITICAL** | Category adjusted budget dropped negative                                       |
+| **`B3_BUCKET_OVERALLOCATION`**       | $\sum \text{BaseAllocations} \le \text{BucketTarget}$                                                                                              | **WARNING**  | Base envelopes exceed bucket target                                             |
+| **`B4_BUDGET_EQUILIBRIUM`**          | $\sum \text{AdjustedBudget} \le \text{Period.income} + \text{NetAdvances}(P)$                                                                      | **WARNING**  | Budget envelope equilibrium exceeded; $\text{NetAdvances} = \sum \text{AdvPos} - \sum \text{AdvNeg}$ |
+| **`C1_DUPLICATE_CATEGORY`**          | Unique active category names                                                                                                                       | **WARNING**  | Ambiguous duplicate categories                                                  |
+| **`P1_PERIOD_OVERLAP`**              | No overlapping $[\text{start\_at}, \text{end\_at})$ intervals                                                                                      | **CRITICAL** | Corrupted budget period boundaries                                              |
+| **`M1_LOCKED_MODIFICATION`**         | No row mutations targeting closed periods; enforced via SQLite `BEFORE` triggers raising abort                                                     | **CRITICAL** | Violation of historical ledger immutability                                     |
+| **`M2_CLOSE_TOTALS_MISMATCH`**       | `month_closes` matches recomputed historical totals                                                                                                |  **ERROR**   | Historical close record tampering                                               |
+| **`S1_STATEMENT_MISMATCH`**          | Internal statement arithmetic equals reported closing                                                                                              | **WARNING**  | Bank CSV arithmetic mismatch                                                    |
+| **`R1_CUMULATIVE_REFUND_EXCEEDED`**  | $\sum \text{Refunds}(T) \le T.\text{amount\_paise}$                                                                                                |  **ERROR**   | Refunds exceed original charge                                                  |
+| **`R2_REFUND_EXCEEDS_CATEGORY_CAP`** | $\forall \text{refund splits } i, \text{Refund}_i \le \text{cap}_i$                                                                                |  **ERROR**   | Refund allocated to category exceeds original spend capacity                    |
 
 ---
 
@@ -613,21 +654,26 @@ The `DataIntegrityChecker` audits the Room database against 19 formal rules:
 2. Runs `PRAGMA integrity_check;` on snapshot connection.
 3. Computes SHA-256 checksum, schema version, and record count manifest (`manifest.json`).
 4. Bundles `snapshot.db` and `manifest.json` into a single archive (`.tapledger`).
-5. **Scheduled Automatic Backups via SAF:**
+5. **Scheduled Automatic Backups via Persistent SAF:**
    - Backups stored strictly in internal app storage are destroyed on app uninstall or "Clear Data".
-   - TapLedger prompts the user during initial setup to designate a persistent backup directory via the Android Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) and persists URI access across reboots via `contentResolver.takePersistableUriPermission`.
+   - TapLedger prompts the user during initial onboarding to designate a persistent backup directory via the Android Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`) and persists URI access across reboots via `contentResolver.takePersistableUriPermission`.
    - WorkManager runs a daily background task exporting `.tapledger` snapshots directly to this persistent SAF folder (retaining 7 daily and 4 weekly archives).
-6. **Key Management & Password Encryption:**
-   - **Scheduled Automatic Backups:** Encrypted with **AES-256-GCM** using an app-scoped hardware-backed key stored in the Android Keystore (`TapLedgerMasterKey`). If the user opts out of encryption, backups are exported in plaintext.
-   - **Manual Exports:** User can supply a custom passphrase derived via **Argon2id** (salt: 16 bytes, nonce: 12 bytes, iterations: 3, memory: 64MB).
+6. **Portable Key Management & Encryption Architecture:**
+   - **The Keystore Portability Trap:** Hardware-backed Android Keystore keys are non-exportable and wiped on uninstall or phone loss. Backups encrypted strictly with raw Keystore keys cannot be restored on a new device.
+   - **Passphrase / Recovery Key Solution:** During setup, the user establishes a Master Backup Secret: either a user-supplied **Passphrase** or a 12-word **Recovery Mnemonic / Hex Key** displayed once to record.
+   - **Key Derivation (Argon2id via BouncyCastle):**
+     $$\text{MasterKey} = \text{Argon2id}(\text{Secret}, \text{salt}, \text{iterations} = 3, \text{memory} = 65536 \text{ KiB}, \text{parallelism} = 1)$$
+   - **Unattended Background Encryption:** For daily WorkManager backups, the derived key is cached encrypted inside Android Keystore (`TapLedgerMasterKey`), allowing background backups without nightly password prompts.
+   - **Cross-Device Restore:** On a new device or fresh install, the user restores the backup using their Passphrase or 12-word Recovery Key.
+   - **Archive Header Format:** Bytes 0–3 (`TPLF`), Format Version (1 byte), Salt (16 bytes), IV/Nonce (12 bytes), Argon2id params (iterations 4B, memory 4B, parallelism 4B), Key Verification Tag (16 bytes).
 
-### 13.2 Safe Restore Protocol with Ingestion Buffering & Rollback Guard
+### 13.2 Safe Restore Protocol with File-Backed Spool & Rollback Guard
 
 ```mermaid
 flowchart TD
-    A["User selects .tapledger backup file"] --> B["Pause Notification Ingestion Service\n& Buffer Inbound Alerts into Spool"]
-    B --> C["Decrypt (if password-protected) & Verify SHA-256 Manifest"]
-    C --> D["Verify Schema Version ≤ AppCurrentVersion"]
+    A["User selects .tapledger backup file"] --> B["Pause Notification Ingestion Service\n& Spool Inbound Alerts to Disk (fsync)"]
+    B --> C["Prompt Passphrase / Recovery Key\nVerify Header & Decrypt AES-256-GCM"]
+    C --> D["Verify SHA-256 Manifest & Schema Version ≤ AppCurrentVersion"]
     D --> E["Open snapshot & run PRAGMA integrity_check"]
     E -- Failed --> F["Resume Ingestion, Replay Spooled Alerts & Abort with Error"]
     E -- OK --> G["Create Pre-Restore Safety Backup of current DB"]
@@ -637,14 +683,15 @@ flowchart TD
     I --> J["Copy snapshot.db to tapledger.db"]
     J --> K["Reopen Room Connection (Run Migrations if applicable)"]
 
-    K -- Migration Fails --> L["AUTOMATIC ROLLBACK:\nRestore Pre-Restore Safety Backup\nResume Ingestion, Replay Spooled Alerts & Display Failure"]
+    K -- Migration Fails --> L["AUTOMATIC ROLLBACK:\nRestore Pre-Restore Safety Backup\nResume Ingestion, Replay Spool & Display Failure"]
     K -- Success --> M["Run DataIntegrityChecker (19 Rules)"]
 
-    M -- Invariants Intact --> N["Resume Ingestion, Replay Spooled Alerts & Restore Complete"]
+    M -- Invariants Intact --> N["Resume Ingestion, Replay Spool & Restore Complete"]
     M -- Invariants Failed --> L
 ```
 
-- **Zero Notification Loss Guarantee:** Any notifications or SMS alerts arriving while the database connection is closed are held in a memory/file-backed spool buffer (`RestoreNotificationBuffer`). Once the database swap is finalized (or rolled back), all buffered alerts are automatically replayed through the ingestion pipeline.
+- **File-Backed Notification Spool (Crash-Resilient Buffer):**
+  Any notifications or SMS alerts arriving while the database connection is closed are written to a dedicated disk spool (`RestoreNotificationBuffer`) using `FileChannel.force(true)` (`fsync`). Once the database swap is verified (or rolled back), the spooled alerts are replayed through ingestion and the spool file is immediately securely deleted to prevent raw SMS texts from lingering on disk.
 
 ---
 
@@ -672,6 +719,10 @@ flowchart TD
 
 ```mermaid
 flowchart TD
+    subgraph OnboardingFlow ["First-Run Onboarding Flow"]
+        S_Onboard["First-Run Onboarding Screen\n• Welcome & Privacy Guarantees\n• Seed Accounts & Opening Balances\n• Planned Income & 50/30/20 Targets\n• Notification Listener Permission\n• Persistent SAF Folder Setup\n• Passphrase / 12-Word Recovery Key"]
+    end
+
     subgraph BottomNav ["Bottom Navigation Tabs (4 Core Pillars)"]
         S_Dash["Dashboard Screen\n• Period Month Switcher (Animated)\n• Needs+Wants Progress Hero\n• 50/30/20 Bucket Progress Cards\n• Quick Action Buttons (Pending, Rec, Close)"]
         S_Tx["Transactions Screen\n• Sticky Date Headers\n• Search & Advanced Filter Chips\n• StatusBadges & Source Chips\n• Swipe Void / Ignore with Undo"]
@@ -695,6 +746,9 @@ flowchart TD
         S_Settings["Settings & Security Screen\n• Biometric App Lock Toggle\n• Auto-purge Alert Retention\n• Diagnostic Auditor Entry"]
     end
 
+    S_Onboard -->|"Complete Setup"| S_Dash
+    S_Onboard -->|"Restore Existing Backup"| S_Backup
+
     S_Dash -->|"Contextual FAB"| S_Manual
     S_Dash -->|"Pending Pill (Count > 0)"| S_Inbox
     S_Dash -->|"Reconcile Pill"| S_Stmt
@@ -715,6 +769,8 @@ flowchart TD
 
     S_Inbox -->|"Gear Icon"| S_Setup
     S_Inbox -->|"Mark as Transfer Action"| S_Transfer
+
+    S_PeriodSetup -->|"Reopen Action"| S_Close
 
     S_Settings -->|"Data Diagnostics Action"| S_Diag
 ```
