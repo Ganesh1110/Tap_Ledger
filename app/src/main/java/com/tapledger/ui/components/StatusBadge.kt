@@ -47,6 +47,12 @@ fun StatusBadge(
             IncomeGreenContainer.copy(alpha = 0.7f),
             IncomeGreen
         )
+        TransactionStatus.CONFIRMED -> Quad(
+            "Confirmed",
+            Icons.Default.CheckCircle,
+            IncomeGreenContainer.copy(alpha = 0.7f),
+            IncomeGreen
+        )
         TransactionStatus.PENDING -> Quad(
             "Pending",
             Icons.Default.HourglassTop,

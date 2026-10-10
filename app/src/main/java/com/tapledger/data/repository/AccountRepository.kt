@@ -25,8 +25,7 @@ class AccountRepository @Inject constructor(
         type: AccountType,
         identifierLast4: String?,
         openingBalancePaise: Long,
-        openingBalanceDate: Long = DateTimeUtils.nowEpochMillis(),
-        currency: String = "INR"
+        openingBalanceDate: Long = DateTimeUtils.nowEpochMillis()
     ): Long {
         val now = DateTimeUtils.nowEpochMillis()
         val entity = AccountEntity(
@@ -35,7 +34,6 @@ class AccountRepository @Inject constructor(
             identifierLast4 = identifierLast4,
             openingBalancePaise = openingBalancePaise,
             openingBalanceDate = openingBalanceDate,
-            currency = currency,
             isActive = true,
             createdAt = now,
             updatedAt = now

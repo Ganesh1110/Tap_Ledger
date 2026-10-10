@@ -50,29 +50,37 @@ class StatementRepository @Inject constructor(
         val now = DateTimeUtils.nowEpochMillis()
 
         return database.withTransaction {
+            val dummyImportId = 0L
+            val rawLines = StatementCsvParser.parseCsv(csvContent, dummyImportId, now)
+            val totalDebits = rawLines.sumOf { it.debitPaise }
+            val totalCredits = rawLines.sumOf { it.creditPaise }
+            val lineCount = rawLines.size
+
             val importEntity = StatementImportEntity(
                 accountId = accountId,
                 periodStart = periodStart,
                 periodEnd = periodEnd,
-                format = format,
                 openingBalancePaise = openingBalancePaise,
                 closingBalancePaise = closingBalancePaise,
+                totalDebitsPaise = totalDebits,
+                totalCreditsPaise = totalCredits,
+                lineCount = lineCount,
                 status = StatementImportStatus.IMPORTED,
                 createdAt = now
             )
             val importId = statementImportDao.insert(importEntity)
 
-            // 1. Parse CSV lines
-            val rawLines = StatementCsvParser.parseCsv(csvContent, importId, now)
             if (rawLines.isEmpty()) {
                 return@withTransaction importId
             }
+
+            val linesWithImportId = rawLines.map { it.copy(importId = importId) }
 
             // 2. Fetch existing app transactions for the account
             val appTransactions = transactionDao.getTransactionsForAccountSync(accountId)
 
             // 3. Match statement lines with app transactions
-            val matchedLines = StatementReconciliationEngine.matchStatementLines(rawLines, appTransactions)
+            val matchedLines = StatementReconciliationEngine.matchStatementLines(linesWithImportId, appTransactions)
 
             // 4. Save matched lines
             statementLineDao.insertAll(matchedLines)

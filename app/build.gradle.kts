@@ -115,6 +115,7 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.turbine)
     testImplementation(libs.androidx.room.testing)
+    testImplementation("org.xerial:sqlite-jdbc:3.46.1.0")
 
     // Android Testing
     androidTestImplementation(libs.androidx.junit)

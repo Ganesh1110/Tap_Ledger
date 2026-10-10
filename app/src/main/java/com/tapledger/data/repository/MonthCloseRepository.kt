@@ -46,7 +46,7 @@ class MonthCloseRepository @Inject constructor(
 
     suspend fun closeMonth(
         summary: BudgetPeriodSummary,
-        reconciliationStatus: String = "RECONCILED",
+        reconciliationStatus: com.tapledger.core.model.MonthCloseReconciliationStatus = com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED,
         overrideReason: String? = null
     ): Long = monthCloseEngine.closeMonth(summary, reconciliationStatus, overrideReason)
 

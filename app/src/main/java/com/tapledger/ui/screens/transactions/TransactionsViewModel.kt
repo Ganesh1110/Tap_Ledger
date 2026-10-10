@@ -57,7 +57,7 @@ class TransactionsViewModel @Inject constructor(
             val matchesQuery = if (query.isBlank()) true else {
                 val q = query.trim().lowercase()
                 (tx.merchantRaw?.lowercase()?.contains(q) == true) ||
-                        (tx.note?.lowercase()?.contains(q) == true) ||
+                        (tx.notes?.lowercase()?.contains(q) == true) ||
                         tx.amountPaise.toString().contains(q)
             }
             matchesStatus && matchesQuery

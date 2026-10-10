@@ -3,14 +3,16 @@ package com.tapledger.core.model
 enum class AccountType {
     BANK,
     CREDIT_CARD,
-    CASH
+    CASH,
+    INVESTMENT,
+    LOAN,
+    WALLET
 }
 
 enum class BudgetBucket {
     NEEDS,
     WANTS,
-    SAVINGS,
-    UNALLOCATED
+    SAVINGS
 }
 
 enum class AdvancePolicy {
@@ -35,12 +37,21 @@ enum class TransactionKind {
     REFUND,
     TRANSFER,
     FEE,
-    INTEREST,
+    INTEREST_CHARGED,
+    INTEREST_EARNED,
     ADJUSTMENT
 }
 
+enum class TransactionDirection {
+    OUT, // Money leaving account
+    IN   // Money entering account
+}
+
+typealias TransferDirection = TransactionDirection
+
 enum class TransactionStatus {
     PENDING,     // Financial event occurred, budget classification incomplete; AFFECTS account balance!
+    CONFIRMED,   // Income and standard paired transfers; AFFECTS account balance
     CATEGORIZED, // Fully classified with allocations summing to total; AFFECTS account balance
     IGNORED,     // Duplicate notification, OTP, promotional, non-financial; EXCLUDED from balance
     VOIDED       // Canceled/reversed manually; EXCLUDED from balance
@@ -53,24 +64,31 @@ enum class TransactionSource {
     MANUAL
 }
 
-enum class TransferDirection {
-    OUT, // Money leaving account
-    IN   // Money entering account
+enum class CheckpointType {
+    AVAILABLE_BALANCE,
+    AVAILABLE_CREDIT_LIMIT,
+    TOTAL_OUTSTANDING
+}
+
+enum class MonthCloseReconciliationStatus {
+    RECONCILED,
+    RECONCILED_WITH_OVERRIDE,
+    UNRECONCILED
 }
 
 enum class StatementImportStatus {
     IMPORTED,
     RECONCILED,
+    ARITHMETIC_ERROR,
     CANCELLED
 }
 
 enum class StatementMatchStatus {
     MATCHED,
+    MATCHED_WITH_DISCREPANCY,
     MISSING_IN_APP,
     MISSING_IN_STATEMENT,
-    AMOUNT_MISMATCH,
-    DATE_MISMATCH,
-    DUPLICATE_CANDIDATE,
+    TIMING_DIFFERENCE,
     RESOLVED
 }
 
@@ -78,9 +96,15 @@ enum class AuditAction {
     CREATED,
     UPDATED,
     CATEGORIZED,
+    UNCATEGORIZED,
     SPLIT,
     TRANSFER_LINKED,
     REFUND_LINKED,
     VOIDED,
-    RESTORED
+    IGNORED,
+    RESTORED,
+    DUPLICATE_DROPPED,
+    PERIOD_CLOSED,
+    PERIOD_REOPENED,
+    DB_RESTORED
 }

@@ -48,6 +48,9 @@ fun AccountCard(
         AccountType.BANK -> Icons.Default.AccountBalance
         AccountType.CREDIT_CARD -> Icons.Default.CreditCard
         AccountType.CASH -> Icons.Default.Payments
+        AccountType.INVESTMENT -> Icons.Default.AccountBalance
+        AccountType.LOAN -> Icons.Default.AccountBalance
+        AccountType.WALLET -> Icons.Default.Payments
     }
 
     val containerColor = if (isCreditCard && summary.currentBalancePaise < 0) {

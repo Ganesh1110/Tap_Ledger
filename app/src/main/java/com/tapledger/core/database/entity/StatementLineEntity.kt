@@ -13,7 +13,7 @@ import com.tapledger.core.model.StatementMatchStatus
         ForeignKey(
             entity = StatementImportEntity::class,
             parentColumns = ["id"],
-            childColumns = ["statement_import_id"],
+            childColumns = ["import_id"],
             onDelete = ForeignKey.RESTRICT
         ),
         ForeignKey(
@@ -24,7 +24,7 @@ import com.tapledger.core.model.StatementMatchStatus
         )
     ],
     indices = [
-        Index(value = ["statement_import_id"]),
+        Index(value = ["import_id"]),
         Index(value = ["matched_transaction_id"]),
         Index(value = ["match_status"])
     ]
@@ -32,10 +32,8 @@ import com.tapledger.core.model.StatementMatchStatus
 data class StatementLineEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    @ColumnInfo(name = "statement_import_id")
-    val statementImportId: Long,
-    @ColumnInfo(name = "line_number")
-    val lineNumber: Int,
+    @ColumnInfo(name = "import_id")
+    val importId: Long,
     @ColumnInfo(name = "transaction_date")
     val transactionDate: Long,
     @ColumnInfo(name = "value_date")
@@ -46,12 +44,10 @@ data class StatementLineEntity(
     val debitPaise: Long = 0L,
     @ColumnInfo(name = "credit_paise")
     val creditPaise: Long = 0L,
-    @ColumnInfo(name = "balance_paise")
-    val balancePaise: Long? = null,
+    @ColumnInfo(name = "balance_after_paise")
+    val balanceAfterPaise: Long? = null,
     @ColumnInfo(name = "matched_transaction_id")
     val matchedTransactionId: Long? = null,
     @ColumnInfo(name = "match_status")
-    val matchStatus: StatementMatchStatus = StatementMatchStatus.MISSING_IN_APP,
-    @ColumnInfo(name = "created_at")
-    val createdAt: Long
+    val matchStatus: StatementMatchStatus = StatementMatchStatus.MISSING_IN_APP
 )

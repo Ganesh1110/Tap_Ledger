@@ -274,7 +274,6 @@ private fun BucketSectionHeader(
         BudgetBucket.NEEDS -> "Needs (50%)"
         BudgetBucket.WANTS -> "Wants (30%)"
         BudgetBucket.SAVINGS -> "Savings (20%)"
-        BudgetBucket.UNALLOCATED -> "Unallocated Pool"
     }
 
     Column(
@@ -337,7 +336,6 @@ private fun CategoryManageRow(
         BudgetBucket.NEEDS -> AdvancePolicy.CARRY_TO_ADVANCE
         BudgetBucket.WANTS -> AdvancePolicy.EXPIRE
         BudgetBucket.SAVINGS -> AdvancePolicy.SWEEP_TO_SAVINGS
-        BudgetBucket.UNALLOCATED -> AdvancePolicy.EXPIRE
     }
     val hasCustomPolicy = itemState.category.defaultAdvancePolicy != bucketDefaultPolicy
 

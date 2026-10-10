@@ -17,10 +17,10 @@ interface StatementLineDao {
     @Update
     suspend fun update(line: StatementLineEntity)
 
-    @Query("SELECT * FROM statement_lines WHERE statement_import_id = :importId ORDER BY line_number ASC")
+    @Query("SELECT * FROM statement_lines WHERE import_id = :importId ORDER BY transaction_date ASC, id ASC")
     fun observeLinesForImport(importId: Long): Flow<List<StatementLineEntity>>
 
-    @Query("SELECT * FROM statement_lines WHERE statement_import_id = :importId ORDER BY line_number ASC")
+    @Query("SELECT * FROM statement_lines WHERE import_id = :importId ORDER BY transaction_date ASC, id ASC")
     suspend fun getLinesForImportSync(importId: Long): List<StatementLineEntity>
 
     @Query("SELECT * FROM statement_lines WHERE matched_transaction_id = :transactionId LIMIT 1")
@@ -28,7 +28,7 @@ interface StatementLineDao {
 
     @Query("""
         SELECT COUNT(*) FROM statement_lines 
-        WHERE statement_import_id = :importId AND match_status != 'MATCHED' AND match_status != 'RESOLVED'
+        WHERE import_id = :importId AND match_status != 'MATCHED' AND match_status != 'RESOLVED'
     """)
     suspend fun getUnresolvedCount(importId: Long): Int
 }

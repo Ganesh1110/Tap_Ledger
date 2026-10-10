@@ -6,6 +6,8 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+import com.tapledger.core.model.MonthCloseReconciliationStatus
+
 @Entity(
     tableName = "month_closes",
     foreignKeys = [
@@ -27,12 +29,20 @@ data class MonthCloseEntity(
     val budgetPeriodId: Long,
     @ColumnInfo(name = "closed_at")
     val closedAt: Long,
-    @ColumnInfo(name = "closed_by")
-    val closedBy: String = "USER",
+    @ColumnInfo(name = "planned_income_paise")
+    val plannedIncomePaise: Long,
+    @ColumnInfo(name = "actual_income_paise")
+    val actualIncomePaise: Long,
+    @ColumnInfo(name = "total_budgeted_paise")
+    val totalBudgetedPaise: Long,
+    @ColumnInfo(name = "total_spent_paise")
+    val totalSpentPaise: Long,
+    @ColumnInfo(name = "total_saved_paise")
+    val totalSavedPaise: Long,
     @ColumnInfo(name = "reconciliation_status")
-    val reconciliationStatus: String,
+    val reconciliationStatus: MonthCloseReconciliationStatus,
     @ColumnInfo(name = "override_reason")
     val overrideReason: String? = null,
-    @ColumnInfo(name = "created_at")
-    val createdAt: Long
+    @ColumnInfo(name = "closing_balances_json")
+    val closingBalancesJson: String
 )

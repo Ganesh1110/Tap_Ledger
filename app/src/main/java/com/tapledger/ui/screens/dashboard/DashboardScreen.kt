@@ -501,16 +501,6 @@ fun DashboardScreen(
                             spentPaise = bs.bucketSpent[BudgetBucket.SAVINGS] ?: 0L
                         )
                     }
-
-                    if (bs.unallocatedBudgetPaise > 0L) {
-                        item(key = "bucket_unallocated") {
-                            BucketProgressCard(
-                                bucket = BudgetBucket.UNALLOCATED,
-                                allocatedPaise = bs.unallocatedBudgetPaise,
-                                spentPaise = 0L
-                            )
-                        }
-                    }
                 }
 
                 // 4. Category Budgets

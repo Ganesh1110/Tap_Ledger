@@ -396,7 +396,7 @@ fun MonthCloseScreen(
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        viewModel.closeMonth("RECONCILED", overrideReason.ifBlank { null })
+                        viewModel.closeMonth(com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED, overrideReason.ifBlank { null })
                         showCloseConfirmDialog = false
                     }
                 ) {

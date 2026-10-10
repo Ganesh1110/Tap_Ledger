@@ -30,15 +30,16 @@ class MerchantRepository @Inject constructor(
         val entity = if (existing != null) {
             existing.copy(
                 categoryId = categoryId,
-                updatedAt = now
+                timesConfirmed = existing.timesConfirmed + 1,
+                lastUsedAt = now
             )
         } else {
             MerchantMapEntity(
                 merchantNormalized = normalized,
                 categoryId = categoryId,
-                source = "USER_CONFIRMED",
-                createdAt = now,
-                updatedAt = now
+                timesConfirmed = 1,
+                timesOverridden = 0,
+                lastUsedAt = now
             )
         }
 

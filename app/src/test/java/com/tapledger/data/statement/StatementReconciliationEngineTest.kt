@@ -16,23 +16,19 @@ class StatementReconciliationEngineTest {
         val lines = listOf(
             StatementLineEntity(
                 id = 1,
-                statementImportId = 10,
-                lineNumber = 1,
+                importId = 10,
                 transactionDate = 1000L,
                 description = "Salary",
                 creditPaise = 50_000_00L,
-                debitPaise = 0L,
-                createdAt = 1000L
+                debitPaise = 0L
             ),
             StatementLineEntity(
                 id = 2,
-                statementImportId = 10,
-                lineNumber = 2,
+                importId = 10,
                 transactionDate = 2000L,
                 description = "Rent",
                 creditPaise = 0L,
-                debitPaise = 15_000_00L,
-                createdAt = 2000L
+                debitPaise = 15_000_00L
             )
         )
 
@@ -59,23 +55,19 @@ class StatementReconciliationEngineTest {
         val lines = listOf(
             StatementLineEntity(
                 id = 1,
-                statementImportId = 10,
-                lineNumber = 1,
+                importId = 10,
                 transactionDate = 1000L,
                 description = "Chai",
                 debitPaise = 50_00L,
-                creditPaise = 0L,
-                createdAt = 1000L
+                creditPaise = 0L
             ),
             StatementLineEntity(
                 id = 2,
-                statementImportId = 10,
-                lineNumber = 2,
+                importId = 10,
                 transactionDate = 1200L,
                 description = "Chai",
                 debitPaise = 50_00L,
-                creditPaise = 0L,
-                createdAt = 1200L
+                creditPaise = 0L
             )
         )
 
@@ -85,6 +77,7 @@ class StatementReconciliationEngineTest {
                 id = 101,
                 accountId = 1,
                 kind = TransactionKind.EXPENSE,
+                direction = com.tapledger.core.model.TransactionDirection.OUT,
                 amountPaise = 50_00L,
                 occurredAt = 1050L,
                 createdAt = 1050L,

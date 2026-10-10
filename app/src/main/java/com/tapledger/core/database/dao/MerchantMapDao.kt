@@ -14,9 +14,15 @@ interface MerchantMapDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(entry: MerchantMapEntity): Long
 
-    @Query("SELECT * FROM merchant_map WHERE merchant_normalized = :merchantNormalized LIMIT 1")
+    @Query("SELECT * FROM merchant_map WHERE merchant_normalized = :merchantNormalized ORDER BY times_confirmed DESC, last_used_at DESC LIMIT 1")
     suspend fun findByMerchant(merchantNormalized: String): MerchantMapEntity?
 
-    @Query("SELECT * FROM merchant_map ORDER BY updated_at DESC")
+    @Query("SELECT * FROM merchant_map WHERE merchant_normalized = :merchantNormalized AND category_id = :categoryId LIMIT 1")
+    suspend fun findByMerchantAndCategory(merchantNormalized: String, categoryId: Long): MerchantMapEntity?
+
+    @Query("SELECT * FROM merchant_map WHERE merchant_normalized = :merchantNormalized")
+    suspend fun getMappingsForMerchant(merchantNormalized: String): List<MerchantMapEntity>
+
+    @Query("SELECT * FROM merchant_map ORDER BY last_used_at DESC")
     fun observeAll(): Flow<List<MerchantMapEntity>>
 }

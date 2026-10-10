@@ -2,21 +2,27 @@ package com.tapledger.core.database.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "unparsed_alerts")
+@Entity(
+    tableName = "unparsed_alerts",
+    indices = [
+        Index(value = ["occurred_at"])
+    ]
+)
 data class UnparsedAlertEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val source: String,
-    @ColumnInfo(name = "sender_or_package")
-    val senderOrPackage: String,
-    @ColumnInfo(name = "raw_redacted_preview")
-    val rawRedactedPreview: String,
-    @ColumnInfo(name = "received_at")
-    val receivedAt: Long,
-    val reason: String,
-    val status: String = "NEW",
+    @ColumnInfo(name = "package_name")
+    val packageName: String,
+    val title: String,
+    @ColumnInfo(name = "raw_text")
+    val rawText: String,
+    @ColumnInfo(name = "occurred_at")
+    val occurredAt: Long,
+    @ColumnInfo(name = "error_reason")
+    val errorReason: String,
     @ColumnInfo(name = "created_at")
     val createdAt: Long
 )

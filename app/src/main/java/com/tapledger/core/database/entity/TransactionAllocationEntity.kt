@@ -23,7 +23,7 @@ import androidx.room.PrimaryKey
         )
     ],
     indices = [
-        Index(value = ["transaction_id"]),
+        Index(value = ["transaction_id", "category_id"], unique = true),
         Index(value = ["category_id"])
     ]
 )
@@ -35,9 +35,5 @@ data class TransactionAllocationEntity(
     @ColumnInfo(name = "category_id")
     val categoryId: Long,
     @ColumnInfo(name = "amount_paise")
-    val amountPaise: Long,
-    @ColumnInfo(name = "created_at")
-    val createdAt: Long,
-    @ColumnInfo(name = "updated_at")
-    val updatedAt: Long
+    val amountPaise: Long
 )

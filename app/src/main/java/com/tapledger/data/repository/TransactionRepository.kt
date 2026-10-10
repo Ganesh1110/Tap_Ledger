@@ -9,10 +9,10 @@ import com.tapledger.core.database.entity.AuditLogEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.AuditAction
+import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
-import com.tapledger.core.model.TransferDirection
 import com.tapledger.core.util.DateTimeUtils
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
@@ -73,17 +73,16 @@ class TransactionRepository @Inject constructor(
             val tx = TransactionEntity(
                 accountId = accountId,
                 kind = TransactionKind.EXPENSE,
+                direction = TransactionDirection.OUT,
                 amountPaise = amountPaise,
                 merchantRaw = merchantRaw,
-                merchantNormalized = merchantNormalized,
                 upiReference = upiReference,
                 occurredAt = occurredAt,
                 createdAt = now,
                 updatedAt = now,
                 status = status,
                 source = source,
-                sourceFingerprint = sourceFingerprint,
-                note = note
+                notes = note
             )
             val txId = transactionDao.insert(tx)
 
@@ -92,9 +91,7 @@ class TransactionRepository @Inject constructor(
                     TransactionAllocationEntity(
                         transactionId = txId,
                         categoryId = catId,
-                        amountPaise = amt,
-                        createdAt = now,
-                        updatedAt = now
+                        amountPaise = amt
                     )
                 }
                 transactionAllocationDao.insertAll(allocEntities)
@@ -134,17 +131,16 @@ class TransactionRepository @Inject constructor(
             val tx = TransactionEntity(
                 accountId = accountId,
                 kind = TransactionKind.INCOME,
+                direction = TransactionDirection.IN,
                 amountPaise = amountPaise,
                 merchantRaw = merchantRaw,
-                merchantNormalized = merchantNormalized,
                 upiReference = upiReference,
                 occurredAt = occurredAt,
                 createdAt = now,
                 updatedAt = now,
                 status = TransactionStatus.CATEGORIZED,
                 source = source,
-                sourceFingerprint = sourceFingerprint,
-                note = note
+                notes = note
             )
             val txId = transactionDao.insert(tx)
 
@@ -177,12 +173,13 @@ class TransactionRepository @Inject constructor(
         require(fromAccountId != toAccountId) { "Cannot transfer to the same account" }
 
         val now = DateTimeUtils.nowEpochMillis()
-        val transferGroupId = System.nanoTime()
+        val transferGroupId = UUID.randomUUID().toString()
 
         return database.withTransaction {
             val outLeg = TransactionEntity(
                 accountId = fromAccountId,
                 kind = TransactionKind.TRANSFER,
+                direction = TransactionDirection.OUT,
                 amountPaise = amountPaise,
                 occurredAt = occurredAt,
                 createdAt = now,
@@ -190,14 +187,15 @@ class TransactionRepository @Inject constructor(
                 status = TransactionStatus.CATEGORIZED,
                 source = source,
                 transferGroupId = transferGroupId,
-                transferDirection = TransferDirection.OUT,
-                note = note ?: "Transfer OUT"
+                counterpartyAccountId = toAccountId,
+                notes = note ?: "Transfer OUT"
             )
             val outId = transactionDao.insert(outLeg)
 
             val inLeg = TransactionEntity(
                 accountId = toAccountId,
                 kind = TransactionKind.TRANSFER,
+                direction = TransactionDirection.IN,
                 amountPaise = amountPaise,
                 occurredAt = occurredAt,
                 createdAt = now,
@@ -205,8 +203,8 @@ class TransactionRepository @Inject constructor(
                 status = TransactionStatus.CATEGORIZED,
                 source = source,
                 transferGroupId = transferGroupId,
-                transferDirection = TransferDirection.IN,
-                note = note ?: "Transfer IN"
+                counterpartyAccountId = fromAccountId,
+                notes = note ?: "Transfer IN"
             )
             val inId = transactionDao.insert(inLeg)
 
@@ -253,6 +251,7 @@ class TransactionRepository @Inject constructor(
             val tx = TransactionEntity(
                 accountId = accountId,
                 kind = TransactionKind.REFUND,
+                direction = TransactionDirection.IN,
                 amountPaise = amountPaise,
                 merchantRaw = merchantRaw,
                 occurredAt = occurredAt,
@@ -261,7 +260,7 @@ class TransactionRepository @Inject constructor(
                 status = status,
                 source = source,
                 refundOfTransactionId = refundOfTransactionId,
-                note = note
+                notes = note
             )
             val txId = transactionDao.insert(tx)
 
@@ -270,9 +269,7 @@ class TransactionRepository @Inject constructor(
                     TransactionAllocationEntity(
                         transactionId = txId,
                         categoryId = categoryId,
-                        amountPaise = amountPaise,
-                        createdAt = now,
-                        updatedAt = now
+                        amountPaise = amountPaise
                     )
                 )
             }
@@ -318,9 +315,7 @@ class TransactionRepository @Inject constructor(
                 TransactionAllocationEntity(
                     transactionId = transactionId,
                     categoryId = catId,
-                    amountPaise = amt,
-                    createdAt = now,
-                    updatedAt = now
+                    amountPaise = amt
                 )
             }
             transactionAllocationDao.insertAll(entities)

@@ -316,7 +316,6 @@ fun ManualEntryScreen(
                                     BudgetBucket.NEEDS -> "Needs (50%)"
                                     BudgetBucket.WANTS -> "Wants (30%)"
                                     BudgetBucket.SAVINGS -> "Savings (20%)"
-                                    BudgetBucket.UNALLOCATED -> "Unallocated"
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

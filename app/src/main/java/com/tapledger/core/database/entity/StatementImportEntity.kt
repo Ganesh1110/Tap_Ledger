@@ -30,13 +30,16 @@ data class StatementImportEntity(
     val periodStart: Long,
     @ColumnInfo(name = "period_end")
     val periodEnd: Long,
-    @ColumnInfo(name = "source_uri_reference")
-    val sourceUriReference: String? = null,
-    val format: String,
     @ColumnInfo(name = "opening_balance_paise")
     val openingBalancePaise: Long,
     @ColumnInfo(name = "closing_balance_paise")
     val closingBalancePaise: Long,
+    @ColumnInfo(name = "total_debits_paise")
+    val totalDebitsPaise: Long,
+    @ColumnInfo(name = "total_credits_paise")
+    val totalCreditsPaise: Long,
+    @ColumnInfo(name = "line_count")
+    val lineCount: Int,
     val status: StatementImportStatus = StatementImportStatus.IMPORTED,
     @ColumnInfo(name = "created_at")
     val createdAt: Long

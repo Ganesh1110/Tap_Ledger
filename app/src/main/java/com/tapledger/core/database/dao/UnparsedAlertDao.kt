@@ -13,9 +13,12 @@ interface UnparsedAlertDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(alert: UnparsedAlertEntity): Long
 
-    @Query("SELECT * FROM unparsed_alerts ORDER BY received_at DESC")
+    @Query("SELECT * FROM unparsed_alerts ORDER BY occurred_at DESC")
     fun observeAll(): Flow<List<UnparsedAlertEntity>>
 
-    @Query("SELECT COUNT(*) FROM unparsed_alerts WHERE status = 'NEW'")
-    fun observeNewCount(): Flow<Int>
+    @Query("SELECT COUNT(*) FROM unparsed_alerts")
+    fun observeCount(): Flow<Int>
+
+    @Query("DELETE FROM unparsed_alerts WHERE occurred_at < :thresholdTimestamp")
+    suspend fun purgeOlderThan(thresholdTimestamp: Long): Int
 }

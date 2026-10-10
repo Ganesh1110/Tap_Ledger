@@ -59,18 +59,16 @@ object StatementCsvParser {
 
             parsedLines.add(
                 StatementLineEntity(
-                    statementImportId = importId,
-                    lineNumber = lineNumber++,
+                    importId = importId,
                     transactionDate = txDate,
                     valueDate = txDate,
                     description = desc,
                     reference = if (ref.isNullOrBlank()) null else ref,
                     debitPaise = debitPaise,
                     creditPaise = creditPaise,
-                    balancePaise = balancePaise,
+                    balanceAfterPaise = balancePaise,
                     matchedTransactionId = null,
-                    matchStatus = StatementMatchStatus.MISSING_IN_APP,
-                    createdAt = createdAt
+                    matchStatus = StatementMatchStatus.MISSING_IN_APP
                 )
             )
         }

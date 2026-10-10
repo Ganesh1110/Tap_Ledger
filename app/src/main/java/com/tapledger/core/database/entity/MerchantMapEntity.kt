@@ -17,7 +17,7 @@ import androidx.room.PrimaryKey
         )
     ],
     indices = [
-        Index(value = ["merchant_normalized"], unique = true),
+        Index(value = ["merchant_normalized", "category_id"], unique = true),
         Index(value = ["category_id"])
     ]
 )
@@ -28,9 +28,10 @@ data class MerchantMapEntity(
     val merchantNormalized: String,
     @ColumnInfo(name = "category_id")
     val categoryId: Long,
-    val source: String = "USER_CONFIRMED",
-    @ColumnInfo(name = "created_at")
-    val createdAt: Long,
-    @ColumnInfo(name = "updated_at")
-    val updatedAt: Long
+    @ColumnInfo(name = "times_confirmed")
+    val timesConfirmed: Int = 0,
+    @ColumnInfo(name = "times_overridden")
+    val timesOverridden: Int = 0,
+    @ColumnInfo(name = "last_used_at")
+    val lastUsedAt: Long
 )

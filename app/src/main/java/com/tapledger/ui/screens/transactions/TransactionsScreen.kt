@@ -362,7 +362,7 @@ fun TransactionsScreen(
                 DetailItem(label = "Type", value = tx.kind.name)
                 DetailItem(label = "Source", value = tx.source.name)
                 tx.upiReference?.let { DetailItem(label = "UPI Reference", value = it) }
-                tx.note?.let { DetailItem(label = "Note", value = it) }
+                tx.notes?.let { DetailItem(label = "Note", value = it) }
 
                 Spacer(modifier = Modifier.height(Spacing.lg))
 

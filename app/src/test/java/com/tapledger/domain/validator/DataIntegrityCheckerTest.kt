@@ -46,6 +46,7 @@ class DataIntegrityCheckerTest {
             id = 101,
             accountId = 1,
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 1_000_00L,
             occurredAt = 2000L,
             createdAt = 2000L,
@@ -58,9 +59,7 @@ class DataIntegrityCheckerTest {
             id = 501,
             transactionId = 101,
             categoryId = 10,
-            amountPaise = 800_00L, // Mismatch!
-            createdAt = 2000L,
-            updatedAt = 2000L
+            amountPaise = 800_00L // Mismatch!
         )
 
         val issues = checker.verifyIntegrity(
@@ -84,14 +83,14 @@ class DataIntegrityCheckerTest {
             id = 201,
             accountId = 1,
             kind = TransactionKind.TRANSFER,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 5_000_00L,
             occurredAt = 2000L,
             createdAt = 2000L,
             updatedAt = 2000L,
             status = TransactionStatus.CATEGORIZED,
             source = TransactionSource.MANUAL,
-            transferGroupId = 999L,
-            transferDirection = TransferDirection.OUT
+            transferGroupId = "999"
         )
 
         val issues = checker.verifyIntegrity(
@@ -115,6 +114,7 @@ class DataIntegrityCheckerTest {
             id = 301,
             accountId = 999, // Missing!
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 500_00L,
             occurredAt = 2000L,
             createdAt = 2000L,

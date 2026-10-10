@@ -29,7 +29,7 @@ class MonthCloseEngine @Inject constructor(
      */
     suspend fun closeMonth(
         summary: BudgetPeriodSummary,
-        reconciliationStatus: String = "RECONCILED",
+        reconciliationStatus: com.tapledger.core.model.MonthCloseReconciliationStatus = com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED,
         overrideReason: String? = null
     ): Long {
         val period = summary.period
@@ -47,7 +47,8 @@ class MonthCloseEngine @Inject constructor(
                     // Section 28: Overspending must NEVER disappear! Recorded as negative advance.
                     advanceEntries.add(
                         AdvanceLedgerEntity(
-                            budgetPeriodId = period.id,
+                            sourcePeriodId = period.id,
+                            appliedToPeriodId = null,
                             categoryId = catSummary.allocation.categoryId,
                             amountPaise = -remaining,
                             direction = AdvanceDirection.NEGATIVE,
@@ -60,7 +61,8 @@ class MonthCloseEngine @Inject constructor(
                         AdvancePolicy.CARRY_TO_ADVANCE -> {
                             advanceEntries.add(
                                 AdvanceLedgerEntity(
-                                    budgetPeriodId = period.id,
+                                    sourcePeriodId = period.id,
+                                    appliedToPeriodId = null,
                                     categoryId = catSummary.allocation.categoryId,
                                     amountPaise = remaining,
                                     direction = AdvanceDirection.POSITIVE,
@@ -73,7 +75,8 @@ class MonthCloseEngine @Inject constructor(
                             // Section 27: Logical budget operation assigning to savings pool
                             advanceEntries.add(
                                 AdvanceLedgerEntity(
-                                    budgetPeriodId = period.id,
+                                    sourcePeriodId = period.id,
+                                    appliedToPeriodId = null,
                                     categoryId = catSummary.allocation.categoryId,
                                     amountPaise = remaining,
                                     direction = AdvanceDirection.POSITIVE,
@@ -97,6 +100,7 @@ class MonthCloseEngine @Inject constructor(
             budgetPeriodDao.update(
                 period.copy(
                     status = BudgetPeriodStatus.CLOSED,
+                    closedAt = now,
                     updatedAt = now
                 )
             )
@@ -105,10 +109,14 @@ class MonthCloseEngine @Inject constructor(
             val monthClose = MonthCloseEntity(
                 budgetPeriodId = period.id,
                 closedAt = now,
-                closedBy = "USER",
+                plannedIncomePaise = summary.totalIncomePaise,
+                actualIncomePaise = summary.totalIncomePaise,
+                totalBudgetedPaise = summary.totalBudgetedPaise,
+                totalSpentPaise = summary.totalSpentPaise,
+                totalSavedPaise = 0L,
                 reconciliationStatus = reconciliationStatus,
                 overrideReason = overrideReason,
-                createdAt = now
+                closingBalancesJson = "{}"
             )
             monthCloseDao.insert(monthClose)
         }

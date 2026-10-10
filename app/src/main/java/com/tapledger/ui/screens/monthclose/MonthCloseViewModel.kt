@@ -70,7 +70,10 @@ class MonthCloseViewModel @Inject constructor(
         }
     }
 
-    fun closeMonth(reconciliationStatus: String = "RECONCILED", overrideReason: String? = null) {
+    fun closeMonth(
+        reconciliationStatus: com.tapledger.core.model.MonthCloseReconciliationStatus = com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED,
+        overrideReason: String? = null
+    ) {
         viewModelScope.launch {
             try {
                 val summary = _uiState.value.summary ?: return@launch

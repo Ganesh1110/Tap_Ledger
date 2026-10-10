@@ -34,36 +34,9 @@ object AccountBalanceCalculator {
                 continue
             }
 
-            when (tx.kind) {
-                TransactionKind.INCOME -> {
-                    totalIncomingPaise += tx.amountPaise
-                }
-                TransactionKind.REFUND -> {
-                    totalIncomingPaise += tx.amountPaise
-                }
-                TransactionKind.EXPENSE,
-                TransactionKind.FEE,
-                TransactionKind.INTEREST -> {
-                    totalOutgoingPaise += tx.amountPaise
-                }
-                TransactionKind.TRANSFER -> {
-                    when (tx.transferDirection) {
-                        TransferDirection.IN -> totalIncomingPaise += tx.amountPaise
-                        TransferDirection.OUT -> totalOutgoingPaise += tx.amountPaise
-                        null -> {
-                            // Default fallback if direction was not recorded
-                            totalOutgoingPaise += tx.amountPaise
-                        }
-                    }
-                }
-                TransactionKind.ADJUSTMENT -> {
-                    // Adjustments can be positive or negative; if stored as positive magnitude
-                    if (tx.amountPaise >= 0) {
-                        totalIncomingPaise += tx.amountPaise
-                    } else {
-                        totalOutgoingPaise += -tx.amountPaise
-                    }
-                }
+            when (tx.direction) {
+                com.tapledger.core.model.TransactionDirection.IN -> totalIncomingPaise += tx.amountPaise
+                com.tapledger.core.model.TransactionDirection.OUT -> totalOutgoingPaise += tx.amountPaise
             }
         }
 
@@ -79,9 +52,10 @@ object AccountBalanceCalculator {
     }
 
     /**
-     * Computes Net Worth across all active accounts:
-     * Asset accounts (BANK, CASH) contribute to total assets (positive balance).
-     * Credit Card accounts contribute to liabilities (negative balance).
+     * Computes Net Worth across all active accounts (Flow.md §6.2):
+     * Assets      = Σ max( Balance(A), 0)
+     * Liabilities = Σ max(−Balance(A), 0)      // type-agnostic
+     * NetWorth    = Assets − Liabilities = Σ Balance(A)
      */
     fun calculateNetWorth(summaries: List<AccountBalanceSummary>): NetWorthSummary {
         var totalAssets = 0L
@@ -90,25 +64,10 @@ object AccountBalanceCalculator {
         for (summary in summaries) {
             if (!summary.account.isActive) continue
             val balance = summary.currentBalancePaise
-            when (summary.account.type) {
-                AccountType.BANK,
-                AccountType.CASH -> {
-                    if (balance >= 0) {
-                        totalAssets += balance
-                    } else {
-                        // In case of bank overdraft
-                        totalLiabilities += -balance
-                    }
-                }
-                AccountType.CREDIT_CARD -> {
-                    // Credit card liability: balance is negative (e.g. -₹8,000 means ₹8,000 liability)
-                    if (balance < 0) {
-                        totalLiabilities += -balance
-                    } else {
-                        // Credit balance on card
-                        totalAssets += balance
-                    }
-                }
+            if (balance >= 0) {
+                totalAssets += balance
+            } else {
+                totalLiabilities += -balance
             }
         }
 

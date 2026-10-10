@@ -16,12 +16,21 @@ interface AdvanceLedgerDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(entries: List<AdvanceLedgerEntity>): List<Long>
 
-    @Query("SELECT * FROM advance_ledger WHERE budget_period_id = :periodId")
-    fun observeForPeriod(periodId: Long): Flow<List<AdvanceLedgerEntity>>
+    @Query("SELECT * FROM advance_ledger WHERE applied_to_period_id = :periodId")
+    fun observeAppliedToPeriod(periodId: Long): Flow<List<AdvanceLedgerEntity>>
 
-    @Query("SELECT * FROM advance_ledger WHERE budget_period_id = :periodId")
-    suspend fun getForPeriodSync(periodId: Long): List<AdvanceLedgerEntity>
+    @Query("SELECT * FROM advance_ledger WHERE applied_to_period_id = :periodId")
+    suspend fun getAppliedToPeriodSync(periodId: Long): List<AdvanceLedgerEntity>
+
+    @Query("SELECT * FROM advance_ledger WHERE source_period_id = :periodId")
+    suspend fun getSourcePeriodSync(periodId: Long): List<AdvanceLedgerEntity>
+
+    @Query("SELECT * FROM advance_ledger WHERE applied_to_period_id IS NULL AND direction = 'NEGATIVE' ORDER BY created_at ASC")
+    suspend fun getUnassignedDeficitPoolSync(): List<AdvanceLedgerEntity>
 
     @Query("SELECT * FROM advance_ledger WHERE category_id = :categoryId ORDER BY created_at ASC")
     suspend fun getForCategory(categoryId: Long): List<AdvanceLedgerEntity>
+
+    @Query("DELETE FROM advance_ledger WHERE source_period_id = :sourcePeriodId")
+    suspend fun deleteForSourcePeriod(sourcePeriodId: Long)
 }

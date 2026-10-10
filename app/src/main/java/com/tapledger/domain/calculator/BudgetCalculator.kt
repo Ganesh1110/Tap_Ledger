@@ -50,7 +50,7 @@ object BudgetCalculator {
             when (tx.kind) {
                 TransactionKind.EXPENSE,
                 TransactionKind.FEE,
-                TransactionKind.INTEREST -> {
+                TransactionKind.INTEREST_CHARGED -> {
                     expensePerCategory[txAlloc.categoryId] =
                         (expensePerCategory[txAlloc.categoryId] ?: 0L) + txAlloc.amountPaise
                 }
@@ -120,7 +120,6 @@ object BudgetCalculator {
         }
 
         val unallocatedBudget = period.incomePaise - totalBudgeted
-        bucketTotals[BudgetBucket.UNALLOCATED] = unallocatedBudget
 
         return BudgetPeriodSummary(
             period = period,

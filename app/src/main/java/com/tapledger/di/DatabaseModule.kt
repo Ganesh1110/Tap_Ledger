@@ -35,7 +35,10 @@ object DatabaseModule {
             context,
             TapLedgerDatabase::class.java,
             TapLedgerDatabase.DATABASE_NAME
-        ).build()
+        )
+            .addMigrations(com.tapledger.core.database.MIGRATION_1_2)
+            .addCallback(com.tapledger.core.database.DatabaseTriggers.Callback)
+            .build()
     }
 
     @Provides

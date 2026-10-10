@@ -24,7 +24,14 @@ data class AccountEntity(
     val openingBalancePaise: Long,
     @ColumnInfo(name = "opening_balance_date")
     val openingBalanceDate: Long,
-    val currency: String = "INR",
+    @ColumnInfo(name = "credit_limit_paise")
+    val creditLimitPaise: Long? = null,
+    @ColumnInfo(name = "statement_day")
+    val statementDay: Int? = null,
+    @ColumnInfo(name = "due_day")
+    val dueDay: Int? = null,
+    @ColumnInfo(name = "is_savings")
+    val isSavings: Boolean = false,
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = true,
     @ColumnInfo(name = "created_at")

@@ -122,7 +122,7 @@ class ManualEntryViewModel @Inject constructor(
                 when (state.selectedKind) {
                     TransactionKind.EXPENSE,
                     TransactionKind.FEE,
-                    TransactionKind.INTEREST -> {
+                    TransactionKind.INTEREST_CHARGED -> {
                         val categoryId = state.selectedCategoryId
                         if (categoryId != null && state.merchantText.isNotBlank()) {
                             merchantRepository.rememberMerchantCategory(state.merchantText, categoryId)
@@ -141,7 +141,8 @@ class ManualEntryViewModel @Inject constructor(
                             allocations = allocations
                         )
                     }
-                    TransactionKind.INCOME -> {
+                    TransactionKind.INCOME,
+                    TransactionKind.INTEREST_EARNED -> {
                         transactionRepository.recordIncome(
                             accountId = accountId,
                             amountPaise = amountPaise,

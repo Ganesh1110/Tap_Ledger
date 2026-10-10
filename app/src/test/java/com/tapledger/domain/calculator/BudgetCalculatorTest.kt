@@ -61,6 +61,7 @@ class BudgetCalculatorTest {
             id = 101,
             accountId = 1,
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 4_100_00L,
             occurredAt = 1500L,
             createdAt = 1500L,
@@ -72,9 +73,7 @@ class BudgetCalculatorTest {
             id = 501,
             transactionId = 101,
             categoryId = 10,
-            amountPaise = 4_100_00L,
-            createdAt = 1500L,
-            updatedAt = 1500L
+            amountPaise = 4_100_00L
         )
 
         val summary = BudgetCalculator.calculateBudgetPeriodSummary(
@@ -130,6 +129,7 @@ class BudgetCalculatorTest {
             id = 101,
             accountId = 1,
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 2_000_00L,
             occurredAt = 1200L,
             createdAt = 1200L,
@@ -141,15 +141,14 @@ class BudgetCalculatorTest {
             id = 501,
             transactionId = 101,
             categoryId = 10,
-            amountPaise = 2_000_00L,
-            createdAt = 1200L,
-            updatedAt = 1200L
+            amountPaise = 2_000_00L
         )
 
         val refundTx = TransactionEntity(
             id = 102,
             accountId = 1,
             kind = TransactionKind.REFUND,
+            direction = com.tapledger.core.model.TransactionDirection.IN,
             amountPaise = 500_00L,
             occurredAt = 1400L,
             createdAt = 1400L,
@@ -162,9 +161,7 @@ class BudgetCalculatorTest {
             id = 502,
             transactionId = 102,
             categoryId = 10,
-            amountPaise = 500_00L,
-            createdAt = 1400L,
-            updatedAt = 1400L
+            amountPaise = 500_00L
         )
 
         val summary = BudgetCalculator.calculateBudgetPeriodSummary(

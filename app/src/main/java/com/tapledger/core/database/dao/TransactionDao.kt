@@ -44,7 +44,7 @@ interface TransactionDao {
     @Query("""
         SELECT * FROM transactions 
         WHERE account_id = :accountId 
-          AND status IN ('PENDING', 'CATEGORIZED') 
+          AND status IN ('PENDING', 'CONFIRMED', 'CATEGORIZED') 
           AND occurred_at >= :sinceEpochMillis
         ORDER BY occurred_at ASC
     """)
@@ -53,7 +53,7 @@ interface TransactionDao {
     @Query("""
         SELECT * FROM transactions 
         WHERE account_id = :accountId 
-          AND status IN ('PENDING', 'CATEGORIZED') 
+          AND status IN ('PENDING', 'CONFIRMED', 'CATEGORIZED') 
           AND occurred_at >= :sinceEpochMillis
         ORDER BY occurred_at ASC
     """)
@@ -61,15 +61,15 @@ interface TransactionDao {
 
     @Query("""
         SELECT * FROM transactions 
-        WHERE occurred_at BETWEEN :startEpochMillis AND :endEpochMillis
-          AND status IN ('PENDING', 'CATEGORIZED')
+        WHERE occurred_at >= :startEpochMillis AND occurred_at < :endEpochMillis
+          AND status IN ('PENDING', 'CONFIRMED', 'CATEGORIZED')
         ORDER BY occurred_at DESC
     """)
     suspend fun getTransactionsInPeriod(startEpochMillis: Long, endEpochMillis: Long): List<TransactionEntity>
 
     @Query("""
         SELECT * FROM transactions 
-        WHERE occurred_at BETWEEN :startEpochMillis AND :endEpochMillis
+        WHERE occurred_at >= :startEpochMillis AND occurred_at < :endEpochMillis
         ORDER BY occurred_at DESC
     """)
     fun observeTransactionsInPeriod(startEpochMillis: Long, endEpochMillis: Long): Flow<List<TransactionEntity>>
@@ -82,21 +82,76 @@ interface TransactionDao {
 
     @Query("""
         SELECT * FROM transactions 
-        WHERE amount_paise = :amountPaise 
-          AND occurred_at BETWEEN :startWindow AND :endWindow
-          AND source != :excludeSource
-          AND status != 'VOIDED'
-        ORDER BY occurred_at ASC
+        WHERE account_id = :accountId 
+          AND upi_reference = :upiRef 
+          AND direction = :direction 
+          AND amount_paise = :amountPaise 
+        LIMIT 1
     """)
-    suspend fun findCrossSourceCandidates(
+    suspend fun findByExactKey(
+        accountId: Long,
+        upiRef: String,
+        direction: com.tapledger.core.model.TransactionDirection,
+        amountPaise: Long
+    ): TransactionEntity?
+
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE account_id IS NULL 
+          AND upi_reference = :upiRef 
+          AND direction = :direction 
+          AND amount_paise = :amountPaise 
+        LIMIT 1
+    """)
+    suspend fun findByExactKeyUnassigned(
+        upiRef: String,
+        direction: com.tapledger.core.model.TransactionDirection,
+        amountPaise: Long
+    ): TransactionEntity?
+
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE ((account_id = :accountId) OR (:accountId IS NULL AND account_id IS NULL))
+          AND direction = :direction 
+          AND amount_paise = :amountPaise 
+          AND occurred_at BETWEEN :startWindow AND :endWindow
+          AND status != 'VOIDED'
+        ORDER BY occurred_at DESC
+    """)
+    suspend fun findFuzzyCandidates(
+        accountId: Long?,
+        direction: com.tapledger.core.model.TransactionDirection,
         amountPaise: Long,
         startWindow: Long,
-        endWindow: Long,
-        excludeSource: String
+        endWindow: Long
+    ): List<TransactionEntity>
+
+    @Query("""
+        SELECT * FROM transactions 
+        WHERE account_id != :excludeAccountId 
+          AND transfer_group_id IS NULL 
+          AND status = 'PENDING' 
+          AND amount_paise = :amountPaise 
+          AND direction = :oppositeDirection 
+          AND occurred_at BETWEEN :startWindow AND :endWindow
+          AND NOT EXISTS (
+              SELECT 1 FROM budget_periods p 
+              WHERE transactions.occurred_at >= p.start_at 
+                AND transactions.occurred_at < p.end_at 
+                AND p.status = 'CLOSED'
+          )
+        ORDER BY occurred_at ASC
+    """)
+    suspend fun findTransferPairCandidates(
+        excludeAccountId: Long,
+        oppositeDirection: com.tapledger.core.model.TransactionDirection,
+        amountPaise: Long,
+        startWindow: Long,
+        endWindow: Long
     ): List<TransactionEntity>
 
     @Query("SELECT * FROM transactions WHERE transfer_group_id = :transferGroupId")
-    suspend fun getTransferLegs(transferGroupId: Long): List<TransactionEntity>
+    suspend fun getTransferLegs(transferGroupId: String): List<TransactionEntity>
 
     @Query("SELECT * FROM transactions WHERE refund_of_transaction_id = :originalTransactionId")
     suspend fun getRefundsForTransaction(originalTransactionId: Long): List<TransactionEntity>

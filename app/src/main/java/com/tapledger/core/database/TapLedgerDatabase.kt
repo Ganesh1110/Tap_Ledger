@@ -50,7 +50,7 @@ import com.tapledger.core.database.entity.UnparsedAlertEntity
         MonthCloseEntity::class,
         AuditLogEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

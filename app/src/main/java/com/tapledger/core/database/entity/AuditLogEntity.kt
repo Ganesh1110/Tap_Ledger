@@ -25,12 +25,12 @@ data class AuditLogEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     @ColumnInfo(name = "transaction_id")
-    val transactionId: Long,
+    val transactionId: Long? = null,
     val action: AuditAction,
-    @ColumnInfo(name = "old_value_json")
-    val oldValuesJson: String? = null,
-    @ColumnInfo(name = "new_value_json")
-    val newValuesJson: String? = null,
+    @ColumnInfo(name = "before_snapshot_json")
+    val beforeSnapshotJson: String? = null,
+    @ColumnInfo(name = "after_snapshot_json")
+    val afterSnapshotJson: String? = null,
     val reason: String? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long

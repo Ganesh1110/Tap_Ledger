@@ -7,14 +7,23 @@ import com.tapledger.core.model.AdvancePolicy
 import com.tapledger.core.model.AuditAction
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.BudgetPeriodStatus
+import com.tapledger.core.model.CheckpointType
+import com.tapledger.core.model.MonthCloseReconciliationStatus
 import com.tapledger.core.model.StatementImportStatus
 import com.tapledger.core.model.StatementMatchStatus
+import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
 import com.tapledger.core.model.TransferDirection
 
 class Converters {
+
+    @TypeConverter
+    fun fromTransactionDirection(value: TransactionDirection?): String? = value?.name
+
+    @TypeConverter
+    fun toTransactionDirection(value: String?): TransactionDirection? = value?.let { TransactionDirection.valueOf(it) }
 
     @TypeConverter
     fun fromAccountType(value: AccountType?): String? = value?.name
@@ -65,12 +74,6 @@ class Converters {
     fun toTransactionSource(value: String?): TransactionSource? = value?.let { TransactionSource.valueOf(it) }
 
     @TypeConverter
-    fun fromTransferDirection(value: TransferDirection?): String? = value?.name
-
-    @TypeConverter
-    fun toTransferDirection(value: String?): TransferDirection? = value?.let { TransferDirection.valueOf(it) }
-
-    @TypeConverter
     fun fromStatementImportStatus(value: StatementImportStatus?): String? = value?.name
 
     @TypeConverter
@@ -87,4 +90,16 @@ class Converters {
 
     @TypeConverter
     fun toAuditAction(value: String?): AuditAction? = value?.let { AuditAction.valueOf(it) }
+
+    @TypeConverter
+    fun fromCheckpointType(value: CheckpointType?): String? = value?.name
+
+    @TypeConverter
+    fun toCheckpointType(value: String?): CheckpointType? = value?.let { CheckpointType.valueOf(it) }
+
+    @TypeConverter
+    fun fromMonthCloseReconciliationStatus(value: MonthCloseReconciliationStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toMonthCloseReconciliationStatus(value: String?): MonthCloseReconciliationStatus? = value?.let { MonthCloseReconciliationStatus.valueOf(it) }
 }

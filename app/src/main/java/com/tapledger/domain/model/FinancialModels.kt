@@ -54,6 +54,6 @@ data class IntegrityIssue(
     val ruleId: String,
     val message: String,
     val entityType: String,
-    val entityId: Long,
+    val entityId: String,
     val severity: IntegritySeverity
 )

@@ -23,7 +23,11 @@ data class BudgetPeriodEntity(
     val endAt: Long,
     @ColumnInfo(name = "income_paise")
     val incomePaise: Long,
+    @ColumnInfo(name = "is_reviewed")
+    val isReviewed: Boolean = false,
     val status: BudgetPeriodStatus = BudgetPeriodStatus.OPEN,
+    @ColumnInfo(name = "closed_at")
+    val closedAt: Long? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")

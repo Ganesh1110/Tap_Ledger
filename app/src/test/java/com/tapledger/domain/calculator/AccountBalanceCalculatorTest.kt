@@ -41,6 +41,7 @@ class AccountBalanceCalculatorTest {
             id = 101,
             accountId = 1,
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 850_00L,
             occurredAt = 2000L,
             createdAt = 2000L,
@@ -64,6 +65,7 @@ class AccountBalanceCalculatorTest {
             id = 102,
             accountId = 1,
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 500_00L,
             occurredAt = 2000L,
             createdAt = 2000L,
@@ -76,6 +78,7 @@ class AccountBalanceCalculatorTest {
             id = 103,
             accountId = 1,
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 1000_00L,
             occurredAt = 2000L,
             createdAt = 2000L,
@@ -100,6 +103,7 @@ class AccountBalanceCalculatorTest {
             id = 201,
             accountId = 2,
             kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
             amountPaise = 2_000_00L,
             occurredAt = 2000L,
             createdAt = 2000L,
@@ -113,14 +117,14 @@ class AccountBalanceCalculatorTest {
             id = 202,
             accountId = 2,
             kind = TransactionKind.TRANSFER,
+            direction = com.tapledger.core.model.TransactionDirection.IN,
             amountPaise = 5_000_00L,
             occurredAt = 3000L,
             createdAt = 3000L,
             updatedAt = 3000L,
             status = TransactionStatus.CATEGORIZED,
             source = TransactionSource.MANUAL,
-            transferGroupId = 55L,
-            transferDirection = TransferDirection.IN
+            transferGroupId = "55"
         )
 
         val summary = AccountBalanceCalculator.calculateAccountBalance(

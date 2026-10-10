@@ -10,7 +10,6 @@ import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.BudgetPeriodStatus
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionStatus
-import com.tapledger.core.model.TransferDirection
 import com.tapledger.domain.model.IntegrityIssue
 import com.tapledger.domain.model.IntegritySeverity
 
@@ -38,14 +37,14 @@ class DataIntegrityChecker {
 
         // 1. Transaction checks
         for (tx in transactions) {
-            // Rule T1: Invalid account reference
-            if (!accountIds.contains(tx.accountId)) {
+            // Rule T1: Invalid account reference (exempt null account_id per Flow.md §3.1)
+            if (tx.accountId != null && !accountIds.contains(tx.accountId)) {
                 issues.add(
                     IntegrityIssue(
                         ruleId = "T1_INVALID_ACCOUNT",
                         message = "Transaction #${tx.id} references non-existent account #${tx.accountId}",
                         entityType = "Transaction",
-                        entityId = tx.id,
+                        entityId = tx.id.toString(),
                         severity = IntegritySeverity.CRITICAL
                     )
                 )
@@ -58,7 +57,7 @@ class DataIntegrityChecker {
                         ruleId = "T2_INVALID_AMOUNT",
                         message = "Transaction #${tx.id} has non-positive amount: ${tx.amountPaise} paise",
                         entityType = "Transaction",
-                        entityId = tx.id,
+                        entityId = tx.id.toString(),
                         severity = IntegritySeverity.ERROR
                     )
                 )
@@ -79,7 +78,7 @@ class DataIntegrityChecker {
                             ruleId = "A1_SPLIT_SUM_MISMATCH",
                             message = "Categorized transaction #${tx.id} amount (${tx.amountPaise} paise) does not match allocations sum ($sumAllocs paise)",
                             entityType = "Transaction",
-                            entityId = tx.id,
+                            entityId = tx.id.toString(),
                             severity = IntegritySeverity.CRITICAL
                         )
                     )
@@ -93,7 +92,7 @@ class DataIntegrityChecker {
                                 ruleId = "A2_INVALID_CATEGORY_REF",
                                 message = "Allocation #${alloc.id} references non-existent category #${alloc.categoryId}",
                                 entityType = "TransactionAllocation",
-                                entityId = alloc.id,
+                                entityId = alloc.id.toString(),
                                 severity = IntegritySeverity.CRITICAL
                             )
                         )
@@ -110,7 +109,7 @@ class DataIntegrityChecker {
                         ruleId = "A3_ORPHANED_ALLOCATION",
                         message = "Allocation #${alloc.id} references non-existent transaction #${alloc.transactionId}",
                         entityType = "TransactionAllocation",
-                        entityId = alloc.id,
+                        entityId = alloc.id.toString(),
                         severity = IntegritySeverity.CRITICAL
                     )
                 )
@@ -144,9 +143,7 @@ class DataIntegrityChecker {
                         )
                     )
                 }
-                if (leg1.transferDirection == leg2.transferDirection ||
-                    leg1.transferDirection == null || leg2.transferDirection == null
-                ) {
+                if (leg1.direction == leg2.direction) {
                     issues.add(
                         IntegrityIssue(
                             ruleId = "TR3_INVALID_DIRECTIONS",
@@ -181,7 +178,7 @@ class DataIntegrityChecker {
                             ruleId = "R1_MISSING_ORIGINAL_TX",
                             message = "Refund #${tx.id} references non-existent original transaction #${tx.refundOfTransactionId}",
                             entityType = "Transaction",
-                            entityId = tx.id,
+                            entityId = tx.id.toString(),
                             severity = IntegritySeverity.ERROR
                         )
                     )
@@ -191,7 +188,7 @@ class DataIntegrityChecker {
                             ruleId = "R2_REFUND_EXCEEDS_ORIGINAL",
                             message = "Refund #${tx.id} amount (${tx.amountPaise}) exceeds original transaction amount (${originalTx.amountPaise})",
                             entityType = "Transaction",
-                            entityId = tx.id,
+                            entityId = tx.id.toString(),
                             severity = IntegritySeverity.WARNING
                         )
                     )
@@ -208,7 +205,7 @@ class DataIntegrityChecker {
                         ruleId = "MC1_MISSING_CLOSE_RECORD",
                         message = "Budget period #${period.id} (${period.year}-${period.month}) is CLOSED but lacks a MonthClose record",
                         entityType = "BudgetPeriod",
-                        entityId = period.id,
+                        entityId = period.id.toString(),
                         severity = IntegritySeverity.ERROR
                     )
                 )

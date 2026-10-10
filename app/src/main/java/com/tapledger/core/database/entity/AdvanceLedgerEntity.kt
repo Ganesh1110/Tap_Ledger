@@ -13,7 +13,13 @@ import com.tapledger.core.model.AdvanceDirection
         ForeignKey(
             entity = BudgetPeriodEntity::class,
             parentColumns = ["id"],
-            childColumns = ["budget_period_id"],
+            childColumns = ["source_period_id"],
+            onDelete = ForeignKey.RESTRICT
+        ),
+        ForeignKey(
+            entity = BudgetPeriodEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["applied_to_period_id"],
             onDelete = ForeignKey.RESTRICT
         ),
         ForeignKey(
@@ -24,15 +30,18 @@ import com.tapledger.core.model.AdvanceDirection
         )
     ],
     indices = [
-        Index(value = ["budget_period_id"]),
+        Index(value = ["source_period_id"]),
+        Index(value = ["applied_to_period_id"]),
         Index(value = ["category_id"])
     ]
 )
 data class AdvanceLedgerEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    @ColumnInfo(name = "budget_period_id")
-    val budgetPeriodId: Long,
+    @ColumnInfo(name = "source_period_id")
+    val sourcePeriodId: Long,
+    @ColumnInfo(name = "applied_to_period_id")
+    val appliedToPeriodId: Long? = null,
     @ColumnInfo(name = "category_id")
     val categoryId: Long,
     @ColumnInfo(name = "amount_paise")
