@@ -50,8 +50,8 @@ class BudgetAllocationDaoGuardTest {
 
         override fun observeAllocationsForPeriod(periodId: Long): Flow<List<BudgetAllocationEntity>> = emptyFlow()
         override suspend fun getAllocationsForPeriodSync(periodId: Long): List<BudgetAllocationEntity> = emptyList()
-        override suspend fun getAllocationForCategory(periodId: Long, categoryId: Long): BudgetAllocationEntity? = null
-        override suspend fun getTotalBudgetedForPeriod(periodId: Long): Long? = 0L
+        override suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity> = emptyList()
+        override suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity? = null
     }
 
     private fun createAllocation(
@@ -66,7 +66,9 @@ class BudgetAllocationDaoGuardTest {
         bucketSnapshot = BudgetBucket.NEEDS,
         sortOrderSnapshot = 1,
         advancePolicySnapshot = AdvancePolicy.CARRY_TO_ADVANCE,
-        amountPaise = amountPaise
+        amountPaise = amountPaise,
+        createdAt = 1000L,
+        updatedAt = 1000L
     )
 
     @Test
@@ -90,6 +92,7 @@ class BudgetAllocationDaoGuardTest {
                 categoryId = 10L,
                 amountPaise = 2000L,
                 direction = AdvanceDirection.POSITIVE,
+                reason = "Carryover",
                 createdAt = 1000L
             )
         )
@@ -157,6 +160,7 @@ class BudgetAllocationDaoGuardTest {
                 categoryId = 10L,
                 amountPaise = 8000L,
                 direction = AdvanceDirection.NEGATIVE,
+                reason = "Deficit",
                 createdAt = 1000L
             ),
             AdvanceLedgerEntity(
@@ -166,6 +170,7 @@ class BudgetAllocationDaoGuardTest {
                 categoryId = 10L,
                 amountPaise = 3000L,
                 direction = AdvanceDirection.POSITIVE,
+                reason = "Surplus",
                 createdAt = 1000L
             )
         )

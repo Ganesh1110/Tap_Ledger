@@ -49,5 +49,5 @@ data class AdvanceLedgerEntity(
     val direction: AdvanceDirection,
     val reason: String? = null,
     @ColumnInfo(name = "created_at")
-    val createdAt: Long
+    val createdAt: Long = 0L
 )

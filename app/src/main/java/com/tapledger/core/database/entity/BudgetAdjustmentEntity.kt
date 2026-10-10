@@ -45,7 +45,7 @@ data class BudgetAdjustmentEntity(
     val toCategoryId: Long,
     @ColumnInfo(name = "amount_paise")
     val amountPaise: Long,
-    val reason: String?,
+    val reason: String? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long
 )
