@@ -1,6 +1,6 @@
 # TapLedger: Complete System Flows & Mathematical Specification
 
-> **Version:** 2.5 (Formal Specification & Production Engine Architecture)  
+> **Version:** 2.6 (Formal Specification & Production Engine Architecture)  
 > **Target OS:** Android 10+ (API 29–36, Android 16 Ready), Optimized for Xiaomi/HyperOS, Samsung OneUI, and Pixel  
 > **Core Architectural Principles:** Single-user, 100% offline-first, Zero floating-point arithmetic (`Long` paise only), Transfer-level double-entry and envelope integrity, Asia/Kolkata (`IST`) timezone.
 
@@ -386,6 +386,7 @@ flowchart LR
    - Equal `amount_paise`.
    - Opposite `direction` (`OUT` vs `IN`).
    - $|t.\text{occurred\_at} - \text{candidate}.\text{occurred\_at}| \le 24 \text{ hours}$.
+   - **Exclusion of Closed Periods (Amendment A2):** The query strictly excludes candidate transactions whose `occurred_at` falls in an already `CLOSED` budget period (preventing cross-boundary pairing attempts).
    - To prevent silent collisions (e.g. accidentally fusing a salary credit with an unrelated same-day rent payment), the engine surfaces a **Candidate Transfer Pair** card in the Pending Inbox:
      `"Potential Transfer: HDFC (-₹10,000) ↔ SBI (+₹10,000) — Tap to Confirm Link"`.
    - Upon user confirmation, Room atomically links both rows: assigns a shared `transfer_group_id`, sets `counterparty_account_id` reciprocally (`Leg1.counterparty_account_id = Leg2.account_id` and vice-versa), updates `kind = TRANSFER`, and transitions standard transfers to `CONFIRMED`.
@@ -688,11 +689,21 @@ The `DataIntegrityChecker` audits the Room database against 19 formal rules:
 
 ### 13.2 Safe Restore Protocol with File-Backed Spool & Rollback Guard
 
+- **Archive Format Auto-Detection (Magic Bytes):**
+  When restoring an archive, the first 4 bytes are inspected to determine whether decryption is required:
+  - `0x54 0x50 0x4C 0x46` (`TPLF`): Encrypted archive. Read header (version, salt, nonce, Argon2id params, tag) and prompt user for passphrase or 12-word recovery key to decrypt via AES-256-GCM.
+  - `0x50 0x4B 0x03 0x04` (`PK\x03\x04`): Plaintext ZIP archive. Directly extract `snapshot.db` and `manifest.json`, skipping the passphrase/recovery key prompt.
+  - Any other initial bytes: Reject immediately as an invalid or corrupted backup format.
+
 ```mermaid
 flowchart TD
     A["User selects .tapledger backup file"] --> B["Pause Notification Ingestion Service\n& Spool Inbound Alerts to Disk (fsync)"]
-    B --> C["Prompt Passphrase / Recovery Key\nVerify Header & Decrypt AES-256-GCM"]
+    B --> C_magic{"Detect Archive Format\n(Read First 4 Bytes)"}
+    C_magic -- "TPLF (Encrypted)" --> C["Prompt Passphrase / Recovery Key\nVerify Header & Decrypt AES-256-GCM"]
+    C_magic -- "PK\x03\x04 (Plaintext ZIP)" --> D_zip["Extract ZIP directly\n(Skip Passphrase Prompt)"]
+    C_magic -- "Unknown Bytes" --> F_bad["Abort: Invalid or Corrupted Format"]
     C --> D["Verify SHA-256 Manifest & Schema Version ≤ AppCurrentVersion"]
+    D_zip --> D
     D --> E["Open snapshot & run PRAGMA integrity_check"]
     E -- Failed --> F["Resume Ingestion, Replay Spooled Alerts & Abort with Error"]
     E -- OK --> G["Create Pre-Restore Safety Backup of current DB"]

@@ -28,7 +28,6 @@ data class MerchantMapEntity(
     val merchantNormalized: String,
     @ColumnInfo(name = "category_id")
     val categoryId: Long,
-    val confidence: Float = 1.0f,
     val source: String = "USER_CONFIRMED",
     @ColumnInfo(name = "created_at")
     val createdAt: Long,

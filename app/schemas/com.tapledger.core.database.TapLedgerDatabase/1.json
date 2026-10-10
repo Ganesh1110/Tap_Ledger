@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "b04c5b5d9c3c52a9ab969bb91bbc2752",
+    "identityHash": "4a4800fd3daedc0104e7fb54ce98bebf",
     "entities": [
       {
         "tableName": "accounts",
@@ -859,7 +859,7 @@
       },
       {
         "tableName": "merchant_map",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `merchant_normalized` TEXT NOT NULL, `category_id` INTEGER NOT NULL, `confidence` REAL NOT NULL, `source` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `merchant_normalized` TEXT NOT NULL, `category_id` INTEGER NOT NULL, `source` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`category_id`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
         "fields": [
           {
             "fieldPath": "id",
@@ -877,12 +877,6 @@
             "fieldPath": "categoryId",
             "columnName": "category_id",
             "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "confidence",
-            "columnName": "confidence",
-            "affinity": "REAL",
             "notNull": true
           },
           {
@@ -1405,7 +1399,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b04c5b5d9c3c52a9ab969bb91bbc2752')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4a4800fd3daedc0104e7fb54ce98bebf')"
     ]
   }
 }

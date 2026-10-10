@@ -36,7 +36,6 @@ class MerchantRepository @Inject constructor(
             MerchantMapEntity(
                 merchantNormalized = normalized,
                 categoryId = categoryId,
-                confidence = 1.0f,
                 source = "USER_CONFIRMED",
                 createdAt = now,
                 updatedAt = now
