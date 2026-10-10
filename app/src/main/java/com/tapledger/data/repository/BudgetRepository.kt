@@ -19,7 +19,7 @@ import javax.inject.Singleton
 
 @Singleton
 class BudgetRepository @Inject constructor(
-    private val database: TapLedgerDatabase,
+    private val transactionRunner: com.tapledger.core.database.DatabaseTransactionRunner,
     private val categoryDao: CategoryDao,
     private val budgetPeriodDao: BudgetPeriodDao,
     private val budgetAllocationDao: BudgetAllocationDao,
@@ -31,48 +31,119 @@ class BudgetRepository @Inject constructor(
 
     suspend fun getCategoryById(id: Long): CategoryEntity? = categoryDao.getById(id)
 
+    suspend fun getOrCreateBudgetPeriodForTimestamp(timestamp: Long): BudgetPeriodEntity {
+        val ym = DateTimeUtils.toYearMonth(timestamp)
+        return getOrCreateBudgetPeriod(ym.year, ym.monthValue)
+    }
+
     suspend fun getOrCreateBudgetPeriod(year: Int, month: Int, defaultIncomePaise: Long = 52_000_00L): BudgetPeriodEntity {
         val existing = budgetPeriodDao.getByYearMonth(year, month)
         if (existing != null) return existing
 
+        return transactionRunner.run {
+            val inTx = budgetPeriodDao.getByYearMonth(year, month)
+            if (inTx != null) return@run inTx
+
+            val latestExisting = budgetPeriodDao.getLatestPeriod()
+            if (latestExisting == null) {
+                createSinglePeriod(year, month, defaultIncomePaise, null)
+            } else {
+                val latestYm = java.time.YearMonth.of(latestExisting.year, latestExisting.month)
+                val targetYm = java.time.YearMonth.of(year, month)
+                if (targetYm.isAfter(latestYm)) {
+                    var currentYm = latestYm.plusMonths(1)
+                    var lastPeriod: BudgetPeriodEntity = latestExisting
+                    while (!currentYm.isAfter(targetYm)) {
+                        val existingAtCurr = budgetPeriodDao.getByYearMonth(currentYm.year, currentYm.monthValue)
+                        if (existingAtCurr != null) {
+                            lastPeriod = existingAtCurr
+                        } else {
+                            val newPeriod = createSinglePeriod(
+                                currentYm.year,
+                                currentYm.monthValue,
+                                lastPeriod.incomePaise,
+                                lastPeriod.id
+                            )
+                            lastPeriod = newPeriod
+                        }
+                        currentYm = currentYm.plusMonths(1)
+                    }
+                    budgetPeriodDao.getByYearMonth(year, month)!!
+                } else {
+                    createSinglePeriod(year, month, latestExisting.incomePaise, latestExisting.id)
+                }
+            }
+        }
+    }
+
+    private suspend fun createSinglePeriod(
+        year: Int,
+        month: Int,
+        incomePaise: Long,
+        templatePeriodId: Long?
+    ): BudgetPeriodEntity {
         val startAt = DateTimeUtils.getStartOfMonthEpochMillis(year, month)
         val endAt = DateTimeUtils.getEndOfMonthEpochMillis(year, month)
         val now = DateTimeUtils.nowEpochMillis()
 
-        return database.withTransaction {
-            val periodEntity = BudgetPeriodEntity(
-                year = year,
-                month = month,
-                startAt = startAt,
-                endAt = endAt,
-                incomePaise = defaultIncomePaise,
-                status = BudgetPeriodStatus.OPEN,
+        val periodEntity = BudgetPeriodEntity(
+            year = year,
+            month = month,
+            startAt = startAt,
+            endAt = endAt,
+            incomePaise = incomePaise,
+            status = BudgetPeriodStatus.OPEN,
+            isReviewed = false,
+            createdAt = now,
+            updatedAt = now
+        )
+        val periodId = budgetPeriodDao.insert(periodEntity)
+        val createdPeriod = periodEntity.copy(id = periodId)
+
+        val allocations = if (templatePeriodId != null) {
+            val templateAllocations = budgetAllocationDao.getAllocationsForPeriodSync(templatePeriodId)
+            if (templateAllocations.isNotEmpty()) {
+                templateAllocations.map { template ->
+                    BudgetAllocationEntity(
+                        budgetPeriodId = periodId,
+                        categoryId = template.categoryId,
+                        categoryNameSnapshot = template.categoryNameSnapshot,
+                        bucketSnapshot = template.bucketSnapshot,
+                        sortOrderSnapshot = template.sortOrderSnapshot,
+                        advancePolicySnapshot = template.advancePolicySnapshot,
+                        amountPaise = template.amountPaise,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                }
+            } else {
+                snapshotCategories(periodId, now)
+            }
+        } else {
+            snapshotCategories(periodId, now)
+        }
+
+        if (allocations.isNotEmpty()) {
+            budgetAllocationDao.insertAll(allocations)
+        }
+
+        return createdPeriod
+    }
+
+    private suspend fun snapshotCategories(periodId: Long, now: Long): List<BudgetAllocationEntity> {
+        val categories = categoryDao.getAllCategoriesSync()
+        return categories.map { category ->
+            BudgetAllocationEntity(
+                budgetPeriodId = periodId,
+                categoryId = category.id,
+                categoryNameSnapshot = category.name,
+                bucketSnapshot = category.defaultBucket,
+                sortOrderSnapshot = category.defaultSortOrder,
+                advancePolicySnapshot = category.defaultAdvancePolicy,
+                amountPaise = 0L,
                 createdAt = now,
                 updatedAt = now
             )
-            val periodId = budgetPeriodDao.insert(periodEntity)
-            val createdPeriod = periodEntity.copy(id = periodId)
-
-            // Snapshot existing active categories into monthly allocations
-            val categories = categoryDao.getAllCategoriesSync()
-            val allocations = categories.map { category ->
-                BudgetAllocationEntity(
-                    budgetPeriodId = periodId,
-                    categoryId = category.id,
-                    categoryNameSnapshot = category.name,
-                    bucketSnapshot = category.defaultBucket,
-                    sortOrderSnapshot = category.defaultSortOrder,
-                    advancePolicySnapshot = category.defaultAdvancePolicy,
-                    amountPaise = 0L, // Initial base allocation
-                    createdAt = now,
-                    updatedAt = now
-                )
-            }
-            if (allocations.isNotEmpty()) {
-                budgetAllocationDao.insertAll(allocations)
-            }
-
-            createdPeriod
         }
     }
 
@@ -128,7 +199,7 @@ class BudgetRepository @Inject constructor(
     ): Long {
         val now = DateTimeUtils.nowEpochMillis()
         val nextSortOrder = (categoryDao.getMaxSortOrder() ?: 0) + 1
-        return database.withTransaction {
+        return transactionRunner.run {
             val category = CategoryEntity(
                 name = name.trim(),
                 defaultBucket = defaultBucket,

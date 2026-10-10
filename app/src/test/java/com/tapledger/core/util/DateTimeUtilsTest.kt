@@ -34,10 +34,11 @@ class DateTimeUtilsTest {
         assertThat(startDate.hour).isEqualTo(0)
         assertThat(startDate.minute).isEqualTo(0)
 
+        // Half-open interval [start_at, end_at): end_at is 00:00:00.000 IST of 2026-11-01
         assertThat(endDate.year).isEqualTo(2026)
-        assertThat(endDate.monthValue).isEqualTo(10)
-        assertThat(endDate.dayOfMonth).isEqualTo(31)
-        assertThat(endDate.hour).isEqualTo(23)
-        assertThat(endDate.minute).isEqualTo(59)
+        assertThat(endDate.monthValue).isEqualTo(11)
+        assertThat(endDate.dayOfMonth).isEqualTo(1)
+        assertThat(endDate.hour).isEqualTo(0)
+        assertThat(endDate.minute).isEqualTo(0)
     }
 }

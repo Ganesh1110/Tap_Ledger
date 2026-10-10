@@ -31,4 +31,19 @@ interface BudgetPeriodDao {
 
     @Query("SELECT * FROM budget_periods")
     suspend fun getAllPeriodsSync(): List<BudgetPeriodEntity>
+
+    @Query("SELECT * FROM budget_periods WHERE :timestamp >= start_at AND :timestamp < end_at LIMIT 1")
+    suspend fun getPeriodForTimestamp(timestamp: Long): BudgetPeriodEntity?
+
+    @Query("SELECT * FROM budget_periods ORDER BY start_at ASC LIMIT 1")
+    suspend fun getEarliestPeriod(): BudgetPeriodEntity?
+
+    @Query("SELECT * FROM budget_periods ORDER BY start_at DESC LIMIT 1")
+    suspend fun getLatestPeriod(): BudgetPeriodEntity?
+
+    @Query("SELECT * FROM budget_periods WHERE status = 'OPEN' AND :timestamp >= start_at AND :timestamp < end_at LIMIT 1")
+    suspend fun getOpenPeriodForTimestamp(timestamp: Long): BudgetPeriodEntity?
+
+    @Query("SELECT * FROM budget_periods WHERE status = 'OPEN' ORDER BY start_at ASC LIMIT 1")
+    suspend fun getFirstOpenPeriod(): BudgetPeriodEntity?
 }

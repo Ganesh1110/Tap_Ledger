@@ -31,4 +31,10 @@ interface AccountDao {
 
     @Query("SELECT * FROM accounts WHERE identifier_last4 = :last4 AND is_active = 1 LIMIT 1")
     suspend fun findByLast4(last4: String): AccountEntity?
+
+    @Query("SELECT * FROM accounts WHERE identifier_last4 = :last4 AND is_active = 1")
+    suspend fun findAllActiveByLast4(last4: String): List<AccountEntity>
+
+    @Query("SELECT * FROM accounts WHERE type = 'BANK' AND is_active = 1")
+    suspend fun getActiveBankAccounts(): List<AccountEntity>
 }

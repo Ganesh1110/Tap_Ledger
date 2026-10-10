@@ -40,11 +40,12 @@ object DateTimeUtils {
     }
 
     /**
-     * Calculates the end epoch millis (23:59:59.999) for a given year and month in Asia/Kolkata.
+     * Calculates the half-open interval upper bound end_at epoch millis (00:00:00.000 IST of next month)
+     * strictly conforming to Flow.md half-open intervals [start_at, end_at) in Asia/Kolkata.
      */
     fun getEndOfMonthEpochMillis(year: Int, month: Int): Long {
         val ym = YearMonth.of(year, month)
-        val endDateTime = ym.atEndOfMonth().atTime(23, 59, 59, 999_000_000).atZone(IST_ZONE)
+        val endDateTime = ym.plusMonths(1).atDay(1).atStartOfDay(IST_ZONE)
         return endDateTime.toInstant().toEpochMilli()
     }
 

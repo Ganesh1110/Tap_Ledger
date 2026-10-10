@@ -82,4 +82,8 @@ object DatabaseModule {
 
     @Provides
     fun provideAuditLogDao(db: TapLedgerDatabase): AuditLogDao = db.auditLogDao()
+
+    @Provides
+    @Singleton
+    fun provideDatabaseTransactionRunner(runner: com.tapledger.core.database.RoomDatabaseTransactionRunner): com.tapledger.core.database.DatabaseTransactionRunner = runner
 }

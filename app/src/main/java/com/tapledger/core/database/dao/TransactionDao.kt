@@ -111,6 +111,19 @@ interface TransactionDao {
 
     @Query("""
         SELECT * FROM transactions 
+        WHERE upi_reference = :upiRef 
+          AND direction = :direction 
+          AND amount_paise = :amountPaise 
+        LIMIT 1
+    """)
+    suspend fun findByUpiDirectionAmountAcrossAllAccounts(
+        upiRef: String,
+        direction: com.tapledger.core.model.TransactionDirection,
+        amountPaise: Long
+    ): TransactionEntity?
+
+    @Query("""
+        SELECT * FROM transactions 
         WHERE ((account_id = :accountId) OR (:accountId IS NULL AND account_id IS NULL))
           AND direction = :direction 
           AND amount_paise = :amountPaise 

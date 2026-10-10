@@ -302,6 +302,11 @@ class TransactionRepository @Inject constructor(
             val tx = transactionDao.getById(transactionId)
                 ?: throw IllegalArgumentException("Transaction #$transactionId not found")
 
+            // Flow.md §3.1: A transaction cannot transition to CONFIRMED or CATEGORIZED while account_id is NULL
+            require(tx.accountId != null) {
+                "Cannot categorize a transaction with unassigned account (account_id is NULL)"
+            }
+
             val totalAllocated = allocations.sumOf { it.second }
             require(totalAllocated == tx.amountPaise) {
                 "Sum of allocations ($totalAllocated) must equal transaction amount (${tx.amountPaise})"
@@ -340,7 +345,61 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
+     * Resolves an unassigned account on a pending transaction (Flow.md §3.1).
+     */
+    suspend fun assignAccount(transactionId: Long, accountId: Long) {
+        val now = DateTimeUtils.nowEpochMillis()
+        database.withTransaction {
+            val tx = transactionDao.getById(transactionId)
+                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
+
+            val updated = tx.copy(
+                accountId = accountId,
+                updatedAt = now
+            )
+            transactionDao.update(updated)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = transactionId,
+                    action = AuditAction.UPDATED,
+                    reason = "Assigned account #$accountId to transaction",
+                    createdAt = now
+                )
+            )
+        }
+    }
+
+    /**
+     * Ignores a transaction (Section 4, Flow.md §3.1).
+     * Permitted even when account_id is NULL. Excluded from financial math.
+     */
+    suspend fun ignoreTransaction(transactionId: Long, reason: String = "Ignored by user") {
+        val now = DateTimeUtils.nowEpochMillis()
+        database.withTransaction {
+            val tx = transactionDao.getById(transactionId)
+                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
+
+            val updated = tx.copy(
+                status = TransactionStatus.IGNORED,
+                updatedAt = now
+            )
+            transactionDao.update(updated)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = transactionId,
+                    action = AuditAction.IGNORED,
+                    reason = reason,
+                    createdAt = now
+                )
+            )
+        }
+    }
+
+    /**
      * Voids a transaction safely without destructive deletion (Section 59, 73).
+     * Permitted even when account_id is NULL.
      */
     suspend fun voidTransaction(transactionId: Long, reason: String) {
         val now = DateTimeUtils.nowEpochMillis()
@@ -366,7 +425,7 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
-     * Restores a voided transaction (Section 59, 73).
+     * Restores a voided or ignored transaction (Section 59, 73).
      */
     suspend fun restoreTransaction(transactionId: Long, reason: String) {
         val now = DateTimeUtils.nowEpochMillis()

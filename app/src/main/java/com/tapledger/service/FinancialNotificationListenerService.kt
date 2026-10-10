@@ -36,13 +36,7 @@ import javax.inject.Inject
 class FinancialNotificationListenerService : NotificationListenerService() {
 
     @Inject
-    lateinit var transactionRepository: TransactionRepository
-
-    @Inject
-    lateinit var transactionDao: TransactionDao
-
-    @Inject
-    lateinit var accountDao: AccountDao
+    lateinit var financialIngestionPipeline: FinancialIngestionPipeline
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -101,7 +95,6 @@ class FinancialNotificationListenerService : NotificationListenerService() {
             else -> text
         }
 
-        // Section 20: Extract EXTRA_MESSAGES for grouped notifications
         val messagesList = mutableListOf<String>()
         val msgArray = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
         msgArray?.forEach {
@@ -117,82 +110,19 @@ class FinancialNotificationListenerService : NotificationListenerService() {
             postTime = sbn.postTime
         )
 
-        Log.d("TapLedgerListener", "Notification received from pkg='$pkg' | title='$title' | text='$effectiveText'")
-
-        val parsed = FinancialNotificationParser.parse(event)
-        if (parsed == null) {
-            Log.d("TapLedgerListener", "Ignored: No financial transaction data parsed from '$title $text'")
-            return
-        }
-
-        Log.i("TapLedgerListener", "Parsed successfully: ${parsed.amountPaise} paise | merchant=${parsed.merchantRaw} | acct=${parsed.accountLast4}")
+        Log.d("TapLedgerListener", "Notification received from pkg='$pkg' | title='$title'")
 
         serviceScope.launch {
-            handleParsedEvent(parsed)
-        }
-    }
-
-    private suspend fun handleParsedEvent(parsed: com.tapledger.parser.ParsedFinancialEvent) {
-        // Level 0 Deduplication: Exact notification fingerprint (Section 22)
-        val existingByFingerprint = transactionDao.findBySourceFingerprint(parsed.sourceFingerprint)
-        if (existingByFingerprint != null) {
-            return // Exact duplicate notification -> auto-dedupe
-        }
-
-        // Level 1 Deduplication: Matching UPI reference (Section 22)
-        if (!parsed.upiReference.isNullOrBlank()) {
-            val existingByUpi = transactionDao.findByUpiReference(parsed.upiReference)
-            if (existingByUpi != null) {
-                return // Same financial event -> auto-dedupe
+            val result = financialIngestionPipeline.processEvent(event)
+            if (result is IngestionResult.Success) {
+                Log.i("TapLedgerListener", "Ingested tx #${result.transactionId}: ${result.parsedEvent.amountPaise} paise")
+                showCapturedNotification(result)
             }
         }
-
-        // Map account identifier (last 4 digits) or fallback to default primary account
-        val matchedAccount = if (!parsed.accountLast4.isNullOrBlank()) {
-            accountDao.findByLast4(parsed.accountLast4)
-        } else {
-            null
-        } ?: accountDao.getAllAccountsSync().firstOrNull() ?: return
-
-        // Ingest into transaction repository
-        if (parsed.kind == TransactionKind.EXPENSE) {
-            transactionRepository.recordExpense(
-                accountId = matchedAccount.id,
-                amountPaise = parsed.amountPaise,
-                occurredAt = parsed.occurredAt,
-                merchantRaw = parsed.merchantRaw,
-                merchantNormalized = parsed.merchantNormalized,
-                upiReference = parsed.upiReference,
-                source = parsed.source,
-                sourceFingerprint = parsed.sourceFingerprint,
-                allocations = emptyList() // Remains PENDING for user categorization
-            )
-        } else if (parsed.kind == TransactionKind.REFUND) {
-            transactionRepository.recordRefund(
-                accountId = matchedAccount.id,
-                amountPaise = parsed.amountPaise,
-                occurredAt = parsed.occurredAt,
-                merchantRaw = parsed.merchantRaw,
-                source = parsed.source
-            )
-        } else if (parsed.kind == TransactionKind.INCOME) {
-            transactionRepository.recordIncome(
-                accountId = matchedAccount.id,
-                amountPaise = parsed.amountPaise,
-                occurredAt = parsed.occurredAt,
-                merchantRaw = parsed.merchantRaw,
-                merchantNormalized = parsed.merchantNormalized,
-                upiReference = parsed.upiReference,
-                source = parsed.source,
-                sourceFingerprint = parsed.sourceFingerprint
-            )
-        }
-
-        // Post local TapLedger notification so user can tap to open app & categorize
-        showCapturedNotification(parsed)
     }
 
-    private fun showCapturedNotification(parsed: com.tapledger.parser.ParsedFinancialEvent) {
+    private fun showCapturedNotification(result: IngestionResult.Success) {
+        val parsed = result.parsedEvent
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "tapledger_captured_tx"
 
@@ -220,14 +150,19 @@ class FinancialNotificationListenerService : NotificationListenerService() {
 
         val amountFormatted = MoneyFormatter.formatRupees(parsed.amountPaise)
         val merchant = parsed.merchantRaw ?: "Transaction"
+        val accountDisplay = if (result.resolvedAccountId == null) {
+            "Unassigned Account — Tap to resolve"
+        } else {
+            parsed.accountLast4?.let { "A/C **$it" } ?: "Account"
+        }
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("New Transaction Captured")
-            .setContentText("$amountFormatted at $merchant. Tap to categorize.")
+            .setContentText("$amountFormatted at $merchant. $accountDisplay")
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("$amountFormatted at $merchant (${parsed.accountLast4?.let { "A/C **$it" } ?: "Account"}). Tap to categorize in TapLedger Pending Inbox.")
+                    .bigText("$amountFormatted at $merchant ($accountDisplay). Tap to categorize in TapLedger Pending Inbox.")
             )
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
