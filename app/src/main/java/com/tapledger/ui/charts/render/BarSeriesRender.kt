@@ -10,6 +10,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -83,5 +84,126 @@ fun BulletBarRender(
             end = Offset(budgetX, heightPx + 2.dp.toPx()),
             strokeWidth = 3.dp.toPx()
         )
+    }
+}
+
+/**
+ * Render primitive for V4 Six-Period Trend clustered bars per Flow.md §17.2 V4.
+ * Clustered bars for actual income, spent, and saved, plus a savings rate line.
+ * The current OPEN period is rendered with hatching / dashed styling and labeled "In progress".
+ */
+@Composable
+fun ClusteredBarChartRender(
+    periods: List<com.tapledger.ui.charts.model.PeriodTrendBar>,
+    modifier: Modifier = Modifier,
+    height: Dp = 180.dp,
+    incomeColor: Color = Color(0xFF009E73),
+    spentColor: Color = Color(0xFFD55E00),
+    savedColor: Color = Color(0xFF0072B2),
+    savingsLineColor: Color = Color(0xFFE69F00)
+) {
+    if (periods.isEmpty()) return
+
+    Canvas(modifier = modifier.fillMaxWidth().height(height)) {
+        val widthPx = size.width
+        val heightPx = size.height
+        val labelMarginPx = 24.dp.toPx()
+        val chartHeightPx = heightPx - labelMarginPx
+
+        val maxPaise = periods.maxOfOrNull {
+            maxOf(it.incomePaise, it.spentPaise, it.savedPaise)
+        }?.coerceAtLeast(1L) ?: 1L
+
+        val n = periods.size
+        val clusterWidth = widthPx / n.toFloat()
+        val barWidth = (clusterWidth * 0.22f).coerceAtMost(16.dp.toPx()).coerceAtLeast(4.dp.toPx())
+        val cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+
+        // Draw horizontal zero baseline
+        drawLine(
+            color = Color.Gray.copy(alpha = 0.3f),
+            start = Offset(0f, chartHeightPx),
+            end = Offset(widthPx, chartHeightPx),
+            strokeWidth = 1.dp.toPx()
+        )
+
+        val savingsPoints = mutableListOf<Offset>()
+
+        periods.forEachIndexed { i, p ->
+            val clusterCenterX = (i + 0.5f) * clusterWidth
+
+            val incomeH = (p.incomePaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+            val spentH = (p.spentPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+            val savedH = (p.savedPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+
+            val xIncome = clusterCenterX - barWidth * 1.5f - 2.dp.toPx()
+            val xSpent = clusterCenterX - barWidth * 0.5f
+            val xSaved = clusterCenterX + barWidth * 0.5f + 2.dp.toPx()
+
+            // Bar drawing helper
+            fun drawBar(x: Float, h: Float, color: Color) {
+                if (h <= 0f) return
+                val topY = chartHeightPx - h
+                if (p.isInProgress) {
+                    // Hatched / dashed stroke for open period in progress (§17.2 V4)
+                    drawRoundRect(
+                        color = color.copy(alpha = 0.4f),
+                        topLeft = Offset(x, topY),
+                        size = Size(barWidth, h),
+                        cornerRadius = cornerRadius
+                    )
+                    drawRoundRect(
+                        color = color,
+                        topLeft = Offset(x, topY),
+                        size = Size(barWidth, h),
+                        cornerRadius = cornerRadius,
+                        style = Stroke(
+                            width = 1.5.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+                        )
+                    )
+                } else {
+                    drawRoundRect(
+                        color = color,
+                        topLeft = Offset(x, topY),
+                        size = Size(barWidth, h),
+                        cornerRadius = cornerRadius
+                    )
+                }
+            }
+
+            drawBar(xIncome, incomeH, incomeColor)
+            drawBar(xSpent, spentH, spentColor)
+            drawBar(xSaved, savedH, savedColor)
+
+            // Savings rate point (0..10,000 bp = 0..100%)
+            p.savingsRateBp?.let { bp ->
+                val rateFraction = (bp.toFloat() / 10_000f).coerceIn(0f, 1f)
+                val ptY = chartHeightPx - (rateFraction * (chartHeightPx * 0.9f))
+                savingsPoints.add(Offset(clusterCenterX, ptY))
+            }
+        }
+
+        // Draw Savings Rate Line connecting points
+        if (savingsPoints.size > 1) {
+            val linePath = androidx.compose.ui.graphics.Path().apply {
+                moveTo(savingsPoints[0].x, savingsPoints[0].y)
+                for (j in 1 until savingsPoints.size) {
+                    lineTo(savingsPoints[j].x, savingsPoints[j].y)
+                }
+            }
+            drawPath(
+                path = linePath,
+                color = savingsLineColor,
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+        savingsPoints.forEach { pt ->
+            drawCircle(
+                color = savingsLineColor,
+                radius = 3.5.dp.toPx(),
+                center = pt
+            )
+        }
     }
 }

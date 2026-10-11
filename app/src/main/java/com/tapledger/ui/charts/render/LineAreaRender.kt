@@ -185,3 +185,184 @@ fun LineAreaRender(
         }
     }
 }
+
+/**
+ * Render primitive for V2 Burn-Up line chart per Flow.md §17.2 V2.
+ * Displays cumulative daily spend vs linear pace vs budget cap line, plus D4 projection.
+ */
+@Composable
+fun BurnUpChartRender(
+    model: com.tapledger.ui.charts.model.BurnUpChartModel,
+    lineColor: Color = Color(0xFF0072B2),
+    paceColor: Color = Color(0xFF7F7F7F),
+    budgetCapColor: Color = Color(0xFFD55E00),
+    modifier: Modifier = Modifier,
+    height: Dp = 180.dp,
+    onScrub: ((com.tapledger.ui.charts.model.BurnUpPoint?) -> Unit)? = null
+) {
+    if (model.cumulativePoints.isEmpty() && model.pacePoints.isEmpty()) return
+
+    var scrubIndex by remember { mutableStateOf<Int?>(null) }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .pointerInput(model.cumulativePoints) {
+                if (onScrub != null && model.cumulativePoints.isNotEmpty()) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val idx = ((offset.x / size.width.toFloat()) * (model.cumulativePoints.size - 1))
+                                .toInt()
+                                .coerceIn(0, model.cumulativePoints.size - 1)
+                            scrubIndex = idx
+                            onScrub(model.cumulativePoints[idx])
+                        },
+                        onDragEnd = {
+                            scrubIndex = null
+                            onScrub(null)
+                        },
+                        onDragCancel = {
+                            scrubIndex = null
+                            onScrub(null)
+                        },
+                        onDrag = { change, _ ->
+                            val idx = ((change.position.x / size.width.toFloat()) * (model.cumulativePoints.size - 1))
+                                .toInt()
+                                .coerceIn(0, model.cumulativePoints.size - 1)
+                            scrubIndex = idx
+                            onScrub(model.cumulativePoints[idx])
+                        }
+                    )
+                }
+            }
+    ) {
+        val widthPx = size.width
+        val heightPx = size.height
+
+        val allValues = model.cumulativePoints.map { it.netSpentPaise } +
+                model.pacePoints.map { it.netSpentPaise } +
+                listOfNotNull(model.budgetCapPaise, model.projectionPaise, 0L)
+        val minVal = 0L
+        val maxVal = maxOf(allValues.maxOrNull() ?: 1L, 1L)
+        val valRange = (maxVal - minVal).coerceAtLeast(1L).toFloat()
+
+        val totalDays = maxOf(model.cumulativePoints.size, model.pacePoints.size, 1)
+
+        fun toX(dayIdx: Int, total: Int): Float {
+            return if (total <= 1) widthPx / 2f else (dayIdx.toFloat() / (total - 1).toFloat()) * widthPx
+        }
+
+        fun toY(value: Long): Float {
+            val fraction = (value - minVal).toFloat() / valRange
+            return heightPx - (fraction * heightPx)
+        }
+
+        // 1. Budget Cap Horizontal Line
+        if (model.budgetCapPaise > 0L) {
+            val capY = toY(model.budgetCapPaise)
+            drawLine(
+                color = budgetCapColor.copy(alpha = 0.7f),
+                start = Offset(0f, capY),
+                end = Offset(widthPx, capY),
+                strokeWidth = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+            )
+        }
+
+        // 2. Linear Pace Guideline Line
+        if (model.pacePoints.size > 1) {
+            val pacePath = Path().apply {
+                moveTo(toX(0, model.pacePoints.size), toY(model.pacePoints[0].netSpentPaise))
+                for (i in 1 until model.pacePoints.size) {
+                    lineTo(toX(i, model.pacePoints.size), toY(model.pacePoints[i].netSpentPaise))
+                }
+            }
+            drawPath(
+                path = pacePath,
+                color = paceColor.copy(alpha = 0.6f),
+                style = Stroke(
+                    width = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f),
+                    cap = StrokeCap.Round
+                )
+            )
+        }
+
+        // 3. Cumulative Spend Fill Area & Line
+        if (model.cumulativePoints.size > 1) {
+            val areaPath = Path().apply {
+                moveTo(toX(0, totalDays), heightPx)
+                model.cumulativePoints.forEachIndexed { i, pt ->
+                    lineTo(toX(i, totalDays), toY(pt.netSpentPaise))
+                }
+                lineTo(toX(model.cumulativePoints.size - 1, totalDays), heightPx)
+                close()
+            }
+            drawPath(
+                path = areaPath,
+                brush = Brush.verticalGradient(
+                    colors = listOf(lineColor.copy(alpha = 0.25f), Color.Transparent),
+                    startY = 0f,
+                    endY = heightPx
+                )
+            )
+
+            val linePath = Path().apply {
+                moveTo(toX(0, totalDays), toY(model.cumulativePoints[0].netSpentPaise))
+                for (i in 1 until model.cumulativePoints.size) {
+                    lineTo(toX(i, totalDays), toY(model.cumulativePoints[i].netSpentPaise))
+                }
+            }
+            drawPath(
+                path = linePath,
+                color = lineColor,
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+
+        // 4. D4 Projection Dashed Line
+        if (model.projectionPoint != null && model.cumulativePoints.isNotEmpty()) {
+            val lastPoint = model.cumulativePoints.last()
+            val startX = toX(model.cumulativePoints.size - 1, totalDays)
+            val startY = toY(lastPoint.netSpentPaise)
+            val endX = toX(totalDays - 1, totalDays)
+            val endY = toY(model.projectionPoint.netSpentPaise)
+
+            val projPath = Path().apply {
+                moveTo(startX, startY)
+                lineTo(endX, endY)
+            }
+            drawPath(
+                path = projPath,
+                color = lineColor.copy(alpha = 0.75f),
+                style = Stroke(
+                    width = 2.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f),
+                    cap = StrokeCap.Round
+                )
+            )
+        }
+
+        // 5. Scrub Indicator
+        scrubIndex?.let { idx ->
+            if (idx in model.cumulativePoints.indices) {
+                val pt = model.cumulativePoints[idx]
+                val scrubX = toX(idx, totalDays)
+                val scrubY = toY(pt.netSpentPaise)
+
+                drawLine(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    start = Offset(scrubX, 0f),
+                    end = Offset(scrubX, heightPx),
+                    strokeWidth = 1.dp.toPx()
+                )
+                drawCircle(
+                    color = lineColor,
+                    radius = 5.dp.toPx(),
+                    center = Offset(scrubX, scrubY)
+                )
+            }
+        }
+    }
+}

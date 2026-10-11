@@ -358,7 +358,7 @@ object DashboardChartBuilder {
                 bars.add(
                     PeriodTrendBar(
                         periodId = currentPeriodId,
-                        label = "$label (In progress)",
+                        label = label,
                         incomePaise = income,
                         spentPaise = spent,
                         savedPaise = saved,

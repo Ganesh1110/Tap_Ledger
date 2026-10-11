@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
@@ -101,6 +102,10 @@ import com.tapledger.ui.components.SkeletonCard
 import com.tapledger.ui.components.SkeletonList
 import com.tapledger.ui.components.StatBlock
 import com.tapledger.ui.components.TransactionRow
+import com.tapledger.ui.screens.dashboard.components.DashboardBucketRingsCard
+import com.tapledger.ui.screens.dashboard.components.DashboardBurnUpCard
+import com.tapledger.ui.screens.dashboard.components.DashboardHeroRingCard
+import com.tapledger.ui.screens.dashboard.components.DashboardSixPeriodTrendCard
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
@@ -119,7 +124,8 @@ fun DashboardScreen(
     onNavigateToCategories: () -> Unit,
     onNavigateToStatements: () -> Unit,
     onNavigateToMonthClose: () -> Unit,
-    onNavigateToDiagnostics: () -> Unit
+    onNavigateToDiagnostics: () -> Unit,
+    onNavigateToInsights: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -452,54 +458,67 @@ fun DashboardScreen(
                                     )
                                 }
                             }
+
+                            // 4. Insights Button
+                            Surface(
+                                onClick = onNavigateToInsights,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PieChart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Insights",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
-                // 2. Hero Card: Spent ÷ Budget Progress & Net Worth
-                state.budgetSummary?.let { bs ->
-                    item(key = "budget_hero") {
-                        DashboardHeroCard(
-                            budgetSummary = bs,
-                            netWorthPaise = state.netWorth?.netWorthPaise
-                        )
-                    }
+                // 2. V1: Hero Ring Card
+                item(key = "budget_hero_ring") {
+                    DashboardHeroRingCard(
+                        heroRingState = state.heroRingState,
+                        netWorthPaise = state.netWorth?.netWorthPaise
+                    )
                 }
 
-                // 3. Needs / Wants / Savings / Unallocated Bucket Progress
-                state.budgetSummary?.let { bs ->
-                    item(key = "buckets_header") {
-                        SectionHeader(
-                            title = "Budget Buckets",
-                            subtitle = "50/30/20 Allocation Rule",
-                            actionText = "Manage",
-                            onActionClick = onNavigateToCategories
-                        )
-                    }
+                // 3. V2: Burn-Up Line Card
+                item(key = "budget_burn_up") {
+                    DashboardBurnUpCard(
+                        burnUpState = state.burnUpChartState
+                    )
+                }
 
-                    item(key = "bucket_needs") {
-                        BucketProgressCard(
-                            bucket = BudgetBucket.NEEDS,
-                            allocatedPaise = bs.bucketTotals[BudgetBucket.NEEDS] ?: 0L,
-                            spentPaise = bs.bucketSpent[BudgetBucket.NEEDS] ?: 0L
-                        )
-                    }
+                // 4. V3: 50/30/20 Bucket Rings
+                item(key = "budget_bucket_rings") {
+                    DashboardBucketRingsCard(
+                        bucketRingsState = state.bucketRingsState,
+                        onManageCategories = onNavigateToCategories
+                    )
+                }
 
-                    item(key = "bucket_wants") {
-                        BucketProgressCard(
-                            bucket = BudgetBucket.WANTS,
-                            allocatedPaise = bs.bucketTotals[BudgetBucket.WANTS] ?: 0L,
-                            spentPaise = bs.bucketSpent[BudgetBucket.WANTS] ?: 0L
-                        )
-                    }
-
-                    item(key = "bucket_savings") {
-                        BucketProgressCard(
-                            bucket = BudgetBucket.SAVINGS,
-                            allocatedPaise = bs.bucketTotals[BudgetBucket.SAVINGS] ?: 0L,
-                            spentPaise = bs.bucketSpent[BudgetBucket.SAVINGS] ?: 0L
-                        )
-                    }
+                // 5. V4: Six-Period Trend Clustered Bars
+                item(key = "six_period_trend") {
+                    DashboardSixPeriodTrendCard(
+                        trendState = state.sixPeriodTrendState
+                    )
                 }
 
                 // 4. Category Budgets
@@ -564,135 +583,6 @@ fun DashboardScreen(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-/**
- * Modern Hero Card replacing the old donut chart with a high-readability progress bar and Net Worth stat.
- */
-@Composable
-private fun DashboardHeroCard(
-    budgetSummary: BudgetPeriodSummary,
-    netWorthPaise: Long?,
-    modifier: Modifier = Modifier
-) {
-    val totalBudget = budgetSummary.totalBudgetedPaise
-    val totalSpent = budgetSummary.totalSpentPaise
-    val remainingPaise = totalBudget - totalSpent
-
-    val percentageBp = com.tapledger.ui.charts.util.ChartMath.computeBasisPoints(totalSpent, totalBudget)
-    val percentUsed = percentageBp / 100
-
-    val isOverBudget = totalSpent > totalBudget && totalBudget > 0L
-    val isWarning = percentageBp >= 8000 && !isOverBudget
-
-    val progressColor = when {
-        isOverBudget -> ExpenseRed
-        isWarning -> WarningAmber
-        else -> MaterialTheme.colorScheme.primary
-    }
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) {
-                contentDescription = "Monthly budget: spent ${totalSpent / 100} of ${totalBudget / 100} rupees, remaining ${remainingPaise / 100} rupees"
-            },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(20.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.lg)
-        ) {
-            // Net Worth Stat
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Net Worth",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (netWorthPaise != null) {
-                        MoneyText(
-                            amountPaise = netWorthPaise,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            semantic = if (netWorthPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
-                        )
-                    }
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "Budget Remaining",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    MoneyText(
-                        amountPaise = kotlin.math.abs(remainingPaise),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        semantic = if (remainingPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Spacing.md))
-
-            // Progress bar
-            com.tapledger.ui.charts.render.ProgressBarRender(
-                percentageBp = percentageBp,
-                color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.xs))
-
-            // Spend detail text: "₹850 of ₹50,000 · 1.7%"
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    MoneyText(
-                        amountPaise = totalSpent,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        semantic = MoneySemantic.Expense
-                    )
-                    Text(
-                        text = " of ",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    MoneyText(
-                        amountPaise = totalBudget,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        semantic = MoneySemantic.Neutral
-                    )
-                    Text(
-                        text = " · $percentUsed%",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = progressColor
-                    )
-                }
-
-                Text(
-                    text = if (remainingPaise >= 0) "${MoneyFormatter.formatRupees(remainingPaise)} left" else "${MoneyFormatter.formatRupees(kotlin.math.abs(remainingPaise))} over",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = if (remainingPaise >= 0) IncomeGreen else ExpenseRed
-                )
             }
         }
     }

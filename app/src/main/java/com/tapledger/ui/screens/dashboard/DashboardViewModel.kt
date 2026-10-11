@@ -3,9 +3,12 @@ package com.tapledger.ui.screens.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tapledger.core.database.DatabaseSeeder
+import com.tapledger.core.database.dao.BudgetPeriodDao
+import com.tapledger.core.database.dao.MonthCloseDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.TransactionEntity
+import com.tapledger.core.model.BudgetPeriodStatus
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.BudgetRepository
@@ -15,11 +18,19 @@ import com.tapledger.domain.calculator.BudgetCalculator
 import com.tapledger.domain.model.AccountBalanceSummary
 import com.tapledger.domain.model.BudgetPeriodSummary
 import com.tapledger.domain.model.NetWorthSummary
+import com.tapledger.ui.charts.builder.DashboardChartBuilder
+import com.tapledger.ui.charts.model.BucketRingsModel
+import com.tapledger.ui.charts.model.BurnUpChartModel
+import com.tapledger.ui.charts.model.ChartState
+import com.tapledger.ui.charts.model.DashboardHeroRingModel
+import com.tapledger.ui.charts.model.SixPeriodTrendModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -31,7 +42,11 @@ data class DashboardUiState(
     val budgetSummary: BudgetPeriodSummary? = null,
     val recentTransactions: List<TransactionEntity> = emptyList(),
     val currentYear: Int = 2026,
-    val currentMonth: Int = 10
+    val currentMonth: Int = 10,
+    val heroRingState: ChartState<DashboardHeroRingModel> = ChartState.Loading,
+    val burnUpChartState: ChartState<BurnUpChartModel> = ChartState.Loading,
+    val bucketRingsState: ChartState<BucketRingsModel> = ChartState.Loading,
+    val sixPeriodTrendState: ChartState<SixPeriodTrendModel> = ChartState.Loading
 )
 
 @HiltViewModel
@@ -41,7 +56,9 @@ class DashboardViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository,
     private val transactionRepository: TransactionRepository,
     private val transactionDao: TransactionDao,
-    private val transactionAllocationDao: TransactionAllocationDao
+    private val transactionAllocationDao: TransactionAllocationDao,
+    private val budgetPeriodDao: BudgetPeriodDao,
+    private val monthCloseDao: MonthCloseDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -91,6 +108,23 @@ class DashboardViewModel @Inject constructor(
 
             val recentTxs = periodTxs.sortedByDescending { it.occurredAt }.take(5)
 
+            val nowIST = DateTimeUtils.nowEpochMillis()
+            val isClosed = period.status == BudgetPeriodStatus.CLOSED
+
+            val (heroRing, burnUp) = withContext(Dispatchers.Default) {
+                val hero = DashboardChartBuilder.buildHeroRing(budgetSummary, isClosed, nowIST)
+                val burn = DashboardChartBuilder.buildBurnUpChart(budgetSummary, period, periodTxs, periodAllocations, nowIST)
+                hero to burn
+            }
+
+            val (bucketRings, sixTrend) = withContext(Dispatchers.Default) {
+                val rings = DashboardChartBuilder.buildBucketRings(budgetSummary)
+                val allCloses = monthCloseDao.getAllMonthClosesSync()
+                val allPeriods = budgetPeriodDao.getAllPeriodsSync()
+                val trend = DashboardChartBuilder.buildSixPeriodTrend(allCloses, allPeriods, budgetSummary, period.id)
+                rings to trend
+            }
+
             _uiState.value = DashboardUiState(
                 isLoading = false,
                 pendingCount = pendingCount,
@@ -99,7 +133,11 @@ class DashboardViewModel @Inject constructor(
                 budgetSummary = budgetSummary,
                 recentTransactions = recentTxs,
                 currentYear = year,
-                currentMonth = month
+                currentMonth = month,
+                heroRingState = heroRing,
+                burnUpChartState = burnUp,
+                bucketRingsState = bucketRings,
+                sixPeriodTrendState = sixTrend
             )
         }
     }
