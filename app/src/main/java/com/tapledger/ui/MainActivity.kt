@@ -17,6 +17,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+            android.view.WindowManager.LayoutParams.FLAG_SECURE
+        )
         enableEdgeToEdge()
         val startDestination = intent?.getStringExtra("start_destination") ?: com.tapledger.ui.navigation.Screen.Dashboard.route
         val initialScrollIndex = intent?.getIntExtra("scroll_index", 0) ?: 0

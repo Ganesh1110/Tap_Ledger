@@ -38,19 +38,35 @@ class FinancialNotificationListenerService : NotificationListenerService() {
     @Inject
     lateinit var financialIngestionPipeline: FinancialIngestionPipeline
 
+    @Inject
+    lateinit var restoreNotificationBuffer: com.tapledger.data.backup.RestoreNotificationBuffer
+
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     companion object {
+        var isConnected: Boolean = false
+            internal set
         var lastConnectedAt: Long = 0L
-            private set
+            internal set
         var lastDisconnectedAt: Long = 0L
-            private set
+            internal set
         var lastNotificationSeenAt: Long = 0L
-            private set
+            internal set
+
+        fun requestRebindService(context: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                try {
+                    requestRebind(ComponentName(context, FinancialNotificationListenerService::class.java))
+                } catch (e: Exception) {
+                    Log.w("TapLedgerListener", "Failed to requestRebind: ${e.message}")
+                }
+            }
+        }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
+        isConnected = true
         lastConnectedAt = DateTimeUtils.nowEpochMillis()
 
         // Section 38: Active notification recovery
@@ -66,6 +82,7 @@ class FinancialNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
+        isConnected = false
         lastDisconnectedAt = DateTimeUtils.nowEpochMillis()
         // Section 39: Rebind request on disconnection
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -111,6 +128,11 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         )
 
         Log.d("TapLedgerListener", "Notification received from pkg='$pkg' | title='$title'")
+
+        if (restoreNotificationBuffer.isSpoolingActive()) {
+            restoreNotificationBuffer.spoolEvent(event)
+            return
+        }
 
         serviceScope.launch {
             val result = financialIngestionPipeline.processEvent(event)

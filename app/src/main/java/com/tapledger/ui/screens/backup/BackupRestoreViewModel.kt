@@ -48,7 +48,8 @@ class BackupRestoreViewModel @Inject constructor(
 
     fun refreshBackupList() {
         val files = context.filesDir.listFiles { _, name ->
-            name.endsWith(".db") && (name.startsWith("tapledger_backup_") || name.startsWith("safety_backup_"))
+            (name.endsWith(".tapledger") || name.endsWith(".db")) &&
+                    (name.startsWith("tapledger_backup_") || name.startsWith("safety_backup_"))
         } ?: emptyArray()
 
         val list = files.map { file ->
@@ -91,16 +92,26 @@ class BackupRestoreViewModel @Inject constructor(
         }
     }
 
-    fun triggerBackup() {
+    fun triggerBackup(passphrase: String? = null) {
         _uiState.value = _uiState.value.copy(isBackingUp = true, message = null)
         viewModelScope.launch {
-            val backupFile = File(context.filesDir, "tapledger_backup_${System.currentTimeMillis()}.db")
-            val result = backupManager.createBackup(backupFile)
+            val isEncrypted = !passphrase.isNullOrBlank()
+            val backupFile = File(context.filesDir, "tapledger_backup_${System.currentTimeMillis()}.tapledger")
+            val result = if (isEncrypted) {
+                backupManager.createEncryptedBackup(backupFile, passphrase!!)
+            } else {
+                backupManager.createPlaintextBackup(backupFile)
+            }
+
             if (result.isSuccess) {
                 refreshBackupList()
                 _uiState.value = _uiState.value.copy(
                     isBackingUp = false,
-                    message = "Backup snapshot created safely via VACUUM INTO!",
+                    message = if (isEncrypted) {
+                        "Encrypted backup archive created (.tapledger with Argon2id + AES-256-GCM)!"
+                    } else {
+                        "Plaintext backup archive created safely (.tapledger ZIP bundle)!"
+                    },
                     isError = false
                 )
             } else {
@@ -113,27 +124,25 @@ class BackupRestoreViewModel @Inject constructor(
         }
     }
 
-    fun restoreBackup(file: File) {
+    fun restoreBackup(file: File, secret: String? = null) {
         _uiState.value = _uiState.value.copy(isRestoring = true, message = null)
         viewModelScope.launch {
-            // Create safety backup first
-            val safetyResult = backupManager.createSafetyBackup()
-            if (safetyResult.isFailure) {
+            val result = backupManager.restoreBackup(file, secret)
+            if (result.isSuccess) {
+                refreshBackupList()
                 _uiState.value = _uiState.value.copy(
                     isRestoring = false,
-                    message = "Pre-restore safety backup failed. Aborting restore for safety.",
+                    message = "Backup restored successfully! All 19 invariants verified and spooled notifications replayed.",
+                    isError = false
+                )
+            } else {
+                refreshBackupList()
+                _uiState.value = _uiState.value.copy(
+                    isRestoring = false,
+                    message = "Restore failed: ${result.exceptionOrNull()?.message}",
                     isError = true
                 )
-                return@launch
             }
-
-            // Acknowledge restore safety
-            refreshBackupList()
-            _uiState.value = _uiState.value.copy(
-                isRestoring = false,
-                message = "Pre-restore safety snapshot verified: ${safetyResult.getOrNull()?.name}. Database is ready.",
-                isError = false
-            )
         }
     }
 }
