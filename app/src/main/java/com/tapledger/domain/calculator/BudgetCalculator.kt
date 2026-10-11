@@ -42,8 +42,8 @@ object BudgetCalculator {
 
         for (txAlloc in allocationsForTransactions) {
             val tx = txMap[txAlloc.transactionId] ?: continue
-            // Skip VOIDED and IGNORED transactions
-            if (tx.status == TransactionStatus.VOIDED || tx.status == TransactionStatus.IGNORED) {
+            // Flow.md §4.2 Status Impact Matrix: Only CATEGORIZED transactions hit budget spending & envelopes
+            if (tx.status != TransactionStatus.CATEGORIZED) {
                 continue
             }
 

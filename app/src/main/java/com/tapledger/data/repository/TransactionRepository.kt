@@ -1,7 +1,6 @@
 package com.tapledger.data.repository
 
-import androidx.room.withTransaction
-import com.tapledger.core.database.TapLedgerDatabase
+import com.tapledger.core.database.DatabaseTransactionRunner
 import com.tapledger.core.database.dao.AuditLogDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
@@ -21,11 +20,25 @@ import javax.inject.Singleton
 
 @Singleton
 class TransactionRepository @Inject constructor(
-    private val database: TapLedgerDatabase,
+    private val transactionRunner: DatabaseTransactionRunner,
     private val transactionDao: TransactionDao,
     private val transactionAllocationDao: TransactionAllocationDao,
     private val auditLogDao: AuditLogDao
 ) {
+
+    private fun TransactionEntity.toJsonSnapshot(): String = buildString {
+        append("{")
+        append("\"id\":").append(id).append(",")
+        append("\"accountId\":").append(accountId).append(",")
+        append("\"kind\":\"").append(kind.name).append("\",")
+        append("\"direction\":\"").append(direction.name).append("\",")
+        append("\"amountPaise\":").append(amountPaise).append(",")
+        append("\"status\":\"").append(status.name).append("\",")
+        append("\"previousStatus\":").append(previousStatus?.let { "\"$it\"" } ?: "null").append(",")
+        append("\"source\":\"").append(source.name).append("\",")
+        append("\"occurredAt\":").append(occurredAt)
+        append("}")
+    }
 
     fun observeAllTransactions(): Flow<List<TransactionEntity>> = transactionDao.observeAllTransactions()
 
@@ -39,7 +52,7 @@ class TransactionRepository @Inject constructor(
         transactionAllocationDao.getForTransaction(transactionId)
 
     /**
-     * Atomically records an expense.
+     * Atomically records an expense (Flow.md §4).
      * If allocations are provided and sum equals amount, marked CATEGORIZED.
      * If no allocations, marked PENDING.
      */
@@ -65,9 +78,11 @@ class TransactionRepository @Inject constructor(
             require(totalAlloc == amountPaise) {
                 "Sum of allocations ($totalAlloc) must equal transaction amount ($amountPaise)"
             }
+            require(allocations.all { it.second > 0L }) { "Split allocation amount must be positive" }
+            require(allocations.map { it.first }.toSet().size == allocations.size) { "Duplicate category in split" }
         }
 
-        return database.withTransaction {
+        return transactionRunner.run {
             val status = if (isCategorized) TransactionStatus.CATEGORIZED else TransactionStatus.PENDING
 
             val tx = TransactionEntity(
@@ -76,12 +91,14 @@ class TransactionRepository @Inject constructor(
                 direction = TransactionDirection.OUT,
                 amountPaise = amountPaise,
                 merchantRaw = merchantRaw,
+                merchantNormalized = merchantNormalized,
                 upiReference = upiReference,
                 occurredAt = occurredAt,
                 createdAt = now,
                 updatedAt = now,
                 status = status,
                 source = source,
+                sourceFingerprint = sourceFingerprint,
                 notes = note
             )
             val txId = transactionDao.insert(tx)
@@ -97,10 +114,13 @@ class TransactionRepository @Inject constructor(
                 transactionAllocationDao.insertAll(allocEntities)
             }
 
+            val savedTx = tx.copy(id = txId)
             auditLogDao.insert(
                 AuditLogEntity(
                     transactionId = txId,
                     action = AuditAction.CREATED,
+                    beforeSnapshotJson = null,
+                    afterSnapshotJson = savedTx.toJsonSnapshot(),
                     reason = "Initial expense record",
                     createdAt = now
                 )
@@ -111,7 +131,7 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
-     * Atomically records an income transaction.
+     * Atomically records an income transaction (Flow.md §4: [*] -> CONFIRMED).
      */
     suspend fun recordIncome(
         accountId: Long,
@@ -127,27 +147,32 @@ class TransactionRepository @Inject constructor(
         require(amountPaise > 0L) { "Income amount must be positive" }
         val now = DateTimeUtils.nowEpochMillis()
 
-        return database.withTransaction {
+        return transactionRunner.run {
             val tx = TransactionEntity(
                 accountId = accountId,
                 kind = TransactionKind.INCOME,
                 direction = TransactionDirection.IN,
                 amountPaise = amountPaise,
                 merchantRaw = merchantRaw,
+                merchantNormalized = merchantNormalized,
                 upiReference = upiReference,
                 occurredAt = occurredAt,
                 createdAt = now,
                 updatedAt = now,
-                status = TransactionStatus.CATEGORIZED,
+                status = TransactionStatus.CONFIRMED,
                 source = source,
+                sourceFingerprint = sourceFingerprint,
                 notes = note
             )
             val txId = transactionDao.insert(tx)
 
+            val savedTx = tx.copy(id = txId)
             auditLogDao.insert(
                 AuditLogEntity(
                     transactionId = txId,
                     action = AuditAction.CREATED,
+                    beforeSnapshotJson = null,
+                    afterSnapshotJson = savedTx.toJsonSnapshot(),
                     reason = "Initial income record",
                     createdAt = now
                 )
@@ -158,8 +183,8 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
-     * Atomically records a transfer between two accounts using directed legs (Section 16).
-     * Creates an OUT leg on source account and an IN leg on destination account.
+     * Atomically records a transfer between two accounts using directed legs (Flow.md §4, §7.1).
+     * Both legs seeded as CONFIRMED.
      */
     suspend fun recordTransfer(
         fromAccountId: Long,
@@ -175,7 +200,7 @@ class TransactionRepository @Inject constructor(
         val now = DateTimeUtils.nowEpochMillis()
         val transferGroupId = UUID.randomUUID().toString()
 
-        return database.withTransaction {
+        return transactionRunner.run {
             val outLeg = TransactionEntity(
                 accountId = fromAccountId,
                 kind = TransactionKind.TRANSFER,
@@ -184,7 +209,7 @@ class TransactionRepository @Inject constructor(
                 occurredAt = occurredAt,
                 createdAt = now,
                 updatedAt = now,
-                status = TransactionStatus.CATEGORIZED,
+                status = TransactionStatus.CONFIRMED,
                 source = source,
                 transferGroupId = transferGroupId,
                 counterpartyAccountId = toAccountId,
@@ -200,7 +225,7 @@ class TransactionRepository @Inject constructor(
                 occurredAt = occurredAt,
                 createdAt = now,
                 updatedAt = now,
-                status = TransactionStatus.CATEGORIZED,
+                status = TransactionStatus.CONFIRMED,
                 source = source,
                 transferGroupId = transferGroupId,
                 counterpartyAccountId = fromAccountId,
@@ -212,6 +237,8 @@ class TransactionRepository @Inject constructor(
                 AuditLogEntity(
                     transactionId = outId,
                     action = AuditAction.CREATED,
+                    beforeSnapshotJson = null,
+                    afterSnapshotJson = outLeg.copy(id = outId).toJsonSnapshot(),
                     reason = "Transfer OUT leg for group #$transferGroupId",
                     createdAt = now
                 )
@@ -220,6 +247,8 @@ class TransactionRepository @Inject constructor(
                 AuditLogEntity(
                     transactionId = inId,
                     action = AuditAction.CREATED,
+                    beforeSnapshotJson = null,
+                    afterSnapshotJson = inLeg.copy(id = inId).toJsonSnapshot(),
                     reason = "Transfer IN leg for group #$transferGroupId",
                     createdAt = now
                 )
@@ -230,7 +259,7 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
-     * Atomically records a refund, optionally linked to original transaction (Section 18).
+     * Atomically records a refund, optionally linked to original transaction (Flow.md §4, §9.2).
      */
     suspend fun recordRefund(
         accountId: Long,
@@ -245,7 +274,7 @@ class TransactionRepository @Inject constructor(
         require(amountPaise > 0L) { "Refund amount must be positive" }
         val now = DateTimeUtils.nowEpochMillis()
 
-        return database.withTransaction {
+        return transactionRunner.run {
             val status = if (categoryId != null) TransactionStatus.CATEGORIZED else TransactionStatus.PENDING
 
             val tx = TransactionEntity(
@@ -278,6 +307,8 @@ class TransactionRepository @Inject constructor(
                 AuditLogEntity(
                     transactionId = txId,
                     action = AuditAction.CREATED,
+                    beforeSnapshotJson = null,
+                    afterSnapshotJson = tx.copy(id = txId).toJsonSnapshot(),
                     reason = "Refund record",
                     createdAt = now
                 )
@@ -288,7 +319,76 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
-     * Atomically categorizes or splits a pending/existing transaction (Section 12).
+     * Confirms a transaction (Flow.md §4: PENDING -> CONFIRMED).
+     * Invariant: tx.accountId cannot be NULL (Flow.md §3.1).
+     */
+    suspend fun confirmTransaction(transactionId: Long, reason: String = "Confirmed by user") {
+        val now = DateTimeUtils.nowEpochMillis()
+        transactionRunner.run {
+            val tx = transactionDao.getById(transactionId)
+                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
+
+            require(tx.accountId != null) {
+                "Cannot confirm a transaction with unassigned account (account_id is NULL)"
+            }
+            require(tx.status == TransactionStatus.PENDING) {
+                "Can only confirm a PENDING transaction (current status: ${tx.status})"
+            }
+
+            val updatedTx = tx.copy(
+                status = TransactionStatus.CONFIRMED,
+                updatedAt = now
+            )
+            transactionDao.update(updatedTx)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = transactionId,
+                    action = AuditAction.UPDATED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
+                    reason = reason,
+                    createdAt = now
+                )
+            )
+        }
+    }
+
+    /**
+     * Un-confirms a transaction (Flow.md §4: CONFIRMED -> PENDING).
+     */
+    suspend fun unconfirmTransaction(transactionId: Long, reason: String = "Unconfirmed by user") {
+        val now = DateTimeUtils.nowEpochMillis()
+        transactionRunner.run {
+            val tx = transactionDao.getById(transactionId)
+                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
+
+            require(tx.status == TransactionStatus.CONFIRMED) {
+                "Can only un-confirm a CONFIRMED transaction (current status: ${tx.status})"
+            }
+
+            val updatedTx = tx.copy(
+                status = TransactionStatus.PENDING,
+                updatedAt = now
+            )
+            transactionDao.update(updatedTx)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = transactionId,
+                    action = AuditAction.UPDATED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
+                    reason = reason,
+                    createdAt = now
+                )
+            )
+        }
+    }
+
+    /**
+     * Atomically categorizes or splits a pending/categorized transaction (Flow.md §4, §9.1).
+     * Invariant: A transaction cannot transition to CATEGORIZED while account_id is NULL (Flow.md §3.1).
      */
     suspend fun splitTransaction(
         transactionId: Long,
@@ -298,19 +398,23 @@ class TransactionRepository @Inject constructor(
         require(allocations.isNotEmpty()) { "Allocations list cannot be empty" }
         val now = DateTimeUtils.nowEpochMillis()
 
-        database.withTransaction {
+        transactionRunner.run {
             val tx = transactionDao.getById(transactionId)
                 ?: throw IllegalArgumentException("Transaction #$transactionId not found")
 
-            // Flow.md §3.1: A transaction cannot transition to CONFIRMED or CATEGORIZED while account_id is NULL
             require(tx.accountId != null) {
                 "Cannot categorize a transaction with unassigned account (account_id is NULL)"
+            }
+            require(tx.status == TransactionStatus.PENDING || tx.status == TransactionStatus.CATEGORIZED) {
+                "Cannot categorize transaction with status ${tx.status}"
             }
 
             val totalAllocated = allocations.sumOf { it.second }
             require(totalAllocated == tx.amountPaise) {
                 "Sum of allocations ($totalAllocated) must equal transaction amount (${tx.amountPaise})"
             }
+            require(allocations.all { it.second > 0L }) { "Split allocation amount must be positive" }
+            require(allocations.map { it.first }.toSet().size == allocations.size) { "Duplicate category in split" }
 
             // Remove existing allocations
             transactionAllocationDao.deleteForTransaction(transactionId)
@@ -337,7 +441,44 @@ class TransactionRepository @Inject constructor(
                 AuditLogEntity(
                     transactionId = transactionId,
                     action = if (allocations.size > 1) AuditAction.SPLIT else AuditAction.CATEGORIZED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
                     reason = reason ?: "Categorized/split transaction",
+                    createdAt = now
+                )
+            )
+        }
+    }
+
+    /**
+     * Un-categorizes a categorized transaction (Flow.md §4: CATEGORIZED -> PENDING).
+     * Deletes all envelope split allocations and reverts status to PENDING.
+     */
+    suspend fun uncategorizeTransaction(transactionId: Long, reason: String = "Uncategorized by user") {
+        val now = DateTimeUtils.nowEpochMillis()
+        transactionRunner.run {
+            val tx = transactionDao.getById(transactionId)
+                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
+
+            require(tx.status == TransactionStatus.CATEGORIZED) {
+                "Can only uncategorize a CATEGORIZED transaction (current status: ${tx.status})"
+            }
+
+            transactionAllocationDao.deleteForTransaction(transactionId)
+
+            val updatedTx = tx.copy(
+                status = TransactionStatus.PENDING,
+                updatedAt = now
+            )
+            transactionDao.update(updatedTx)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = transactionId,
+                    action = AuditAction.UNCATEGORIZED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
+                    reason = reason,
                     createdAt = now
                 )
             )
@@ -349,20 +490,22 @@ class TransactionRepository @Inject constructor(
      */
     suspend fun assignAccount(transactionId: Long, accountId: Long) {
         val now = DateTimeUtils.nowEpochMillis()
-        database.withTransaction {
+        transactionRunner.run {
             val tx = transactionDao.getById(transactionId)
                 ?: throw IllegalArgumentException("Transaction #$transactionId not found")
 
-            val updated = tx.copy(
+            val updatedTx = tx.copy(
                 accountId = accountId,
                 updatedAt = now
             )
-            transactionDao.update(updated)
+            transactionDao.update(updatedTx)
 
             auditLogDao.insert(
                 AuditLogEntity(
                     transactionId = transactionId,
                     action = AuditAction.UPDATED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
                     reason = "Assigned account #$accountId to transaction",
                     createdAt = now
                 )
@@ -371,25 +514,31 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
-     * Ignores a transaction (Section 4, Flow.md §3.1).
-     * Permitted even when account_id is NULL. Excluded from financial math.
+     * Ignores a transaction (Flow.md §4: PENDING -> IGNORED).
+     * Permitted even when account_id is NULL (§3.1 exemption). Excluded from financial math.
      */
     suspend fun ignoreTransaction(transactionId: Long, reason: String = "Ignored by user") {
         val now = DateTimeUtils.nowEpochMillis()
-        database.withTransaction {
+        transactionRunner.run {
             val tx = transactionDao.getById(transactionId)
                 ?: throw IllegalArgumentException("Transaction #$transactionId not found")
 
-            val updated = tx.copy(
+            require(tx.status == TransactionStatus.PENDING) {
+                "Can only ignore a PENDING transaction (current status: ${tx.status})"
+            }
+
+            val updatedTx = tx.copy(
                 status = TransactionStatus.IGNORED,
                 updatedAt = now
             )
-            transactionDao.update(updated)
+            transactionDao.update(updatedTx)
 
             auditLogDao.insert(
                 AuditLogEntity(
                     transactionId = transactionId,
                     action = AuditAction.IGNORED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
                     reason = reason,
                     createdAt = now
                 )
@@ -398,51 +547,112 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
-     * Voids a transaction safely without destructive deletion (Section 59, 73).
-     * Permitted even when account_id is NULL.
+     * Un-ignores an ignored transaction (Flow.md §4: IGNORED -> PENDING).
      */
-    suspend fun voidTransaction(transactionId: Long, reason: String) {
+    suspend fun unignoreTransaction(transactionId: Long, reason: String = "Unignored by user") {
         val now = DateTimeUtils.nowEpochMillis()
-        database.withTransaction {
+        transactionRunner.run {
             val tx = transactionDao.getById(transactionId)
                 ?: throw IllegalArgumentException("Transaction #$transactionId not found")
 
-            val updated = tx.copy(
-                status = TransactionStatus.VOIDED,
-                updatedAt = now
-            )
-            transactionDao.update(updated)
+            require(tx.status == TransactionStatus.IGNORED) {
+                "Can only unignore an IGNORED transaction (current status: ${tx.status})"
+            }
 
-            auditLogDao.insert(
-                AuditLogEntity(
-                    transactionId = transactionId,
-                    action = AuditAction.VOIDED,
-                    reason = reason,
-                    createdAt = now
-                )
-            )
-        }
-    }
-
-    /**
-     * Restores a voided or ignored transaction (Section 59, 73).
-     */
-    suspend fun restoreTransaction(transactionId: Long, reason: String) {
-        val now = DateTimeUtils.nowEpochMillis()
-        database.withTransaction {
-            val tx = transactionDao.getById(transactionId)
-                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
-
-            val updated = tx.copy(
+            val updatedTx = tx.copy(
                 status = TransactionStatus.PENDING,
                 updatedAt = now
             )
-            transactionDao.update(updated)
+            transactionDao.update(updatedTx)
 
             auditLogDao.insert(
                 AuditLogEntity(
                     transactionId = transactionId,
                     action = AuditAction.RESTORED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
+                    reason = reason,
+                    createdAt = now
+                )
+            )
+        }
+    }
+
+    /**
+     * Voids a transaction safely without destructive deletion (Flow.md §4).
+     * Permitted from PENDING, CONFIRMED, CATEGORIZED, IGNORED.
+     * Records previous_status = current_status for reversible restore.
+     * Permitted even when account_id is NULL (§3.1 exemption).
+     */
+    suspend fun voidTransaction(transactionId: Long, reason: String = "User voided") {
+        val now = DateTimeUtils.nowEpochMillis()
+        transactionRunner.run {
+            val tx = transactionDao.getById(transactionId)
+                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
+
+            require(tx.status != TransactionStatus.VOIDED) {
+                "Transaction #$transactionId is already VOIDED"
+            }
+
+            val updatedTx = tx.copy(
+                status = TransactionStatus.VOIDED,
+                previousStatus = tx.status,
+                updatedAt = now
+            )
+            transactionDao.update(updatedTx)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = transactionId,
+                    action = AuditAction.VOIDED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
+                    reason = reason,
+                    createdAt = now
+                )
+            )
+        }
+    }
+
+    /**
+     * Restores a voided transaction to its previous status (Flow.md §4).
+     * VOIDED -> PENDING (when previous_status == PENDING)
+     * VOIDED -> CATEGORIZED (when previous_status == CATEGORIZED)
+     * VOIDED -> CONFIRMED (when previous_status == CONFIRMED)
+     * VOIDED -> IGNORED (when previous_status == IGNORED)
+     * Invariant: Restoring to CONFIRMED or CATEGORIZED requires account_id != NULL (Flow.md §3.1).
+     */
+    suspend fun restoreTransaction(transactionId: Long, reason: String = "User restored") {
+        val now = DateTimeUtils.nowEpochMillis()
+        transactionRunner.run {
+            val tx = transactionDao.getById(transactionId)
+                ?: throw IllegalArgumentException("Transaction #$transactionId not found")
+
+            require(tx.status == TransactionStatus.VOIDED) {
+                "Can only restore a VOIDED transaction (current status: ${tx.status})"
+            }
+
+            val targetStatus = tx.previousStatus ?: TransactionStatus.PENDING
+
+            if (targetStatus == TransactionStatus.CONFIRMED || targetStatus == TransactionStatus.CATEGORIZED) {
+                require(tx.accountId != null) {
+                    "Cannot restore to $targetStatus while account_id is NULL (Flow.md §3.1)"
+                }
+            }
+
+            val updatedTx = tx.copy(
+                status = targetStatus,
+                previousStatus = null,
+                updatedAt = now
+            )
+            transactionDao.update(updatedTx)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = transactionId,
+                    action = AuditAction.RESTORED,
+                    beforeSnapshotJson = tx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
                     reason = reason,
                     createdAt = now
                 )

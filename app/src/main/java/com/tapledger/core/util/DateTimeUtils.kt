@@ -58,6 +58,14 @@ object DateTimeUtils {
         return toZonedDateTime(epochMillis).format(DATE_FORMATTER)
     }
 
+    /**
+     * Calculates the start epoch millis (00:00:00.000) for a given timestamp in Asia/Kolkata (Flow.md §6.1).
+     */
+    fun getStartOfDayEpochMillis(epochMillis: Long): Long {
+        val zdt = toZonedDateTime(epochMillis)
+        return zdt.toLocalDate().atStartOfDay(IST_ZONE).toInstant().toEpochMilli()
+    }
+
     fun formatTime(epochMillis: Long): String {
         return toZonedDateTime(epochMillis).format(TIME_FORMATTER)
     }

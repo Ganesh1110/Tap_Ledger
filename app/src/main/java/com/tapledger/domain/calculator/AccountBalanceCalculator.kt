@@ -12,31 +12,44 @@ import com.tapledger.domain.model.NetWorthSummary
 object AccountBalanceCalculator {
 
     /**
-     * Calculates account balance strictly according to Section 14, 16, 23:
-     * current_balance = opening_balance + sum(incoming) - sum(outgoing)
-     * Includes PENDING and CATEGORIZED transactions.
-     * Excludes IGNORED and VOIDED transactions.
+     * Calculates account balance strictly according to Flow.md §4.2, §6.1:
+     * Balance(A, T_asOf) = opening_balance_paise + Σ(IN) - Σ(OUT)
+     * Eligibility rules:
+     * 1. tx.occurred_at >= StartOfDayIST(account.opening_balance_date)
+     * 2. tx.occurred_at <= asOfEpochMillis
+     * 3. tx.status in (PENDING, CONFIRMED, CATEGORIZED)
+     * 4. tx.account_id == account.id
      */
     fun calculateAccountBalance(
         account: AccountEntity,
-        transactions: List<TransactionEntity>
+        transactions: List<TransactionEntity>,
+        asOfEpochMillis: Long = Long.MAX_VALUE
     ): AccountBalanceSummary {
+        val openingStartOfDay = com.tapledger.core.util.DateTimeUtils.getStartOfDayEpochMillis(account.openingBalanceDate)
         var totalIncomingPaise = 0L
         var totalOutgoingPaise = 0L
 
         for (tx in transactions) {
-            // Must belong to this account and occur at or after opening balance date
+            // Must belong to this account and occur at or after opening balance date (StartOfDayIST)
             if (tx.accountId != account.id) continue
-            if (tx.occurredAt < account.openingBalanceDate) continue
+            if (tx.occurredAt < openingStartOfDay) continue
+            // As-Of boundary: caps future transactions from asOf timestamp
+            if (tx.occurredAt > asOfEpochMillis) continue
 
-            // Exclude IGNORED and VOIDED
-            if (tx.status == TransactionStatus.IGNORED || tx.status == TransactionStatus.VOIDED) {
-                continue
-            }
-
-            when (tx.direction) {
-                com.tapledger.core.model.TransactionDirection.IN -> totalIncomingPaise += tx.amountPaise
-                com.tapledger.core.model.TransactionDirection.OUT -> totalOutgoingPaise += tx.amountPaise
+            // Include PENDING, CONFIRMED, CATEGORIZED; Exclude IGNORED and VOIDED
+            when (tx.status) {
+                TransactionStatus.PENDING,
+                TransactionStatus.CONFIRMED,
+                TransactionStatus.CATEGORIZED -> {
+                    when (tx.direction) {
+                        com.tapledger.core.model.TransactionDirection.IN -> totalIncomingPaise += tx.amountPaise
+                        com.tapledger.core.model.TransactionDirection.OUT -> totalOutgoingPaise += tx.amountPaise
+                    }
+                }
+                TransactionStatus.IGNORED,
+                TransactionStatus.VOIDED -> {
+                    continue
+                }
             }
         }
 
@@ -49,6 +62,17 @@ object AccountBalanceCalculator {
             totalOutgoingPaise = totalOutgoingPaise,
             currentBalancePaise = currentBalance
         )
+    }
+
+    /**
+     * Calculates as-of balance for an account at an arbitrary historical timestamp (Flow.md §6.1).
+     */
+    fun calculateAsOfBalance(
+        account: AccountEntity,
+        transactions: List<TransactionEntity>,
+        asOfEpochMillis: Long
+    ): Long {
+        return calculateAccountBalance(account, transactions, asOfEpochMillis).currentBalancePaise
     }
 
     /**
