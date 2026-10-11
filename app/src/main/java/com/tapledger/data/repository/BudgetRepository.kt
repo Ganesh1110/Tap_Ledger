@@ -168,15 +168,65 @@ class BudgetRepository @Inject constructor(
     ): Long {
         require(amountPaise > 0L) { "Adjustment amount must be positive" }
         require(fromCategoryId != toCategoryId) { "Cannot adjust to the same category" }
-        val adjustment = BudgetAdjustmentEntity(
+
+        return transactionRunner.run {
+            val allocations = budgetAllocationDao.getAllocationsForPeriodSync(periodId)
+            val fromAlloc = allocations.find { it.categoryId == fromCategoryId }
+                ?: throw IllegalArgumentException("Source category #$fromCategoryId not allocated in period #$periodId")
+
+            val adjustments = budgetAdjustmentDao.getAdjustmentsForPeriodSync(periodId)
+            val advances = budgetAllocationDao.getAdvancesForPeriod(periodId)
+
+            val base = fromAlloc.amountPaise
+            val adjOut = adjustments.filter { it.fromCategoryId == fromCategoryId }.sumOf { it.amountPaise }
+            val adjIn = adjustments.filter { it.toCategoryId == fromCategoryId }.sumOf { it.amountPaise }
+            val advPos = advances.filter { it.categoryId == fromCategoryId && it.direction == com.tapledger.core.model.AdvanceDirection.POSITIVE }.sumOf { it.amountPaise }
+            val advNeg = advances.filter { it.categoryId == fromCategoryId && it.direction == com.tapledger.core.model.AdvanceDirection.NEGATIVE }.sumOf { it.amountPaise }
+
+            val currentAdjusted = base + adjIn - adjOut + advPos - advNeg
+            if (currentAdjusted - amountPaise < 0L) {
+                throw IllegalArgumentException(
+                    "Cannot transfer $amountPaise paise from category #$fromCategoryId with headroom $currentAdjusted paise (Rule B2: AdjustedBudget >= 0)"
+                )
+            }
+
+            val adjustment = BudgetAdjustmentEntity(
+                budgetPeriodId = periodId,
+                fromCategoryId = fromCategoryId,
+                toCategoryId = toCategoryId,
+                amountPaise = amountPaise,
+                reason = reason,
+                createdAt = DateTimeUtils.nowEpochMillis()
+            )
+            budgetAdjustmentDao.insert(adjustment)
+        }
+    }
+
+    /**
+     * Flow.md §8.2: Universal Zero-Base Seeding Invariant:
+     * Seeds an allocation row with amount_paise = 0L if a category receives an advance ledger row but lacks an allocation row.
+     */
+    suspend fun ensureAllocationExists(periodId: Long, categoryId: Long): BudgetAllocationEntity {
+        val existing = budgetAllocationDao.getAllocation(periodId, categoryId)
+        if (existing != null) return existing
+
+        val category = categoryDao.getById(categoryId)
+            ?: throw IllegalArgumentException("Category #$categoryId not found")
+
+        val now = DateTimeUtils.nowEpochMillis()
+        val seeded = BudgetAllocationEntity(
             budgetPeriodId = periodId,
-            fromCategoryId = fromCategoryId,
-            toCategoryId = toCategoryId,
-            amountPaise = amountPaise,
-            reason = reason,
-            createdAt = DateTimeUtils.nowEpochMillis()
+            categoryId = categoryId,
+            categoryNameSnapshot = category.name,
+            bucketSnapshot = category.defaultBucket,
+            sortOrderSnapshot = category.defaultSortOrder,
+            advancePolicySnapshot = category.defaultAdvancePolicy,
+            amountPaise = 0L,
+            createdAt = now,
+            updatedAt = now
         )
-        return budgetAdjustmentDao.insert(adjustment)
+        val id = budgetAllocationDao.insert(seeded)
+        return seeded.copy(id = id)
     }
 
     suspend fun updateBudgetAllocationAmount(periodId: Long, categoryId: Long, newAmountPaise: Long) {

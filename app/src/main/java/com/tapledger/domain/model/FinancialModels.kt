@@ -20,6 +20,12 @@ data class NetWorthSummary(
     val netWorthPaise: Long
 )
 
+data class Target503020(
+    val needsPaise: Long,
+    val wantsPaise: Long,
+    val savingsPaise: Long
+)
+
 data class BudgetCategorySummary(
     val allocation: BudgetAllocationEntity,
     val baseBudgetPaise: Long,
@@ -28,9 +34,10 @@ data class BudgetCategorySummary(
     val refundPaise: Long,
     val netSpentPaise: Long,
     val remainingPaise: Long,
-    val percentageUsed: Int, // 0..100+
-    val isWarning: Boolean,  // >= 80%
-    val isExceeded: Boolean  // > 100%
+    val percentageUsed: Int, // 0..999
+    val isWarning: Boolean,  // 80..100% for non-savings
+    val isExceeded: Boolean, // > 100% for non-savings (false for savings)
+    val isGoalAchieved: Boolean = false
 )
 
 data class BudgetPeriodSummary(
@@ -42,7 +49,11 @@ data class BudgetPeriodSummary(
     val totalRemainingPaise: Long,
     val bucketTotals: Map<BudgetBucket, Long>,
     val bucketSpent: Map<BudgetBucket, Long>,
-    val categorySummaries: List<BudgetCategorySummary>
+    val categorySummaries: List<BudgetCategorySummary>,
+    val dashboardHeroSpendPaise: Long = 0L,
+    val dashboardHeroBudgetPaise: Long = 0L,
+    val actualSavingsPaise: Long = 0L,
+    val actualIncomePaise: Long = 0L
 )
 
 enum class IntegritySeverity {
