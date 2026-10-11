@@ -12,8 +12,11 @@ import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionStatus
 import com.tapledger.domain.model.IntegrityIssue
 import com.tapledger.domain.model.IntegritySeverity
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class DataIntegrityChecker {
+@Singleton
+class DataIntegrityChecker @Inject constructor() {
 
     /**
      * Executes all integrity checks across database records.

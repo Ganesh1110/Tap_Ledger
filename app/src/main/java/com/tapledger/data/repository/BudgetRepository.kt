@@ -37,6 +37,13 @@ class BudgetRepository @Inject constructor(
     }
 
     suspend fun getOrCreateBudgetPeriod(year: Int, month: Int, defaultIncomePaise: Long = 52_000_00L): BudgetPeriodEntity {
+        val targetYm = java.time.YearMonth.of(year, month)
+        val nowYm = DateTimeUtils.toYearMonth(DateTimeUtils.nowEpochMillis())
+        val maxAllowedYm = nowYm.plusMonths(3)
+        require(!targetYm.isAfter(maxAllowedYm)) {
+            "Cannot create budget period more than 3 months in the future (§3.1, §10.1)"
+        }
+
         val existing = budgetPeriodDao.getByYearMonth(year, month)
         if (existing != null) return existing
 

@@ -45,10 +45,17 @@ class MonthCloseRepository @Inject constructor(
     }
 
     suspend fun closeMonth(
+        periodId: Long,
+        reconciliationStatus: com.tapledger.core.model.MonthCloseReconciliationStatus = com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED,
+        overrideReason: String? = null,
+        allowUnreviewedOverride: Boolean = false
+    ): Long = monthCloseEngine.closeMonth(periodId, reconciliationStatus, overrideReason, allowUnreviewedOverride)
+
+    suspend fun closeMonth(
         summary: BudgetPeriodSummary,
         reconciliationStatus: com.tapledger.core.model.MonthCloseReconciliationStatus = com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED,
         overrideReason: String? = null
-    ): Long = monthCloseEngine.closeMonth(summary, reconciliationStatus, overrideReason)
+    ): Long = monthCloseEngine.closeMonth(summary.period.id, reconciliationStatus, overrideReason)
 
     suspend fun reopenMonth(periodId: Long) = monthCloseEngine.reopenMonth(periodId)
 }

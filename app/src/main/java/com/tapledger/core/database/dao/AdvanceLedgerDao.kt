@@ -28,6 +28,9 @@ interface AdvanceLedgerDao {
     @Query("SELECT * FROM advance_ledger WHERE applied_to_period_id IS NULL AND direction = 'NEGATIVE' ORDER BY created_at ASC")
     suspend fun getUnassignedDeficitPoolSync(): List<AdvanceLedgerEntity>
 
+    @Query("SELECT * FROM advance_ledger WHERE applied_to_period_id IS NULL ORDER BY created_at ASC")
+    suspend fun getUnassignedPoolSync(): List<AdvanceLedgerEntity>
+
     @Query("SELECT * FROM advance_ledger WHERE category_id = :categoryId ORDER BY created_at ASC")
     suspend fun getForCategory(categoryId: Long): List<AdvanceLedgerEntity>
 
