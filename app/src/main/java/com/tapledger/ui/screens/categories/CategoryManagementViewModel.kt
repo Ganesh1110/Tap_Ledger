@@ -2,26 +2,36 @@ package com.tapledger.ui.screens.categories
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tapledger.core.database.dao.AdvanceLedgerDao
+import com.tapledger.core.database.dao.TransactionAllocationDao
+import com.tapledger.core.database.dao.TransactionDao
+import com.tapledger.core.model.AdvanceDirection
 import com.tapledger.core.model.AdvancePolicy
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.BudgetRepository
-import com.tapledger.core.database.dao.TransactionAllocationDao
+import com.tapledger.domain.calculator.BudgetCalculator
+import com.tapledger.ui.charts.builder.BudgetChartBuilder
+import com.tapledger.ui.charts.model.CategoryDonutSlice
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
 @HiltViewModel
 class CategoryManagementViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository,
-    private val transactionAllocationDao: TransactionAllocationDao
+    private val transactionAllocationDao: TransactionAllocationDao,
+    private val transactionDao: TransactionDao,
+    private val advanceLedgerDao: AdvanceLedgerDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CategoryManagementUiState())
@@ -46,7 +56,32 @@ class CategoryManagementViewModel @Inject constructor(
                     budgetRepository.observeAdjustmentsForPeriod(period.id)
                 ) { categories, allocations, adjustments ->
                     val allocationMap = allocations.associateBy { it.categoryId }
+                    val periodTxs = transactionDao.getTransactionsInPeriod(period.startAt, period.endAt)
                     val periodAllocations = transactionAllocationDao.getAllocationsInPeriod(period.startAt, period.endAt)
+                    val advances = advanceLedgerDao.getAppliedToPeriodSync(period.id)
+
+                    val summary = BudgetCalculator.calculateBudgetPeriodSummary(
+                        period = period,
+                        allocations = allocations,
+                        adjustments = adjustments,
+                        transactions = periodTxs,
+                        allocationsForTransactions = periodAllocations
+                    )
+
+                    val categoryNames = categories.associate { it.id to it.name }
+                    val advPosMap = advances.filter { it.direction == AdvanceDirection.POSITIVE }
+                        .groupBy { it.categoryId }
+                        .mapValues { (_, list) -> list.sumOf { it.amountPaise } }
+                    val advNegMap = advances.filter { it.direction == AdvanceDirection.NEGATIVE }
+                        .groupBy { it.categoryId }
+                        .mapValues { (_, list) -> list.sumOf { it.amountPaise } }
+
+                    val (bulletBars, donut) = withContext(Dispatchers.Default) {
+                        val b = BudgetChartBuilder.buildEnvelopeBulletBars(summary, categoryNames, advPosMap, advNegMap)
+                        val d = BudgetChartBuilder.buildCategoryDonut(summary, categoryNames)
+                        b to d
+                    }
+
                     val spentMap = periodAllocations.groupBy { it.categoryId }
                         .mapValues { (_, list) -> list.sumOf { it.amountPaise } }
 
@@ -60,6 +95,7 @@ class CategoryManagementViewModel @Inject constructor(
                             remainingPaise = alloc - spent
                         )
                     }
+
                     CategoryManagementUiState(
                         isLoading = false,
                         currentPeriodId = period.id,
@@ -67,7 +103,11 @@ class CategoryManagementViewModel @Inject constructor(
                         currentMonth = currentMonth,
                         categories = itemStates,
                         adjustments = adjustments,
-                        errorMessage = null
+                        errorMessage = null,
+                        bulletBarsState = bulletBars,
+                        categoryDonutState = donut,
+                        selectedDonutSlice = _uiState.value.selectedDonutSlice,
+                        viewMode = _uiState.value.viewMode
                     )
                 }.collect { state ->
                     _uiState.value = state
@@ -81,6 +121,14 @@ class CategoryManagementViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun setViewMode(mode: BudgetViewMode) {
+        _uiState.update { it.copy(viewMode = mode) }
+    }
+
+    fun selectDonutSlice(slice: CategoryDonutSlice?) {
+        _uiState.update { it.copy(selectedDonutSlice = slice) }
     }
 
     fun addCategory(

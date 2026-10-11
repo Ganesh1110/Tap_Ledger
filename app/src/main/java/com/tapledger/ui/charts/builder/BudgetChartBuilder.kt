@@ -110,6 +110,9 @@ object BudgetChartBuilder {
             }
 
             if (positiveSpendCategories.isEmpty()) {
+                if (netRefundCategories.isEmpty()) {
+                    return ChartState.Empty("No spending recorded in this period")
+                }
                 return ChartState.Data(
                     CategoryDonutModel(
                         slices = emptyList(),

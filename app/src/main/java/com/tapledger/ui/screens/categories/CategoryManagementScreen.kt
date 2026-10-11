@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -34,6 +35,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -80,6 +82,9 @@ import com.tapledger.ui.components.MoneySemantic
 import com.tapledger.ui.components.MoneyText
 import com.tapledger.ui.components.SectionHeader
 import com.tapledger.ui.components.SkeletonList
+import com.tapledger.ui.charts.model.ChartState
+import com.tapledger.ui.screens.categories.components.CategoryDonutCard
+import com.tapledger.ui.screens.categories.components.EnvelopeBulletBarRow
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
@@ -169,6 +174,7 @@ fun CategoryManagementScreen(
             )
         } else {
             val categoriesByBucket = state.categories.groupBy { it.category.defaultBucket }
+            val bulletItemsMap = (state.bulletBarsState as? ChartState.Data)?.data?.envelopes?.associateBy { it.categoryId } ?: emptyMap()
 
             LazyColumn(
                 state = listState,
@@ -179,30 +185,83 @@ fun CategoryManagementScreen(
                 contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                listOf(BudgetBucket.NEEDS, BudgetBucket.WANTS, BudgetBucket.SAVINGS).forEach { bucket ->
-                    val bucketItems = categoriesByBucket[bucket] ?: emptyList()
-                    if (bucketItems.isNotEmpty()) {
-                        val totalAllocated = bucketItems.sumOf { it.currentAllocationPaise }
-                        val totalSpent = bucketItems.sumOf { it.spentPaise }
-                        val totalRemaining = totalAllocated - totalSpent
+                // View Mode Toggle (Flow.md §17.2 V6 S_Budget toggle)
+                item(key = "budget_view_mode_toggle") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = Spacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        FilterChip(
+                            selected = state.viewMode == BudgetViewMode.ENVELOPES,
+                            onClick = { viewModel.setViewMode(BudgetViewMode.ENVELOPES) },
+                            label = { Text("Envelopes") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        )
+                        FilterChip(
+                            selected = state.viewMode == BudgetViewMode.DONUT,
+                            onClick = { viewModel.setViewMode(BudgetViewMode.DONUT) },
+                            label = { Text("Spending Donut") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.PieChart,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        )
+                    }
+                }
 
-                        item(key = "header_${bucket.name}") {
-                            BucketSectionHeader(
-                                bucket = bucket,
-                                totalAllocated = totalAllocated,
-                                totalSpent = totalSpent,
-                                totalRemaining = totalRemaining
-                            )
-                        }
+                if (state.viewMode == BudgetViewMode.DONUT) {
+                    item(key = "category_donut_card") {
+                        CategoryDonutCard(
+                            donutState = state.categoryDonutState,
+                            selectedSlice = state.selectedDonutSlice,
+                            onSelectSlice = { viewModel.selectDonutSlice(it) }
+                        )
+                    }
+                } else {
+                    listOf(BudgetBucket.NEEDS, BudgetBucket.WANTS, BudgetBucket.SAVINGS).forEach { bucket ->
+                        val bucketItems = categoriesByBucket[bucket] ?: emptyList()
+                        if (bucketItems.isNotEmpty()) {
+                            val totalAllocated = bucketItems.sumOf { it.currentAllocationPaise }
+                            val totalSpent = bucketItems.sumOf { it.spentPaise }
+                            val totalRemaining = totalAllocated - totalSpent
 
-                        items(
-                            items = bucketItems,
-                            key = { it.category.id }
-                        ) { itemState ->
-                            CategoryManageRow(
-                                itemState = itemState,
-                                onEdit = { editingCategoryItem = itemState }
-                            )
+                            item(key = "header_${bucket.name}") {
+                                BucketSectionHeader(
+                                    bucket = bucket,
+                                    totalAllocated = totalAllocated,
+                                    totalSpent = totalSpent,
+                                    totalRemaining = totalRemaining
+                                )
+                            }
+
+                            items(
+                                items = bucketItems,
+                                key = { it.category.id }
+                            ) { itemState ->
+                                val bulletItem = bulletItemsMap[itemState.category.id]
+                                if (bulletItem != null) {
+                                    EnvelopeBulletBarRow(
+                                        item = bulletItem,
+                                        onClick = { editingCategoryItem = itemState }
+                                    )
+                                } else {
+                                    CategoryManageRow(
+                                        itemState = itemState,
+                                        onEdit = { editingCategoryItem = itemState }
+                                    )
+                                }
+                            }
                         }
                     }
                 }

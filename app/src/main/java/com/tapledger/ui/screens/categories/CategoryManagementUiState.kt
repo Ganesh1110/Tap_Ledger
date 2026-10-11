@@ -2,6 +2,15 @@ package com.tapledger.ui.screens.categories
 
 import com.tapledger.core.database.entity.BudgetAdjustmentEntity
 import com.tapledger.core.database.entity.CategoryEntity
+import com.tapledger.ui.charts.model.BulletBarsModel
+import com.tapledger.ui.charts.model.CategoryDonutModel
+import com.tapledger.ui.charts.model.CategoryDonutSlice
+import com.tapledger.ui.charts.model.ChartState
+
+enum class BudgetViewMode {
+    ENVELOPES,
+    DONUT
+}
 
 data class CategoryItemState(
     val category: CategoryEntity,
@@ -17,5 +26,9 @@ data class CategoryManagementUiState(
     val currentMonth: Int = 0,
     val categories: List<CategoryItemState> = emptyList(),
     val adjustments: List<BudgetAdjustmentEntity> = emptyList(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val bulletBarsState: ChartState<BulletBarsModel> = ChartState.Loading,
+    val categoryDonutState: ChartState<CategoryDonutModel> = ChartState.Loading,
+    val selectedDonutSlice: CategoryDonutSlice? = null,
+    val viewMode: BudgetViewMode = BudgetViewMode.ENVELOPES
 )

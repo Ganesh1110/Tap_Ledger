@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tapledger.ui.theme.ChartPalette
 
 data class BarSegment(
     val valuePaise: Long,
@@ -27,17 +28,20 @@ data class BarSegment(
 /**
  * Render primitive for horizontal bullet bars per Flow.md §17.2 V5.
  */
+
 @Composable
 fun BulletBarRender(
     spentPaise: Long,
     adjustedBudgetPaise: Long,
     baseAllocationPaise: Long,
-    advPosPaise: Long, // carried-in surplus (striped)
-    advNegPaise: Long, // applied deficit (shaded)
+    advPosPaise: Long = 0L, // carried-in surplus (striped)
+    advNegPaise: Long = 0L, // applied deficit (shaded)
     barColor: Color,
     trackColor: Color,
     modifier: Modifier = Modifier,
-    height: Dp = 24.dp
+    height: Dp = 20.dp,
+    isExceeded: Boolean = false,
+    isGoalAchieved: Boolean = false
 ) {
     Canvas(modifier = modifier.fillMaxWidth().height(height)) {
         val totalCapacity = maxOf(spentPaise, adjustedBudgetPaise, baseAllocationPaise, 1L)
@@ -53,8 +57,9 @@ fun BulletBarRender(
             cornerRadius = cornerRadius
         )
 
-        // 2. Spent Bar
-        val spentFraction = (spentPaise.coerceAtLeast(0L).toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
+        // 2. Spent Bar (capped visually at adjusted budget if exceeded, overflow drawn separately per D8)
+        val cappedSpent = if (isExceeded) adjustedBudgetPaise else spentPaise
+        val spentFraction = (cappedSpent.coerceAtLeast(0L).toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
         val spentWidth = widthPx * spentFraction
         if (spentWidth > 0f) {
             drawRoundRect(
@@ -65,17 +70,73 @@ fun BulletBarRender(
             )
         }
 
-        // 3. Base Marker (vertical line at BaseAllocation)
+        // 3. D8 Hatched Overflow Segment when isExceeded
+        if (isExceeded && spentPaise > adjustedBudgetPaise) {
+            val overflowPaise = spentPaise - adjustedBudgetPaise
+            val overflowFraction = (overflowPaise.toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
+            val overflowWidth = widthPx * overflowFraction
+            if (overflowWidth > 0f) {
+                drawRoundRect(
+                    color = ChartPalette.OverflowHatch.copy(alpha = 0.4f),
+                    topLeft = Offset(spentWidth, 0f),
+                    size = Size(overflowWidth, heightPx),
+                    cornerRadius = cornerRadius
+                )
+                drawRoundRect(
+                    color = ChartPalette.OverflowHatch,
+                    topLeft = Offset(spentWidth, 0f),
+                    size = Size(overflowWidth, heightPx),
+                    cornerRadius = cornerRadius,
+                    style = Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+                    )
+                )
+            }
+        }
+
+        // 4. Carried-in segment (AdvPos, striped)
+        if (advPosPaise > 0L) {
+            val baseFraction = (baseAllocationPaise.coerceAtLeast(0L).toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
+            val advPosFraction = (advPosPaise.toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
+            val startX = widthPx * baseFraction
+            val advWidth = widthPx * advPosFraction
+            if (advWidth > 0f) {
+                drawRoundRect(
+                    color = Color.Green.copy(alpha = 0.25f),
+                    topLeft = Offset(startX, 0f),
+                    size = Size(advWidth, heightPx),
+                    style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f))
+                )
+            }
+        }
+
+        // 5. Applied deficit segment (AdvNeg, shaded)
+        if (advNegPaise > 0L) {
+            val adjFraction = (adjustedBudgetPaise.coerceAtLeast(0L).toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
+            val advNegFraction = (advNegPaise.toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
+            val startX = widthPx * adjFraction
+            val advWidth = widthPx * advNegFraction
+            if (advWidth > 0f) {
+                drawRoundRect(
+                    color = Color.Red.copy(alpha = 0.25f),
+                    topLeft = Offset(startX, 0f),
+                    size = Size(advWidth, heightPx)
+                )
+            }
+        }
+
+        // 6. Base Marker (vertical line at BaseAllocation)
         val baseFraction = (baseAllocationPaise.coerceAtLeast(0L).toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
         val baseX = widthPx * baseFraction
         drawLine(
-            color = Color.Black.copy(alpha = 0.6f),
+            color = Color.Black.copy(alpha = 0.7f),
             start = Offset(baseX, 0f),
             end = Offset(baseX, heightPx),
             strokeWidth = 2.dp.toPx()
         )
 
-        // 4. Budget Cap Line (at adjustedBudgetPaise)
+        // 7. Budget Cap Line (at adjustedBudgetPaise)
         val budgetFraction = (adjustedBudgetPaise.coerceAtLeast(0L).toFloat() / totalCapacity.toFloat()).coerceIn(0f, 1f)
         val budgetX = widthPx * budgetFraction
         drawLine(

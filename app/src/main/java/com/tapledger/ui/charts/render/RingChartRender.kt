@@ -15,6 +15,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import com.tapledger.ui.charts.model.CategoryDonutSlice
 import com.tapledger.ui.theme.ChartPalette
 import kotlin.math.cos
 import kotlin.math.sin
@@ -114,6 +117,95 @@ fun RingChartRender(
                     strokeWidth = 3.dp.toPx(),
                     cap = StrokeCap.Round
                 )
+            }
+        }
+
+        centerContent()
+    }
+}
+
+/**
+ * Render primitive for V6 Category Donut chart per Flow.md §17.2 V6.
+ * Multi-slice donut chart using D2 percentages. Supports slice selection on tap.
+ */
+@Composable
+fun DonutChartRender(
+    slices: List<CategoryDonutSlice>,
+    modifier: Modifier = Modifier,
+    diameter: Dp = 180.dp,
+    strokeWidth: Dp = 22.dp,
+    selectedCategoryId: Long? = null,
+    onSliceClick: ((CategoryDonutSlice) -> Unit)? = null,
+    centerContent: @Composable () -> Unit = {}
+) {
+    Box(
+        modifier = modifier.size(diameter),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(
+            modifier = Modifier
+                .size(diameter)
+                .then(
+                    if (onSliceClick != null && slices.isNotEmpty()) {
+                        Modifier.pointerInput(slices) {
+                            detectTapGestures { offset ->
+                                val centerX = size.width.toFloat() / 2f
+                                val centerY = size.height.toFloat() / 2f
+                                val dx = offset.x - centerX
+                                val dy = offset.y - centerY
+                                var angleDeg = (kotlin.math.atan2(dy, dx) * 180f / Math.PI.toFloat())
+                                if (angleDeg < -90f) angleDeg += 360f
+
+                                var currentAngle = -90f
+                                for (slice in slices) {
+                                    val sweep = (slice.percentageBp.toFloat() / 10_000f) * 360f
+                                    if (angleDeg >= currentAngle && angleDeg <= (currentAngle + sweep)) {
+                                        onSliceClick(slice)
+                                        break
+                                    }
+                                    currentAngle += sweep
+                                }
+                            }
+                        }
+                    } else Modifier
+                )
+        ) {
+            val strokePx = strokeWidth.toPx()
+            val arcSize = Size(size.width - strokePx, size.height - strokePx)
+            val topLeft = Offset(strokePx / 2f, strokePx / 2f)
+
+            if (slices.isEmpty()) {
+                // Empty track
+                drawArc(
+                    color = Color.LightGray.copy(alpha = 0.3f),
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                )
+            } else {
+                var startAngle = -90f
+                slices.forEachIndexed { index, slice ->
+                    val sweepAngle = (slice.percentageBp.toFloat() / 10_000f) * 360f
+                    val sliceColor = ChartPalette.sliceColor(index)
+                    val isSelected = selectedCategoryId == slice.categoryId
+                    val currentStroke = if (isSelected) strokePx + 4.dp.toPx() else strokePx
+
+                    if (sweepAngle > 0f) {
+                        drawArc(
+                            color = sliceColor,
+                            startAngle = startAngle,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = currentStroke, cap = StrokeCap.Butt)
+                        )
+                    }
+                    startAngle += sweepAngle
+                }
             }
         }
 

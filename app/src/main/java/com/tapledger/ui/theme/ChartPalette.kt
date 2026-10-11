@@ -42,4 +42,20 @@ object ChartPalette {
     // Overflow & Alert Elements
     val OverflowHatch = Color(0xFFBA1A1A)
     val OverflowHatchDark = Color(0xFFFFB4AB)
+
+    // Category Donut Slice Palette (Okabe-Ito series)
+    val OkabeItoSlices = listOf(
+        Color(0xFF0072B2), // Blue
+        Color(0xFFE69F00), // Orange
+        Color(0xFF009E73), // Bluish Green
+        Color(0xFF56B4E9), // Sky Blue
+        Color(0xFFD55E00), // Vermilion
+        Color(0xFFCC79A7), // Reddish Purple
+        Color(0xFFF0E442), // Yellow
+        Color(0xFF999999)  // Grey / Other
+    )
+
+    fun sliceColor(index: Int): Color {
+        return OkabeItoSlices[index % OkabeItoSlices.size]
+    }
 }
