@@ -203,6 +203,9 @@ class IngestionPipelineTest {
 
         override suspend fun getFirstOpenPeriod(): BudgetPeriodEntity? =
             periods.filter { it.status == BudgetPeriodStatus.OPEN }.minByOrNull { it.startAt }
+
+        override suspend fun getClosedPeriodEndingAfter(startOfDayTimestamp: Long): BudgetPeriodEntity? =
+            periods.find { it.status == BudgetPeriodStatus.CLOSED && it.endAt > startOfDayTimestamp }
     }
 
     private class FakeBudgetAllocationDao : BudgetAllocationDao() {

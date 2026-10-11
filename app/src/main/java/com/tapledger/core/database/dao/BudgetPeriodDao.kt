@@ -46,4 +46,7 @@ interface BudgetPeriodDao {
 
     @Query("SELECT * FROM budget_periods WHERE status = 'OPEN' ORDER BY start_at ASC LIMIT 1")
     suspend fun getFirstOpenPeriod(): BudgetPeriodEntity?
+
+    @Query("SELECT * FROM budget_periods WHERE status = 'CLOSED' AND end_at > :startOfDayTimestamp LIMIT 1")
+    suspend fun getClosedPeriodEndingAfter(startOfDayTimestamp: Long): BudgetPeriodEntity?
 }

@@ -10,7 +10,8 @@ data class AccountBalanceSummary(
     val openingBalancePaise: Long,
     val totalIncomingPaise: Long,
     val totalOutgoingPaise: Long,
-    val currentBalancePaise: Long
+    val currentBalancePaise: Long,
+    val creditCardUtilizationPercent: Int = 0
 )
 
 data class NetWorthSummary(
