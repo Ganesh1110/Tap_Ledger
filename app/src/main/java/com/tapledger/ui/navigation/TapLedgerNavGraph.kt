@@ -16,6 +16,7 @@ import com.tapledger.ui.screens.backup.BackupRestoreScreen
 import com.tapledger.ui.screens.categories.CategoryManagementScreen
 import com.tapledger.ui.screens.dashboard.DashboardScreen
 import com.tapledger.ui.screens.diagnostics.DataDiagnosticsScreen
+import com.tapledger.ui.screens.insights.InsightsScreen
 import com.tapledger.ui.screens.manual.ManualEntryScreen
 import com.tapledger.ui.screens.monthclose.MonthCloseScreen
 import com.tapledger.ui.screens.pending.PendingInboxScreen
@@ -36,6 +37,7 @@ sealed class Screen(val route: String) {
     object StatementReconciliation : Screen("statements")
     object MonthClose : Screen("month_close")
     object DataDiagnostics : Screen("diagnostics")
+    object Insights : Screen("insights")
 }
 
 @Composable
@@ -76,7 +78,8 @@ fun TapLedgerNavGraph(
                 onNavigateToCategories = { navController.navigate(Screen.CategoryManagement.route) },
                 onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) },
                 onNavigateToMonthClose = { navController.navigate(Screen.MonthClose.route) },
-                onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) }
+                onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) },
+                onNavigateToInsights = { navController.navigate(Screen.Insights.route) }
             )
         }
         composable(Screen.Transactions.route) {
@@ -125,6 +128,11 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.DataDiagnostics.route) {
             DataDiagnosticsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.Insights.route) {
+            InsightsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

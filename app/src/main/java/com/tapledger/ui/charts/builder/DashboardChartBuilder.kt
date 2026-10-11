@@ -299,15 +299,16 @@ object DashboardChartBuilder {
         closedCloses: List<MonthCloseEntity>,
         allPeriods: List<BudgetPeriodEntity>,
         currentSummary: BudgetPeriodSummary?,
-        currentPeriodId: Long?
+        currentPeriodId: Long?,
+        maxClosedPeriods: Int = 5
     ): ChartState<SixPeriodTrendModel> {
         return try {
             val periodMap = allPeriods.associateBy { it.id }
             val bars = mutableListOf<PeriodTrendBar>()
             val tableRows = mutableListOf<TrendTableRow>()
 
-            // Take up to 5 most recent closed periods
-            val recentClosed = closedCloses.sortedBy { it.closedAt }.takeLast(5)
+            // Take up to maxClosedPeriods most recent closed periods
+            val recentClosed = closedCloses.sortedBy { it.closedAt }.takeLast(maxClosedPeriods)
             for (close in recentClosed) {
                 val period = periodMap[close.budgetPeriodId]
                 val label = if (period != null) "${period.month}/${period.year % 100}" else "Period #${close.budgetPeriodId}"

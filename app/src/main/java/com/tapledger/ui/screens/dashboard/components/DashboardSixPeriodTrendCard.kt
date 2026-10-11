@@ -56,7 +56,9 @@ import com.tapledger.ui.theme.Spacing
 fun DashboardSixPeriodTrendCard(
     trendState: ChartState<SixPeriodTrendModel>,
     modifier: Modifier = Modifier,
-    initiallyExpanded: Boolean = true
+    initiallyExpanded: Boolean = true,
+    title: String = "Cash Flow Trend",
+    subtitle: String = "6-period income, spent, & saved"
 ) {
     var isExpanded by remember { mutableStateOf(initiallyExpanded) }
     var showTable by remember { mutableStateOf(false) }
@@ -88,12 +90,12 @@ fun DashboardSixPeriodTrendCard(
             ) {
                 Column {
                     Text(
-                        text = "Cash Flow Trend",
+                        text = title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "6-period income, spent, & saved",
+                        text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

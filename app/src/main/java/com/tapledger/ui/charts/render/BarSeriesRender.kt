@@ -584,4 +584,45 @@ fun DiagnosticsSeverityBarRender(
     }
 }
 
+/**
+ * Render primitive for V8 Top Merchants horizontal proportion bar per Flow.md §17.2 V8.
+ */
+@Composable
+fun TopMerchantBarRender(
+    percentageBp: Int,
+    modifier: Modifier = Modifier,
+    height: Dp = 8.dp,
+    barColor: Color = Color(0xFF0072B2),
+    trackColor: Color = Color(0xFFE5E5EA)
+) {
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+    ) {
+        val widthPx = size.width
+        val heightPx = size.height
+        val radius = CornerRadius(heightPx / 2f, heightPx / 2f)
+
+        // Draw track
+        drawRoundRect(
+            color = trackColor.copy(alpha = 0.5f),
+            size = Size(widthPx, heightPx),
+            cornerRadius = radius
+        )
+
+        // Draw bar
+        val fraction = (percentageBp.toFloat() / 10_000f).coerceIn(0f, 1f)
+        val barW = widthPx * fraction
+        if (barW > 0f) {
+            drawRoundRect(
+                color = barColor,
+                size = Size(barW, heightPx),
+                cornerRadius = radius
+            )
+        }
+    }
+}
+
+
 
