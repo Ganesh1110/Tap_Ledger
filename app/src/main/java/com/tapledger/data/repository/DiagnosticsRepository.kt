@@ -1,11 +1,15 @@
 package com.tapledger.data.repository
 
 import com.tapledger.core.database.dao.AccountDao
+import com.tapledger.core.database.dao.AdvanceLedgerDao
 import com.tapledger.core.database.dao.AuditLogDao
+import com.tapledger.core.database.dao.BudgetAdjustmentDao
 import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.MonthCloseDao
+import com.tapledger.core.database.dao.StatementImportDao
+import com.tapledger.core.database.dao.StatementLineDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.AuditLogEntity
@@ -21,9 +25,13 @@ class DiagnosticsRepository @Inject constructor(
     private val categoryDao: CategoryDao,
     private val budgetPeriodDao: BudgetPeriodDao,
     private val budgetAllocationDao: BudgetAllocationDao,
+    private val budgetAdjustmentDao: BudgetAdjustmentDao,
+    private val advanceLedgerDao: AdvanceLedgerDao,
     private val transactionDao: TransactionDao,
     private val transactionAllocationDao: TransactionAllocationDao,
     private val monthCloseDao: MonthCloseDao,
+    private val statementImportDao: StatementImportDao,
+    private val statementLineDao: StatementLineDao,
     private val auditLogDao: AuditLogDao
 ) {
 
@@ -35,9 +43,13 @@ class DiagnosticsRepository @Inject constructor(
         val categories = categoryDao.getAllCategoriesSync()
         val periods = budgetPeriodDao.getAllPeriodsSync()
         val allocations = budgetAllocationDao.getAllAllocationsSync()
+        val adjustments = budgetAdjustmentDao.getAllAdjustmentsSync()
+        val advances = advanceLedgerDao.getAllAdvancesSync()
         val transactions = transactionDao.getAllTransactionsSync()
         val txAllocations = transactionAllocationDao.getAllTransactionAllocationsSync()
         val monthCloses = monthCloseDao.getAllMonthClosesSync()
+        val statementImports = statementImportDao.getAllImportsSync()
+        val statementLines = statementLineDao.getAllLinesSync()
 
         val checker = DataIntegrityChecker()
         return checker.verifyIntegrity(
@@ -47,7 +59,11 @@ class DiagnosticsRepository @Inject constructor(
             allocations = allocations,
             transactions = transactions,
             transactionAllocations = txAllocations,
-            monthCloses = monthCloses
+            monthCloses = monthCloses,
+            adjustments = adjustments,
+            advances = advances,
+            statementImports = statementImports,
+            statementLines = statementLines
         )
     }
 }

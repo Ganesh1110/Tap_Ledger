@@ -128,6 +128,7 @@ class BudgetPeriodLifecycleTest {
                 override suspend fun insert(adjustment: com.tapledger.core.database.entity.BudgetAdjustmentEntity): Long = 1L
                 override fun observeAdjustmentsForPeriod(periodId: Long): Flow<List<com.tapledger.core.database.entity.BudgetAdjustmentEntity>> = emptyFlow()
                 override suspend fun getAdjustmentsForPeriodSync(periodId: Long): List<com.tapledger.core.database.entity.BudgetAdjustmentEntity> = emptyList()
+                override suspend fun getAllAdjustmentsSync(): List<com.tapledger.core.database.entity.BudgetAdjustmentEntity> = emptyList()
             }
         )
     }

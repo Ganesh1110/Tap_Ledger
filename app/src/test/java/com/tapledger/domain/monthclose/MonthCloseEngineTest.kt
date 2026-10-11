@@ -156,6 +156,7 @@ class MonthCloseEngineTest {
         override fun observeAdjustmentsForPeriod(periodId: Long): Flow<List<BudgetAdjustmentEntity>> = emptyFlow()
         override suspend fun getAdjustmentsForPeriodSync(periodId: Long): List<BudgetAdjustmentEntity> =
             storage.filter { it.budgetPeriodId == periodId }
+        override suspend fun getAllAdjustmentsSync(): List<BudgetAdjustmentEntity> = storage.toList()
     }
 
     private class FakeAdvanceLedgerDao : AdvanceLedgerDao {
@@ -178,6 +179,7 @@ class MonthCloseEngineTest {
             storage.filter { it.appliedToPeriodId == null }
         override suspend fun getForCategory(categoryId: Long): List<AdvanceLedgerEntity> =
             storage.filter { it.categoryId == categoryId }
+        override suspend fun getAllAdvancesSync(): List<AdvanceLedgerEntity> = storage.toList()
         override suspend fun deleteForSourcePeriod(sourcePeriodId: Long) {
             storage.removeIf { it.sourcePeriodId == sourcePeriodId }
         }

@@ -131,9 +131,9 @@ Scope: Full codebase gap analysis and traceability matrix across all phases.
 
 ### Phase 11: Data Integrity & Invariant Auditor (19 Formal Rules) (§12)
 
-| Spec §  | Requirement                                                                                                      | File / Class              |  Status   | Discrepancy Details                                                                                                                                                 | Test Name                                               |
-| :------ | :--------------------------------------------------------------------------------------------------------------- | :------------------------ | :-------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------ |
-| **§12** | Complete 19-Rule Invariant Auditor: `T1`..`T4`, `A1`..`A4`, `B1`..`B4`, `C1`, `P1`, `M1`, `M2`, `S1`, `R1`, `R2` | `DataIntegrityChecker.kt` | **WRONG** | Only checks ~6 rules with non-standard IDs (`TR1`, `TR2`, `MC1`, etc.). Completely missing: `T4`, `A4`, `B1`, `B2`, `B3`, `B4`, `C1`, `P1`, `M1`, `M2`, `S1`, `R2`. | `DataIntegrityCheckerTest.kt#testAll19FormalInvariants` |
+| Spec §  | Requirement                                                                                                      | File / Class              |    Status     | Discrepancy Details                                                                                                                                                 | Test Name                                               |
+| :------ | :--------------------------------------------------------------------------------------------------------------- | :------------------------ | :-----------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :------------------------------------------------------ |
+| **§12** | Complete 19-Rule Invariant Auditor: `T1`..`T4`, `A1`..`A4`, `B1`..`B4`, `C1`, `P1`, `M1`, `M2`, `S1`, `R1`, `R2` | `DataIntegrityChecker.kt` | **IMPLEMENTED** | All 19 formal invariant rules implemented with exact codes, severities (CRITICAL, ERROR, WARNING), and error messages according to Flow.md §12.                      | `DataIntegrityCheckerTest.kt#testAll19FormalInvariants` |
 
 ---
 

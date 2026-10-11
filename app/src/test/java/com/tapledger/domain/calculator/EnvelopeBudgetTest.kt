@@ -140,6 +140,7 @@ class EnvelopeBudgetTest {
         override fun observeAdjustmentsForPeriod(periodId: Long): Flow<List<BudgetAdjustmentEntity>> = emptyFlow()
         override suspend fun getAdjustmentsForPeriodSync(periodId: Long): List<BudgetAdjustmentEntity> =
             allocationDao.adjustments.filter { it.budgetPeriodId == periodId }
+        override suspend fun getAllAdjustmentsSync(): List<BudgetAdjustmentEntity> = allocationDao.adjustments
     }
 
     private lateinit var categoryDao: FakeCategoryDao

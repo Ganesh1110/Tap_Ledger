@@ -265,6 +265,7 @@ class IngestionPipelineTest {
     private class FakeBudgetAdjustmentDao : BudgetAdjustmentDao {
         override suspend fun insert(adjustment: BudgetAdjustmentEntity): Long = 1L
         override suspend fun getAdjustmentsForPeriodSync(periodId: Long): List<BudgetAdjustmentEntity> = emptyList()
+        override suspend fun getAllAdjustmentsSync(): List<BudgetAdjustmentEntity> = emptyList()
         override fun observeAdjustmentsForPeriod(periodId: Long): Flow<List<BudgetAdjustmentEntity>> = emptyFlow()
     }
 

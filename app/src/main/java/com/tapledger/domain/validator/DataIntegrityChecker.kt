@@ -1,25 +1,39 @@
 package com.tapledger.domain.validator
 
 import com.tapledger.core.database.entity.AccountEntity
+import com.tapledger.core.database.entity.AdvanceLedgerEntity
+import com.tapledger.core.database.entity.BudgetAdjustmentEntity
 import com.tapledger.core.database.entity.BudgetAllocationEntity
 import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
+import com.tapledger.core.database.entity.StatementImportEntity
+import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
+import com.tapledger.core.model.AdvanceDirection
+import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.BudgetPeriodStatus
+import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionStatus
+import com.tapledger.domain.calculator.BudgetCalculator
 import com.tapledger.domain.model.IntegrityIssue
 import com.tapledger.domain.model.IntegritySeverity
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Data Integrity & Invariant Auditor (Flow.md §12).
+ * Verifies all 19 formal database rules with exact codes and severities:
+ * T1..T4, A1..A4, B1..B4, C1, P1, M1, M2, S1, R1, R2.
+ */
 @Singleton
 class DataIntegrityChecker @Inject constructor() {
 
     /**
-     * Executes all integrity checks across database records.
+     * Executes all 19 invariant checks across database records.
      * Returns a list of actionable issues found.
      */
     fun verifyIntegrity(
@@ -29,7 +43,11 @@ class DataIntegrityChecker @Inject constructor() {
         allocations: List<BudgetAllocationEntity>,
         transactions: List<TransactionEntity>,
         transactionAllocations: List<TransactionAllocationEntity>,
-        monthCloses: List<MonthCloseEntity>
+        monthCloses: List<MonthCloseEntity>,
+        adjustments: List<BudgetAdjustmentEntity> = emptyList(),
+        advances: List<AdvanceLedgerEntity> = emptyList(),
+        statementImports: List<StatementImportEntity> = emptyList(),
+        statementLines: List<StatementLineEntity> = emptyList()
     ): List<IntegrityIssue> {
         val issues = mutableListOf<IntegrityIssue>()
 
@@ -37,27 +55,38 @@ class DataIntegrityChecker @Inject constructor() {
         val categoryIds = categories.map { it.id }.toSet()
         val periodIds = periods.map { it.id }.toSet()
         val txById = transactions.associateBy { it.id }
+        val allocsByTxId = transactionAllocations.groupBy { it.transactionId }
 
-        // 1. Transaction checks
+        // =============================================================
+        // 1. Transaction Rules (T1..T4)
+        // =============================================================
+
+        // Rule T1_INVALID_ACCOUNT (CRITICAL):
+        // ∀ t with status ∉ {PENDING, IGNORED, VOIDED}, t.account_id ∈ Accounts.id
         for (tx in transactions) {
-            // Rule T1: Invalid account reference (exempt null account_id per Flow.md §3.1)
-            if (tx.accountId != null && !accountIds.contains(tx.accountId)) {
-                issues.add(
-                    IntegrityIssue(
-                        ruleId = "T1_INVALID_ACCOUNT",
-                        message = "Transaction #${tx.id} references non-existent account #${tx.accountId}",
-                        entityType = "Transaction",
-                        entityId = tx.id.toString(),
-                        severity = IntegritySeverity.CRITICAL
+            val isExemptStatus = tx.status == TransactionStatus.PENDING ||
+                tx.status == TransactionStatus.IGNORED ||
+                tx.status == TransactionStatus.VOIDED
+
+            if (!isExemptStatus) {
+                if (tx.accountId == null || !accountIds.contains(tx.accountId)) {
+                    issues.add(
+                        IntegrityIssue(
+                            ruleId = "T1_INVALID_ACCOUNT",
+                            message = "Transaction #${tx.id} with status ${tx.status} has invalid/null account #${tx.accountId}",
+                            entityType = "Transaction",
+                            entityId = tx.id.toString(),
+                            severity = IntegritySeverity.CRITICAL
+                        )
                     )
-                )
+                }
             }
 
-            // Rule T2: Non-positive transaction amount
+            // Rule T2_NON_POSITIVE_AMOUNT (ERROR): ∀ t, t.amount_paise > 0
             if (tx.amountPaise <= 0L) {
                 issues.add(
                     IntegrityIssue(
-                        ruleId = "T2_INVALID_AMOUNT",
+                        ruleId = "T2_NON_POSITIVE_AMOUNT",
                         message = "Transaction #${tx.id} has non-positive amount: ${tx.amountPaise} paise",
                         entityType = "Transaction",
                         entityId = tx.id.toString(),
@@ -67,35 +96,102 @@ class DataIntegrityChecker @Inject constructor() {
             }
         }
 
-        // 2. Allocation sum rule for Categorized transactions (Section 12)
-        val allocationsByTxId = transactionAllocations.groupBy { it.transactionId }
-        for (tx in transactions) {
-            if (tx.status == TransactionStatus.CATEGORIZED &&
-                (tx.kind == TransactionKind.EXPENSE || tx.kind == TransactionKind.REFUND)
-            ) {
-                val txAllocs = allocationsByTxId[tx.id].orEmpty()
-                val sumAllocs = txAllocs.sumOf { it.amountPaise }
-                if (sumAllocs != tx.amountPaise) {
+        // Rule T3_UNPAIRED_TRANSFER (CRITICAL):
+        // Every paired transfer has linked counterpart with equal amount, opposite direction, and reciprocal counterparty_account_id
+        val transferGroups = transactions.filter { it.transferGroupId != null }.groupBy { it.transferGroupId!! }
+        for ((groupId, legs) in transferGroups) {
+            if (legs.size != 2) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "T3_UNPAIRED_TRANSFER",
+                        message = "Transfer group #$groupId has ${legs.size} legs instead of exactly 2",
+                        entityType = "TransferGroup",
+                        entityId = groupId,
+                        severity = IntegritySeverity.CRITICAL
+                    )
+                )
+            } else {
+                val leg1 = legs[0]
+                val leg2 = legs[1]
+                val amountMatches = leg1.amountPaise == leg2.amountPaise
+                val directionsOpposite = (leg1.direction == TransactionDirection.OUT && leg2.direction == TransactionDirection.IN) ||
+                    (leg1.direction == TransactionDirection.IN && leg2.direction == TransactionDirection.OUT)
+                val accountsReciprocal = leg1.counterpartyAccountId == leg2.accountId && leg2.counterpartyAccountId == leg1.accountId
+
+                if (!amountMatches || !directionsOpposite || !accountsReciprocal) {
                     issues.add(
                         IntegrityIssue(
-                            ruleId = "A1_SPLIT_SUM_MISMATCH",
-                            message = "Categorized transaction #${tx.id} amount (${tx.amountPaise} paise) does not match allocations sum ($sumAllocs paise)",
-                            entityType = "Transaction",
-                            entityId = tx.id.toString(),
+                            ruleId = "T3_UNPAIRED_TRANSFER",
+                            message = "Transfer group #$groupId fails pairing invariants (amount=$amountMatches, directions=$directionsOpposite, reciprocal=$accountsReciprocal)",
+                            entityType = "TransferGroup",
+                            entityId = groupId,
                             severity = IntegritySeverity.CRITICAL
                         )
                     )
                 }
+            }
+        }
+        for (tx in transactions) {
+            if (tx.kind == TransactionKind.TRANSFER && tx.transferGroupId == null) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "T3_UNPAIRED_TRANSFER",
+                        message = "Transfer #${tx.id} lacks transfer_group_id",
+                        entityType = "Transaction",
+                        entityId = tx.id.toString(),
+                        severity = IntegritySeverity.CRITICAL
+                    )
+                )
+            }
+        }
 
-                // Check category references in allocations
-                for (alloc in txAllocs) {
-                    if (!categoryIds.contains(alloc.categoryId)) {
+        // Rule T4_DUPLICATE_UPI_REF (ERROR):
+        // Unique non-null (account_id, upi_reference, direction, amount_paise); if account_id IS NULL: unique (upi_reference, direction, amount_paise)
+        val nonVoidedTxsWithRef = transactions.filter {
+            it.status != TransactionStatus.VOIDED && !it.upiReference.isNullOrBlank()
+        }
+        val groupedByUpi = nonVoidedTxsWithRef.groupBy {
+            val accKey = it.accountId?.toString() ?: "NULL"
+            val refKey = it.upiReference!!.trim().lowercase(Locale.ENGLISH)
+            "$accKey:$refKey:${it.direction}:${it.amountPaise}"
+        }
+        for ((key, duplicates) in groupedByUpi) {
+            if (duplicates.size > 1) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "T4_DUPLICATE_UPI_REF",
+                        message = "Duplicate transaction captured for key '$key' across transactions: ${duplicates.map { it.id }}",
+                        entityType = "Transaction",
+                        entityId = duplicates.first().id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+        }
+
+        // =============================================================
+        // 2. Allocation Rules (A1..A4)
+        // =============================================================
+
+        // Rule A1_SPLIT_SUM_MISMATCH (CRITICAL):
+        // For categorized t: Σ Allocations ≡ t.amount_paise
+        for (tx in transactions) {
+            if (tx.status == TransactionStatus.CATEGORIZED) {
+                val txAllocs = allocsByTxId[tx.id].orEmpty()
+                val isStandardCategorizedTx = tx.kind == TransactionKind.EXPENSE ||
+                    tx.kind == TransactionKind.REFUND ||
+                    tx.kind == TransactionKind.FEE ||
+                    tx.kind == TransactionKind.INTEREST_CHARGED
+
+                if (isStandardCategorizedTx || txAllocs.isNotEmpty()) {
+                    val sumAllocs = txAllocs.sumOf { it.amountPaise }
+                    if (sumAllocs != tx.amountPaise) {
                         issues.add(
                             IntegrityIssue(
-                                ruleId = "A2_INVALID_CATEGORY_REF",
-                                message = "Allocation #${alloc.id} references non-existent category #${alloc.categoryId}",
-                                entityType = "TransactionAllocation",
-                                entityId = alloc.id.toString(),
+                                ruleId = "A1_SPLIT_SUM_MISMATCH",
+                                message = "Categorized transaction #${tx.id} amount (${tx.amountPaise}) does not match allocations sum ($sumAllocs)",
+                                entityType = "Transaction",
+                                entityId = tx.id.toString(),
                                 severity = IntegritySeverity.CRITICAL
                             )
                         )
@@ -104,66 +200,326 @@ class DataIntegrityChecker @Inject constructor() {
             }
         }
 
-        // 3. Orphaned Allocations
+        // Rule A2_INVALID_CATEGORY (ERROR): ∀ a, a.category_id ∈ Categories.id
         for (alloc in transactionAllocations) {
-            if (!txById.containsKey(alloc.transactionId)) {
+            if (!categoryIds.contains(alloc.categoryId)) {
                 issues.add(
                     IntegrityIssue(
-                        ruleId = "A3_ORPHANED_ALLOCATION",
-                        message = "Allocation #${alloc.id} references non-existent transaction #${alloc.transactionId}",
+                        ruleId = "A2_INVALID_CATEGORY",
+                        message = "Transaction allocation #${alloc.id} references non-existent category #${alloc.categoryId}",
                         entityType = "TransactionAllocation",
                         entityId = alloc.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+        }
+        for (budgetAlloc in allocations) {
+            if (!categoryIds.contains(budgetAlloc.categoryId)) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "A2_INVALID_CATEGORY",
+                        message = "Budget allocation #${budgetAlloc.id} references non-existent category #${budgetAlloc.categoryId}",
+                        entityType = "BudgetAllocation",
+                        entityId = budgetAlloc.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+        }
+
+        // Rule A3_NON_POSITIVE_ALLOCATION (ERROR): ∀ a, a.amount_paise > 0
+        for (alloc in transactionAllocations) {
+            if (alloc.amountPaise <= 0L) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "A3_NON_POSITIVE_ALLOCATION",
+                        message = "Transaction allocation #${alloc.id} has non-positive amount: ${alloc.amountPaise}",
+                        entityType = "TransactionAllocation",
+                        entityId = alloc.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+        }
+
+        // Rule A4_DUPLICATE_CATEGORY_IN_SPLIT (ERROR): Unique (transaction_id, category_id)
+        for ((txId, allocList) in allocsByTxId) {
+            val catCounts = allocList.groupBy { it.categoryId }
+            for ((catId, duplicates) in catCounts) {
+                if (duplicates.size > 1) {
+                    issues.add(
+                        IntegrityIssue(
+                            ruleId = "A4_DUPLICATE_CATEGORY_IN_SPLIT",
+                            message = "Transaction #$txId repeats category #$catId multiple times in split",
+                            entityType = "TransactionAllocation",
+                            entityId = duplicates.first().id.toString(),
+                            severity = IntegritySeverity.ERROR
+                        )
+                    )
+                }
+            }
+        }
+
+        // =============================================================
+        // 3. Budget Rules (B1..B4)
+        // =============================================================
+
+        // Rule B1_INVALID_ADJUSTMENT (ERROR): from_cat ∈ Cat ∧ to_cat ∈ Cat
+        for (adj in adjustments) {
+            if (!categoryIds.contains(adj.fromCategoryId) || !categoryIds.contains(adj.toCategoryId)) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "B1_INVALID_ADJUSTMENT",
+                        message = "Budget adjustment #${adj.id} has invalid category references (from=${adj.fromCategoryId}, to=${adj.toCategoryId})",
+                        entityType = "BudgetAdjustment",
+                        entityId = adj.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+        }
+
+        // Rule B2_NEGATIVE_BUDGET (CRITICAL): ∀ b, AdjustedBudget(b) ≥ 0
+        // Rule B3_BUCKET_OVERALLOCATION (WARNING): Σ BaseAllocations ≤ BucketTarget
+        // Rule B4_BUDGET_EQUILIBRIUM (WARNING): Σ AdjustedBudget ≤ Period.income + NetAdvances(P)
+        for (period in periods) {
+            val periodAllocs = allocations.filter { it.budgetPeriodId == period.id }
+            val periodAdjs = adjustments.filter { it.budgetPeriodId == period.id }
+            val periodAdvs = advances.filter { it.appliedToPeriodId == period.id }
+
+            val allPeriodCatIds = (periodAllocs.map { it.categoryId } +
+                periodAdjs.map { it.fromCategoryId } +
+                periodAdjs.map { it.toCategoryId } +
+                periodAdvs.map { it.categoryId }).toSet()
+
+            var totalAdjustedBudgetPeriod = 0L
+
+            for (catId in allPeriodCatIds) {
+                val base = periodAllocs.find { it.categoryId == catId }?.amountPaise ?: 0L
+                val adjIn = periodAdjs.filter { it.toCategoryId == catId }.sumOf { it.amountPaise }
+                val adjOut = periodAdjs.filter { it.fromCategoryId == catId }.sumOf { it.amountPaise }
+                val advPos = periodAdvs.filter { it.categoryId == catId && it.direction == AdvanceDirection.POSITIVE }.sumOf { it.amountPaise }
+                val advNeg = periodAdvs.filter { it.categoryId == catId && it.direction == AdvanceDirection.NEGATIVE }.sumOf { it.amountPaise }
+
+                val adjustedBudget = base + adjIn - adjOut + advPos - advNeg
+                if (adjustedBudget < 0L) {
+                    issues.add(
+                        IntegrityIssue(
+                            ruleId = "B2_NEGATIVE_BUDGET",
+                            message = "Period #${period.id} category #$catId adjusted budget is negative: $adjustedBudget paise",
+                            entityType = "BudgetAllocation",
+                            entityId = period.id.toString(),
+                            severity = IntegritySeverity.CRITICAL
+                        )
+                    )
+                }
+                totalAdjustedBudgetPeriod += adjustedBudget
+            }
+
+            // B3 Bucket Over-allocation check
+            val targetNeeds = (period.incomePaise * 50L) / 100L
+            val targetWants = (period.incomePaise * 30L) / 100L
+            val targetSavings = (period.incomePaise * 20L) / 100L
+
+            val sumNeeds = periodAllocs.filter { it.bucketSnapshot == BudgetBucket.NEEDS }.sumOf { it.amountPaise }
+            val sumWants = periodAllocs.filter { it.bucketSnapshot == BudgetBucket.WANTS }.sumOf { it.amountPaise }
+            val sumSavings = periodAllocs.filter { it.bucketSnapshot == BudgetBucket.SAVINGS }.sumOf { it.amountPaise }
+
+            if (sumNeeds > targetNeeds || sumWants > targetWants || sumSavings > targetSavings) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "B3_BUCKET_OVERALLOCATION",
+                        message = "Period #${period.id} base allocations exceed 50/30/20 bucket targets (Needs: $sumNeeds > $targetNeeds, Wants: $sumWants > $targetWants, Savings: $sumSavings > $targetSavings)",
+                        entityType = "BudgetPeriod",
+                        entityId = period.id.toString(),
+                        severity = IntegritySeverity.WARNING
+                    )
+                )
+            }
+
+            // B4 Budget Equilibrium check
+            val advPosTotal = periodAdvs.filter { it.direction == AdvanceDirection.POSITIVE }.sumOf { it.amountPaise }
+            val advNegTotal = periodAdvs.filter { it.direction == AdvanceDirection.NEGATIVE }.sumOf { it.amountPaise }
+            val netAdvances = advPosTotal - advNegTotal
+            val allowableTotal = period.incomePaise + netAdvances
+
+            if (totalAdjustedBudgetPeriod > allowableTotal) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "B4_BUDGET_EQUILIBRIUM",
+                        message = "Period #${period.id} total adjusted budget ($totalAdjustedBudgetPeriod) exceeds income + net advances ($allowableTotal)",
+                        entityType = "BudgetPeriod",
+                        entityId = period.id.toString(),
+                        severity = IntegritySeverity.WARNING
+                    )
+                )
+            }
+        }
+
+        // =============================================================
+        // 4. Category Rules (C1)
+        // =============================================================
+
+        // Rule C1_DUPLICATE_CATEGORY (WARNING): Unique active category names
+        val activeCategoriesByName = categories.filter { it.isActive }.groupBy { it.name.trim().lowercase(Locale.ENGLISH) }
+        for ((name, duplicateCats) in activeCategoriesByName) {
+            if (duplicateCats.size > 1) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "C1_DUPLICATE_CATEGORY",
+                        message = "Multiple active categories share name '$name': ${duplicateCats.map { it.id }}",
+                        entityType = "Category",
+                        entityId = duplicateCats.first().id.toString(),
+                        severity = IntegritySeverity.WARNING
+                    )
+                )
+            }
+        }
+
+        // =============================================================
+        // 5. Period Boundary Rules (P1)
+        // =============================================================
+
+        // Rule P1_PERIOD_OVERLAP (CRITICAL): No overlapping [start_at, end_at) intervals
+        val sortedPeriods = periods.sortedBy { it.startAt }
+        for (i in 0 until sortedPeriods.size - 1) {
+            val curr = sortedPeriods[i]
+            val next = sortedPeriods[i + 1]
+            if (curr.endAt > next.startAt) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "P1_PERIOD_OVERLAP",
+                        message = "Budget period #${curr.id} [${curr.startAt}, ${curr.endAt}) overlaps with period #${next.id} [${next.startAt}, ${next.endAt})",
+                        entityType = "BudgetPeriod",
+                        entityId = curr.id.toString(),
                         severity = IntegritySeverity.CRITICAL
                     )
                 )
             }
         }
 
-        // 4. Transfer Pair Consistency (Section 16)
-        val transferGroups = transactions.filter { it.transferGroupId != null }.groupBy { it.transferGroupId!! }
-        for ((groupId, legs) in transferGroups) {
-            if (legs.size != 2) {
+        // =============================================================
+        // 6. Immutability & Month-Close Rules (M1, M2)
+        // =============================================================
+
+        // Rule M1_LOCKED_MODIFICATION (CRITICAL):
+        // No row mutations targeting closed periods; enforced via SQLite BEFORE triggers
+        for (period in periods) {
+            if (period.status == BudgetPeriodStatus.CLOSED) {
+                val periodClosedAt = period.closedAt
+                val txsInPeriod = transactions.filter { it.occurredAt >= period.startAt && it.occurredAt < period.endAt }
+
+                for (tx in txsInPeriod) {
+                    if (tx.status == TransactionStatus.PENDING) {
+                        issues.add(
+                            IntegrityIssue(
+                                ruleId = "M1_LOCKED_MODIFICATION",
+                                message = "Closed period #${period.id} contains PENDING transaction #${tx.id}",
+                                entityType = "Transaction",
+                                entityId = tx.id.toString(),
+                                severity = IntegritySeverity.CRITICAL
+                            )
+                        )
+                    }
+                    if (periodClosedAt != null && tx.createdAt > periodClosedAt) {
+                        issues.add(
+                            IntegrityIssue(
+                                ruleId = "M1_LOCKED_MODIFICATION",
+                                message = "Closed period #${period.id} contains transaction #${tx.id} created after close timestamp",
+                                entityType = "Transaction",
+                                entityId = tx.id.toString(),
+                                severity = IntegritySeverity.CRITICAL
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // Rule M2_CLOSE_TOTALS_MISMATCH (ERROR):
+        // month_closes matches recomputed historical totals
+        for (mc in monthCloses) {
+            val period = periods.find { it.id == mc.budgetPeriodId }
+            if (period == null) {
                 issues.add(
                     IntegrityIssue(
-                        ruleId = "TR1_UNBALANCED_TRANSFER",
-                        message = "Transfer group #$groupId has ${legs.size} legs instead of exactly 2",
-                        entityType = "TransferGroup",
-                        entityId = groupId,
+                        ruleId = "M2_CLOSE_TOTALS_MISMATCH",
+                        message = "MonthClose record #${mc.id} references non-existent period #${mc.budgetPeriodId}",
+                        entityType = "MonthClose",
+                        entityId = mc.id.toString(),
                         severity = IntegritySeverity.ERROR
                     )
                 )
             } else {
-                val leg1 = legs[0]
-                val leg2 = legs[1]
-                if (leg1.amountPaise != leg2.amountPaise) {
+                if (mc.plannedIncomePaise != period.incomePaise) {
                     issues.add(
                         IntegrityIssue(
-                            ruleId = "TR2_AMOUNT_MISMATCH",
-                            message = "Transfer group #$groupId has mismatched leg amounts: ${leg1.amountPaise} vs ${leg2.amountPaise}",
-                            entityType = "TransferGroup",
-                            entityId = groupId,
+                            ruleId = "M2_CLOSE_TOTALS_MISMATCH",
+                            message = "MonthClose #${mc.id} planned income (${mc.plannedIncomePaise}) does not match period income (${period.incomePaise})",
+                            entityType = "MonthClose",
+                            entityId = mc.id.toString(),
                             severity = IntegritySeverity.ERROR
                         )
                     )
                 }
-                if (leg1.direction == leg2.direction) {
-                    issues.add(
-                        IntegrityIssue(
-                            ruleId = "TR3_INVALID_DIRECTIONS",
-                            message = "Transfer group #$groupId legs must have opposing directions (OUT and IN)",
-                            entityType = "TransferGroup",
-                            entityId = groupId,
-                            severity = IntegritySeverity.ERROR
-                        )
-                    )
+
+                val periodAllocs = allocations.filter { it.budgetPeriodId == period.id }
+                val periodAdjs = adjustments.filter { it.budgetPeriodId == period.id }
+                val periodAdvs = advances.filter { it.appliedToPeriodId == period.id }
+                val periodTxs = transactions.filter { it.occurredAt >= period.startAt && it.occurredAt < period.endAt }
+                val periodTxAllocs = transactionAllocations.filter { alloc ->
+                    periodTxs.any { it.id == alloc.transactionId }
                 }
-                if (leg1.accountId == leg2.accountId) {
+
+                if (periodAllocs.isNotEmpty() || periodTxs.isNotEmpty()) {
+                    val summary = BudgetCalculator.calculateBudgetPeriodSummary(
+                        period = period,
+                        allocations = periodAllocs,
+                        adjustments = periodAdjs,
+                        transactions = periodTxs,
+                        allocationsForTransactions = periodTxAllocs,
+                        advances = periodAdvs
+                    )
+
+                    val spentMismatch = mc.totalSpentPaise != summary.dashboardHeroSpendPaise
+                    val savedMismatch = mc.totalSavedPaise != summary.actualSavingsPaise
+                    val budgetMismatch = mc.totalBudgetedPaise != summary.totalBudgetedPaise
+
+                    if (spentMismatch || savedMismatch || budgetMismatch) {
+                        issues.add(
+                            IntegrityIssue(
+                                ruleId = "M2_CLOSE_TOTALS_MISMATCH",
+                                message = "MonthClose #${mc.id} totals mismatch recomputed values (Spent: ${mc.totalSpentPaise} vs ${summary.dashboardHeroSpendPaise}, Saved: ${mc.totalSavedPaise} vs ${summary.actualSavingsPaise}, Budget: ${mc.totalBudgetedPaise} vs ${summary.totalBudgetedPaise})",
+                                entityType = "MonthClose",
+                                entityId = mc.id.toString(),
+                                severity = IntegritySeverity.ERROR
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // =============================================================
+        // 7. Statement Arithmetic Rules (S1)
+        // =============================================================
+
+        // Rule S1_STATEMENT_MISMATCH (WARNING):
+        // Internal statement arithmetic equals reported closing
+        for (stmt in statementImports) {
+            val lines = statementLines.filter { it.importId == stmt.id }
+            if (lines.isNotEmpty()) {
+                val totalDebits = lines.sumOf { it.debitPaise }
+                val totalCredits = lines.sumOf { it.creditPaise }
+                val expectedClosing = stmt.openingBalancePaise + totalCredits - totalDebits
+                if (expectedClosing != stmt.closingBalancePaise) {
                     issues.add(
                         IntegrityIssue(
-                            ruleId = "TR4_IDENTICAL_ACCOUNTS",
-                            message = "Transfer group #$groupId legs are on the exact same account #${leg1.accountId}",
-                            entityType = "TransferGroup",
-                            entityId = groupId,
+                            ruleId = "S1_STATEMENT_MISMATCH",
+                            message = "Statement import #${stmt.id} internal arithmetic mismatch (Expected: $expectedClosing, Reported: ${stmt.closingBalancePaise})",
+                            entityType = "StatementImport",
+                            entityId = stmt.id.toString(),
                             severity = IntegritySeverity.WARNING
                         )
                     )
@@ -171,47 +527,59 @@ class DataIntegrityChecker @Inject constructor() {
             }
         }
 
-        // 5. Refund reference validity (Section 18)
-        for (tx in transactions) {
-            if (tx.refundOfTransactionId != null) {
-                val originalTx = txById[tx.refundOfTransactionId]
-                if (originalTx == null) {
-                    issues.add(
-                        IntegrityIssue(
-                            ruleId = "R1_MISSING_ORIGINAL_TX",
-                            message = "Refund #${tx.id} references non-existent original transaction #${tx.refundOfTransactionId}",
-                            entityType = "Transaction",
-                            entityId = tx.id.toString(),
-                            severity = IntegritySeverity.ERROR
-                        )
-                    )
-                } else if (tx.amountPaise > originalTx.amountPaise) {
-                    issues.add(
-                        IntegrityIssue(
-                            ruleId = "R2_REFUND_EXCEEDS_ORIGINAL",
-                            message = "Refund #${tx.id} amount (${tx.amountPaise}) exceeds original transaction amount (${originalTx.amountPaise})",
-                            entityType = "Transaction",
-                            entityId = tx.id.toString(),
-                            severity = IntegritySeverity.WARNING
-                        )
-                    )
-                }
-            }
-        }
+        // =============================================================
+        // 8. Refund Rules (R1, R2)
+        // =============================================================
 
-        // 6. Closed-Month Integrity (Section 57, 58)
-        val closedPeriodIds = monthCloses.map { it.budgetPeriodId }.toSet()
-        for (period in periods) {
-            if (period.status == BudgetPeriodStatus.CLOSED && !closedPeriodIds.contains(period.id)) {
+        // Rule R1_CUMULATIVE_REFUND_EXCEEDED (ERROR): Σ Refunds(T) ≤ T.amount_paise
+        // Rule R2_REFUND_EXCEEDS_CATEGORY_CAP (ERROR): ∀ refund splits i, Refund_i ≤ cap_i
+        val refundsByOriginal = transactions.filter { it.refundOfTransactionId != null }.groupBy { it.refundOfTransactionId!! }
+        for ((origTxId, refunds) in refundsByOriginal) {
+            val origTx = txById[origTxId]
+            if (origTx == null) {
                 issues.add(
                     IntegrityIssue(
-                        ruleId = "MC1_MISSING_CLOSE_RECORD",
-                        message = "Budget period #${period.id} (${period.year}-${period.month}) is CLOSED but lacks a MonthClose record",
-                        entityType = "BudgetPeriod",
-                        entityId = period.id.toString(),
+                        ruleId = "R1_CUMULATIVE_REFUND_EXCEEDED",
+                        message = "Refunds reference non-existent original transaction #$origTxId",
+                        entityType = "Transaction",
+                        entityId = origTxId.toString(),
                         severity = IntegritySeverity.ERROR
                     )
                 )
+            } else {
+                val totalRefundPaise = refunds.sumOf { it.amountPaise }
+                if (totalRefundPaise > origTx.amountPaise) {
+                    issues.add(
+                        IntegrityIssue(
+                            ruleId = "R1_CUMULATIVE_REFUND_EXCEEDED",
+                            message = "Cumulative refunds ($totalRefundPaise paise) exceed original transaction #${origTx.id} amount (${origTx.amountPaise} paise)",
+                            entityType = "Transaction",
+                            entityId = origTx.id.toString(),
+                            severity = IntegritySeverity.ERROR
+                        )
+                    )
+                }
+
+                // Check R2 category cap
+                val origAllocs = allocsByTxId[origTx.id].orEmpty()
+                val refundTxIds = refunds.map { it.id }.toSet()
+                val refundAllocs = transactionAllocations.filter { refundTxIds.contains(it.transactionId) }
+                val refundedByCat = refundAllocs.groupBy { it.categoryId }.mapValues { it.value.sumOf { a -> a.amountPaise } }
+
+                for (origAlloc in origAllocs) {
+                    val refundedToCat = refundedByCat[origAlloc.categoryId] ?: 0L
+                    if (refundedToCat > origAlloc.amountPaise) {
+                        issues.add(
+                            IntegrityIssue(
+                                ruleId = "R2_REFUND_EXCEEDS_CATEGORY_CAP",
+                                message = "Refund allocated to category #${origAlloc.categoryId} ($refundedToCat) exceeds original spend capacity (${origAlloc.amountPaise})",
+                                entityType = "TransactionAllocation",
+                                entityId = origAlloc.id.toString(),
+                                severity = IntegritySeverity.ERROR
+                            )
+                        )
+                    }
+                }
             }
         }
 

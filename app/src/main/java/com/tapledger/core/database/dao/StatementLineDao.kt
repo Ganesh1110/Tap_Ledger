@@ -31,4 +31,7 @@ interface StatementLineDao {
         WHERE import_id = :importId AND match_status != 'MATCHED' AND match_status != 'RESOLVED'
     """)
     suspend fun getUnresolvedCount(importId: Long): Int
+
+    @Query("SELECT * FROM statement_lines")
+    suspend fun getAllLinesSync(): List<StatementLineEntity>
 }

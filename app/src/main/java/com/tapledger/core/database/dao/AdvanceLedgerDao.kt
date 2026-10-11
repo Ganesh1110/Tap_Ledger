@@ -34,6 +34,9 @@ interface AdvanceLedgerDao {
     @Query("SELECT * FROM advance_ledger WHERE category_id = :categoryId ORDER BY created_at ASC")
     suspend fun getForCategory(categoryId: Long): List<AdvanceLedgerEntity>
 
+    @Query("SELECT * FROM advance_ledger")
+    suspend fun getAllAdvancesSync(): List<AdvanceLedgerEntity>
+
     @Query("DELETE FROM advance_ledger WHERE source_period_id = :sourcePeriodId")
     suspend fun deleteForSourcePeriod(sourcePeriodId: Long)
 }

@@ -18,4 +18,7 @@ interface BudgetAdjustmentDao {
 
     @Query("SELECT * FROM budget_adjustments WHERE budget_period_id = :periodId ORDER BY created_at ASC")
     suspend fun getAdjustmentsForPeriodSync(periodId: Long): List<BudgetAdjustmentEntity>
+
+    @Query("SELECT * FROM budget_adjustments")
+    suspend fun getAllAdjustmentsSync(): List<BudgetAdjustmentEntity>
 }

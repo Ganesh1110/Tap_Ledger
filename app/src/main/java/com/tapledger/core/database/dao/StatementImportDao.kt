@@ -23,6 +23,9 @@ interface StatementImportDao {
     @Query("SELECT * FROM statement_imports WHERE account_id = :accountId AND period_end <= :beforePeriodStart ORDER BY period_end DESC LIMIT 1")
     suspend fun getLatestImportForAccount(accountId: Long, beforePeriodStart: Long): StatementImportEntity?
 
+    @Query("SELECT * FROM statement_imports")
+    suspend fun getAllImportsSync(): List<StatementImportEntity>
+
     @Query("SELECT * FROM statement_imports ORDER BY period_end DESC")
     fun observeAll(): Flow<List<StatementImportEntity>>
 }
