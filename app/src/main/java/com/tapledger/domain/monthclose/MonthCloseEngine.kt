@@ -11,6 +11,10 @@ import com.tapledger.core.database.dao.MonthCloseDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.AdvanceLedgerEntity
+import com.tapledger.core.database.entity.BudgetAllocationEntity
+import com.tapledger.core.database.entity.BudgetAdjustmentEntity
+import com.tapledger.core.database.entity.BudgetPeriodEntity
+import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
 import com.tapledger.core.model.AdvanceDirection
 import com.tapledger.core.model.AdvancePolicy
@@ -198,183 +202,28 @@ class MonthCloseEngine @Inject constructor(
                 advances = currentAdvances
             )
 
-            // Step 2: Loop Active Categories across Open Downstream Periods
             val unassignedPoolRows = advanceLedgerDao.getUnassignedPoolSync()
             val nextAllocations = budgetAllocationDao.getAllocationsForPeriodSync(nextPeriod.id).associateBy { it.categoryId }
             val nextAdjustments = budgetAdjustmentDao.getAdjustmentsForPeriodSync(nextPeriod.id)
             val nextAdvances = advanceLedgerDao.getAppliedToPeriodSync(nextPeriod.id).toMutableList()
-
-            val advanceEntriesToInsert = mutableListOf<AdvanceLedgerEntity>()
-
-            // Find all active categories
             val allCategories = categoryDao.getAllCategoriesSync()
-            val activeCategoryIds = mutableSetOf<Long>()
-            for (catSummary in summary.categorySummaries) {
-                if (catSummary.baseBudgetPaise > 0L || catSummary.netSpentPaise != 0L || catSummary.adjustedBudgetPaise > 0L) {
-                    activeCategoryIds.add(catSummary.allocation.categoryId)
-                }
-            }
-            for (poolRow in unassignedPoolRows) {
-                activeCategoryIds.add(poolRow.categoryId)
-            }
 
-            for (catId in activeCategoryIds) {
-                val category = allCategories.find { it.id == catId } ?: continue
-                val catSummary = summary.categorySummaries.find { it.allocation.categoryId == catId }
+            val plan = calculateAdvancePlan(
+                period = period,
+                nextPeriodId = nextPeriod.id,
+                nextPeriodYear = nextPeriod.year,
+                nextPeriodMonth = nextPeriod.month,
+                summary = summary,
+                nextAllocations = nextAllocations,
+                nextAdjustments = nextAdjustments,
+                nextAdvancesInitial = nextAdvances,
+                unassignedPoolRows = unassignedPoolRows,
+                allCategories = allCategories,
+                now = now
+            )
 
-                // Determine Headroom in M+1 (§10.3)
-                val nextAlloc = nextAllocations[catId]
-                val baseMPlus1 = nextAlloc?.amountPaise ?: 0L
-                val adjInMPlus1 = nextAdjustments.filter { it.toCategoryId == catId }.sumOf { it.amountPaise }
-                val adjOutMPlus1 = nextAdjustments.filter { it.fromCategoryId == catId }.sumOf { it.amountPaise }
-                val advPosMPlus1 = nextAdvances.filter { it.categoryId == catId && it.direction == AdvanceDirection.POSITIVE }.sumOf { it.amountPaise }
-                val advNegMPlus1 = nextAdvances.filter { it.categoryId == catId && it.direction == AdvanceDirection.NEGATIVE }.sumOf { it.amountPaise }
-
-                var headroom = baseMPlus1 + adjInMPlus1 - adjOutMPlus1 + advPosMPlus1 - advNegMPlus1
-                if (headroom < 0L) headroom = 0L
-
-                // Priority 1: UncoveredPool(C) > 0? (§10.3)
-                val poolNeg = unassignedPoolRows.filter { it.categoryId == catId && it.direction == AdvanceDirection.NEGATIVE }.sumOf { it.amountPaise }
-                val poolPos = unassignedPoolRows.filter { it.categoryId == catId && it.direction == AdvanceDirection.POSITIVE }.sumOf { it.amountPaise }
-                val uncoveredPool = (poolNeg - poolPos).coerceAtLeast(0L)
-
-                if (uncoveredPool > 0L && headroom > 0L) {
-                    val absorbed = minOf(uncoveredPool, headroom)
-                    if (absorbed > 0L) {
-                        // Offset Row in unassigned pool (applied_to = NULL, direction = POSITIVE)
-                        val offsetRow = AdvanceLedgerEntity(
-                            sourcePeriodId = period.id,
-                            appliedToPeriodId = null,
-                            categoryId = catId,
-                            amountPaise = absorbed,
-                            direction = AdvanceDirection.POSITIVE,
-                            reason = "Offset row reducing unassigned deficit pool (§10.3)",
-                            createdAt = now
-                        )
-                        advanceEntriesToInsert.add(offsetRow)
-
-                        // Application Row in M+1 (applied_to = M+1, direction = NEGATIVE)
-                        val appliedRow = AdvanceLedgerEntity(
-                            sourcePeriodId = period.id,
-                            appliedToPeriodId = nextPeriod.id,
-                            categoryId = catId,
-                            amountPaise = absorbed,
-                            direction = AdvanceDirection.NEGATIVE,
-                            reason = "Priority 1 historical deficit absorbed into period ${nextPeriod.year}-${nextPeriod.month}",
-                            createdAt = now
-                        )
-                        advanceEntriesToInsert.add(appliedRow)
-                        nextAdvances.add(appliedRow)
-
-                        headroom -= absorbed
-                    }
-                }
-
-                // Bucket handling (§10.2)
-                val bucket = catSummary?.allocation?.bucketSnapshot ?: category.defaultBucket
-                val remaining = catSummary?.remainingPaise ?: 0L
-                val policy = catSummary?.allocation?.advancePolicySnapshot ?: category.defaultAdvancePolicy
-
-                if (bucket == BudgetBucket.SAVINGS) {
-                    val adjustedBudget = catSummary?.adjustedBudgetPaise ?: 0L
-                    val netSpent = catSummary?.netSpentPaise ?: 0L
-                    if (netSpent >= adjustedBudget) {
-                        // Goal Met / Surpassed -> No deficit carry-forward (§8.4)
-                    } else {
-                        // Under-saved
-                        val shortfall = adjustedBudget - netSpent
-                        when (policy) {
-                            AdvancePolicy.CARRY_TO_ADVANCE -> {
-                                val shortfallRow = AdvanceLedgerEntity(
-                                    sourcePeriodId = period.id,
-                                    appliedToPeriodId = nextPeriod.id,
-                                    categoryId = catId,
-                                    amountPaise = shortfall,
-                                    direction = AdvanceDirection.POSITIVE,
-                                    reason = "Unfulfilled savings goal target carried forward (§8.4, §10.2)",
-                                    createdAt = now
-                                )
-                                advanceEntriesToInsert.add(shortfallRow)
-                                nextAdvances.add(shortfallRow)
-                            }
-                            AdvancePolicy.EXPIRE, AdvancePolicy.SWEEP_TO_SAVINGS -> {
-                                // Shortfall lapses without penalty
-                            }
-                        }
-                    }
-                } else {
-                    // NEEDS or WANTS
-                    if (remaining < 0L) {
-                        // Overspent -> Priority 2: Deficit Handling (§10.3)
-                        val deficit = -remaining
-                        val appliedNew = minOf(deficit, headroom)
-                        val uncoveredNew = deficit - appliedNew
-
-                        if (appliedNew > 0L) {
-                            val appliedRow = AdvanceLedgerEntity(
-                                sourcePeriodId = period.id,
-                                appliedToPeriodId = nextPeriod.id,
-                                categoryId = catId,
-                                amountPaise = appliedNew,
-                                direction = AdvanceDirection.NEGATIVE,
-                                reason = "Deficit applied to period ${nextPeriod.year}-${nextPeriod.month} (§10.3)",
-                                createdAt = now
-                            )
-                            advanceEntriesToInsert.add(appliedRow)
-                            nextAdvances.add(appliedRow)
-                        }
-
-                        if (uncoveredNew > 0L) {
-                            val poolRow = AdvanceLedgerEntity(
-                                sourcePeriodId = period.id,
-                                appliedToPeriodId = null,
-                                categoryId = catId,
-                                amountPaise = uncoveredNew,
-                                direction = AdvanceDirection.NEGATIVE,
-                                reason = "Uncovered deficit sent to unassigned pool (§10.3)",
-                                createdAt = now
-                            )
-                            advanceEntriesToInsert.add(poolRow)
-                        }
-                    } else if (remaining > 0L) {
-                        when (policy) {
-                            AdvancePolicy.CARRY_TO_ADVANCE -> {
-                                val surplusRow = AdvanceLedgerEntity(
-                                    sourcePeriodId = period.id,
-                                    appliedToPeriodId = nextPeriod.id,
-                                    categoryId = catId,
-                                    amountPaise = remaining,
-                                    direction = AdvanceDirection.POSITIVE,
-                                    reason = "Surplus budget carried forward",
-                                    createdAt = now
-                                )
-                                advanceEntriesToInsert.add(surplusRow)
-                                nextAdvances.add(surplusRow)
-                            }
-                            AdvancePolicy.SWEEP_TO_SAVINGS -> {
-                                val targetCatId = category.sweepTargetCategoryId ?: catId
-                                val sweepRow = AdvanceLedgerEntity(
-                                    sourcePeriodId = period.id,
-                                    appliedToPeriodId = nextPeriod.id,
-                                    categoryId = targetCatId,
-                                    amountPaise = remaining,
-                                    direction = AdvanceDirection.POSITIVE,
-                                    reason = "Surplus swept to savings category #$targetCatId",
-                                    createdAt = now
-                                )
-                                advanceEntriesToInsert.add(sweepRow)
-                                nextAdvances.add(sweepRow)
-                            }
-                            AdvancePolicy.EXPIRE -> {
-                                // Surplus lapses
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (advanceEntriesToInsert.isNotEmpty()) {
-                advanceLedgerDao.insertAll(advanceEntriesToInsert)
+            if (plan.entriesToInsert.isNotEmpty()) {
+                advanceLedgerDao.insertAll(plan.entriesToInsert)
             }
 
             // Lock Period M
@@ -462,5 +311,301 @@ class MonthCloseEngine @Inject constructor(
             // Step 3: Delete Month M's record in month_closes
             monthCloseDao.deleteForPeriod(period.id)
         }
+    }
+
+    data class MonthCloseAdvancePreviewRow(
+        val categoryId: Long,
+        val categoryName: String,
+        val carryPaise: Long,
+        val sweepPaise: Long,
+        val appliedDeficitPaise: Long,
+        val uncoveredPoolPaise: Long
+    )
+
+    data class MonthClosePreviewResult(
+        val periodId: Long,
+        val rows: List<MonthCloseAdvancePreviewRow>,
+        val advanceEntries: List<AdvanceLedgerEntity>
+    )
+
+    private data class AdvancePlanResult(
+        val entriesToInsert: List<AdvanceLedgerEntity>,
+        val previewRows: List<MonthCloseAdvancePreviewRow>
+    )
+
+    /**
+     * Read-only preview of advance rollover mutations for Period M per Flow.md §17.2 V11.
+     * Guaranteed pure computation: performs zero database mutations.
+     */
+    suspend fun preview(periodId: Long): MonthClosePreviewResult {
+        val period = budgetPeriodDao.getById(periodId)
+            ?: throw IllegalArgumentException("Budget period #$periodId not found")
+
+        val now = DateTimeUtils.nowEpochMillis()
+        val nextYm = YearMonth.of(period.year, period.month).plusMonths(1)
+        val existingNext = budgetPeriodDao.getByYearMonth(nextYm.year, nextYm.monthValue)
+
+        val currentAllocations = budgetAllocationDao.getAllocationsForPeriodSync(period.id)
+        val currentAdjustments = budgetAdjustmentDao.getAdjustmentsForPeriodSync(period.id)
+        val currentAdvances = advanceLedgerDao.getAppliedToPeriodSync(period.id)
+        val currentTxList = transactionDao.getTransactionsInPeriod(period.startAt, period.endAt)
+        val currentTxAllocations = transactionAllocationDao.getAllocationsInPeriod(period.startAt, period.endAt)
+
+        val summary = BudgetCalculator.calculateBudgetPeriodSummary(
+            period = period,
+            allocations = currentAllocations,
+            adjustments = currentAdjustments,
+            transactions = currentTxList,
+            allocationsForTransactions = currentTxAllocations,
+            advances = currentAdvances
+        )
+
+        val nextPeriodId = existingNext?.id ?: (period.id + 1L)
+        val nextAllocations = if (existingNext != null) {
+            budgetAllocationDao.getAllocationsForPeriodSync(existingNext.id).associateBy { it.categoryId }
+        } else {
+            currentAllocations.associateBy { it.categoryId }
+        }
+        val nextAdjustments = if (existingNext != null) {
+            budgetAdjustmentDao.getAdjustmentsForPeriodSync(existingNext.id)
+        } else {
+            emptyList()
+        }
+        val nextAdvances = if (existingNext != null) {
+            advanceLedgerDao.getAppliedToPeriodSync(existingNext.id).toMutableList()
+        } else {
+            mutableListOf()
+        }
+
+        val unassignedPoolRows = advanceLedgerDao.getUnassignedPoolSync()
+        val allCategories = categoryDao.getAllCategoriesSync()
+
+        val plan = calculateAdvancePlan(
+            period = period,
+            nextPeriodId = nextPeriodId,
+            nextPeriodYear = nextYm.year,
+            nextPeriodMonth = nextYm.monthValue,
+            summary = summary,
+            nextAllocations = nextAllocations,
+            nextAdjustments = nextAdjustments,
+            nextAdvancesInitial = nextAdvances,
+            unassignedPoolRows = unassignedPoolRows,
+            allCategories = allCategories,
+            now = now
+        )
+
+        return MonthClosePreviewResult(
+            periodId = period.id,
+            rows = plan.previewRows,
+            advanceEntries = plan.entriesToInsert
+        )
+    }
+
+    private fun calculateAdvancePlan(
+        period: BudgetPeriodEntity,
+        nextPeriodId: Long,
+        nextPeriodYear: Int,
+        nextPeriodMonth: Int,
+        summary: BudgetPeriodSummary,
+        nextAllocations: Map<Long, BudgetAllocationEntity>,
+        nextAdjustments: List<BudgetAdjustmentEntity>,
+        nextAdvancesInitial: List<AdvanceLedgerEntity>,
+        unassignedPoolRows: List<AdvanceLedgerEntity>,
+        allCategories: List<CategoryEntity>,
+        now: Long
+    ): AdvancePlanResult {
+        val nextAdvances = nextAdvancesInitial.toMutableList()
+        val advanceEntriesToInsert = mutableListOf<AdvanceLedgerEntity>()
+        val previewRows = mutableListOf<MonthCloseAdvancePreviewRow>()
+
+        val activeCategoryIds = mutableSetOf<Long>()
+        for (catSummary in summary.categorySummaries) {
+            if (catSummary.baseBudgetPaise > 0L || catSummary.netSpentPaise != 0L || catSummary.adjustedBudgetPaise > 0L) {
+                activeCategoryIds.add(catSummary.allocation.categoryId)
+            }
+        }
+        for (poolRow in unassignedPoolRows) {
+            activeCategoryIds.add(poolRow.categoryId)
+        }
+
+        for (catId in activeCategoryIds) {
+            val category = allCategories.find { it.id == catId } ?: continue
+            val catSummary = summary.categorySummaries.find { it.allocation.categoryId == catId }
+
+            var carryPaise = 0L
+            var sweepPaise = 0L
+            var appliedDeficitPaise = 0L
+            var uncoveredPoolPaise = 0L
+
+            // Determine Headroom in M+1 (§10.3)
+            val nextAlloc = nextAllocations[catId]
+            val baseMPlus1 = nextAlloc?.amountPaise ?: 0L
+            val adjInMPlus1 = nextAdjustments.filter { it.toCategoryId == catId }.sumOf { it.amountPaise }
+            val adjOutMPlus1 = nextAdjustments.filter { it.fromCategoryId == catId }.sumOf { it.amountPaise }
+            val advPosMPlus1 = nextAdvances.filter { it.categoryId == catId && it.direction == AdvanceDirection.POSITIVE }.sumOf { it.amountPaise }
+            val advNegMPlus1 = nextAdvances.filter { it.categoryId == catId && it.direction == AdvanceDirection.NEGATIVE }.sumOf { it.amountPaise }
+
+            var headroom = baseMPlus1 + adjInMPlus1 - adjOutMPlus1 + advPosMPlus1 - advNegMPlus1
+            if (headroom < 0L) headroom = 0L
+
+            // Priority 1: UncoveredPool(C) > 0? (§10.3)
+            val poolNeg = unassignedPoolRows.filter { it.categoryId == catId && it.direction == AdvanceDirection.NEGATIVE }.sumOf { it.amountPaise }
+            val poolPos = unassignedPoolRows.filter { it.categoryId == catId && it.direction == AdvanceDirection.POSITIVE }.sumOf { it.amountPaise }
+            val uncoveredPool = (poolNeg - poolPos).coerceAtLeast(0L)
+
+            if (uncoveredPool > 0L && headroom > 0L) {
+                val absorbed = minOf(uncoveredPool, headroom)
+                if (absorbed > 0L) {
+                    val offsetRow = AdvanceLedgerEntity(
+                        sourcePeriodId = period.id,
+                        appliedToPeriodId = null,
+                        categoryId = catId,
+                        amountPaise = absorbed,
+                        direction = AdvanceDirection.POSITIVE,
+                        reason = "Offset row reducing unassigned deficit pool (§10.3)",
+                        createdAt = now
+                    )
+                    advanceEntriesToInsert.add(offsetRow)
+
+                    val appliedRow = AdvanceLedgerEntity(
+                        sourcePeriodId = period.id,
+                        appliedToPeriodId = nextPeriodId,
+                        categoryId = catId,
+                        amountPaise = absorbed,
+                        direction = AdvanceDirection.NEGATIVE,
+                        reason = "Priority 1 historical deficit absorbed into period $nextPeriodYear-$nextPeriodMonth",
+                        createdAt = now
+                    )
+                    advanceEntriesToInsert.add(appliedRow)
+                    nextAdvances.add(appliedRow)
+
+                    appliedDeficitPaise = Math.addExact(appliedDeficitPaise, absorbed)
+                    headroom -= absorbed
+                }
+            }
+
+            // Bucket handling (§10.2)
+            val bucket = catSummary?.allocation?.bucketSnapshot ?: category.defaultBucket
+            val remaining = catSummary?.remainingPaise ?: 0L
+            val policy = catSummary?.allocation?.advancePolicySnapshot ?: category.defaultAdvancePolicy
+
+            if (bucket == BudgetBucket.SAVINGS) {
+                val adjustedBudget = catSummary?.adjustedBudgetPaise ?: 0L
+                val netSpent = catSummary?.netSpentPaise ?: 0L
+                if (netSpent >= adjustedBudget) {
+                    // Goal Met / Surpassed -> No deficit carry-forward (§8.4)
+                } else {
+                    val shortfall = adjustedBudget - netSpent
+                    when (policy) {
+                        AdvancePolicy.CARRY_TO_ADVANCE -> {
+                            val shortfallRow = AdvanceLedgerEntity(
+                                sourcePeriodId = period.id,
+                                appliedToPeriodId = nextPeriodId,
+                                categoryId = catId,
+                                amountPaise = shortfall,
+                                direction = AdvanceDirection.POSITIVE,
+                                reason = "Unfulfilled savings goal target carried forward (§8.4, §10.2)",
+                                createdAt = now
+                            )
+                            advanceEntriesToInsert.add(shortfallRow)
+                            nextAdvances.add(shortfallRow)
+                            carryPaise = Math.addExact(carryPaise, shortfall)
+                        }
+                        AdvancePolicy.EXPIRE, AdvancePolicy.SWEEP_TO_SAVINGS -> {
+                            // Shortfall lapses without penalty
+                        }
+                    }
+                }
+            } else {
+                // NEEDS or WANTS
+                if (remaining < 0L) {
+                    val deficit = -remaining
+                    val appliedNew = minOf(deficit, headroom)
+                    val uncoveredNew = deficit - appliedNew
+
+                    if (appliedNew > 0L) {
+                        val appliedRow = AdvanceLedgerEntity(
+                            sourcePeriodId = period.id,
+                            appliedToPeriodId = nextPeriodId,
+                            categoryId = catId,
+                            amountPaise = appliedNew,
+                            direction = AdvanceDirection.NEGATIVE,
+                            reason = "Deficit applied to period $nextPeriodYear-$nextPeriodMonth (§10.3)",
+                            createdAt = now
+                        )
+                        advanceEntriesToInsert.add(appliedRow)
+                        nextAdvances.add(appliedRow)
+                        appliedDeficitPaise = Math.addExact(appliedDeficitPaise, appliedNew)
+                    }
+
+                    if (uncoveredNew > 0L) {
+                        val poolRow = AdvanceLedgerEntity(
+                            sourcePeriodId = period.id,
+                            appliedToPeriodId = null,
+                            categoryId = catId,
+                            amountPaise = uncoveredNew,
+                            direction = AdvanceDirection.NEGATIVE,
+                            reason = "Uncovered deficit sent to unassigned pool (§10.3)",
+                            createdAt = now
+                        )
+                        advanceEntriesToInsert.add(poolRow)
+                        uncoveredPoolPaise = Math.addExact(uncoveredPoolPaise, uncoveredNew)
+                    }
+                } else if (remaining > 0L) {
+                    when (policy) {
+                        AdvancePolicy.CARRY_TO_ADVANCE -> {
+                            val surplusRow = AdvanceLedgerEntity(
+                                sourcePeriodId = period.id,
+                                appliedToPeriodId = nextPeriodId,
+                                categoryId = catId,
+                                amountPaise = remaining,
+                                direction = AdvanceDirection.POSITIVE,
+                                reason = "Surplus budget carried forward",
+                                createdAt = now
+                            )
+                            advanceEntriesToInsert.add(surplusRow)
+                            nextAdvances.add(surplusRow)
+                            carryPaise = Math.addExact(carryPaise, remaining)
+                        }
+                        AdvancePolicy.SWEEP_TO_SAVINGS -> {
+                            val targetCatId = category.sweepTargetCategoryId ?: catId
+                            val sweepRow = AdvanceLedgerEntity(
+                                sourcePeriodId = period.id,
+                                appliedToPeriodId = nextPeriodId,
+                                categoryId = targetCatId,
+                                amountPaise = remaining,
+                                direction = AdvanceDirection.POSITIVE,
+                                reason = "Surplus swept to savings category #$targetCatId",
+                                createdAt = now
+                            )
+                            advanceEntriesToInsert.add(sweepRow)
+                            nextAdvances.add(sweepRow)
+                            sweepPaise = Math.addExact(sweepPaise, remaining)
+                        }
+                        AdvancePolicy.EXPIRE -> {
+                            // Surplus lapses
+                        }
+                    }
+                }
+            }
+
+            if (carryPaise > 0L || sweepPaise > 0L || appliedDeficitPaise > 0L || uncoveredPoolPaise > 0L) {
+                previewRows.add(
+                    MonthCloseAdvancePreviewRow(
+                        categoryId = catId,
+                        categoryName = category.name,
+                        carryPaise = carryPaise,
+                        sweepPaise = sweepPaise,
+                        appliedDeficitPaise = appliedDeficitPaise,
+                        uncoveredPoolPaise = uncoveredPoolPaise
+                    )
+                )
+            }
+        }
+
+        return AdvancePlanResult(
+            entriesToInsert = advanceEntriesToInsert,
+            previewRows = previewRows
+        )
     }
 }
