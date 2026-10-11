@@ -2,6 +2,7 @@ package com.tapledger.ui.charts.render
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -362,6 +363,260 @@ fun BurnUpChartRender(
                     radius = 5.dp.toPx(),
                     center = Offset(scrubX, scrubY)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Render primitive for V9 Net worth line/area chart per Flow.md §17.2 V9.
+ * Supports:
+ * - Single Net Worth line with area fill
+ * - Stacked Assets & Liabilities view
+ * - Horizontal drag scrub with vertical scroll pass-through via detectHorizontalDragGestures
+ */
+@Composable
+fun NetWorthChartRender(
+    points: List<com.tapledger.ui.charts.model.NetWorthPoint>,
+    modifier: Modifier = Modifier,
+    height: Dp = 190.dp,
+    isStacked: Boolean = false,
+    netWorthColor: Color = Color(0xFF0072B2),
+    assetsColor: Color = Color(0xFF009E73),
+    liabilitiesColor: Color = Color(0xFFD55E00),
+    onScrub: ((com.tapledger.ui.charts.model.NetWorthPoint?) -> Unit)? = null
+) {
+    if (points.isEmpty()) return
+
+    var scrubIndex by remember { mutableStateOf<Int?>(null) }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .pointerInput(points) {
+                if (onScrub != null && points.isNotEmpty()) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { offset ->
+                            val idx = ((offset.x / size.width.toFloat()) * (points.size - 1))
+                                .toInt()
+                                .coerceIn(0, points.size - 1)
+                            scrubIndex = idx
+                            onScrub(points[idx])
+                        },
+                        onDragEnd = {
+                            scrubIndex = null
+                            onScrub(null)
+                        },
+                        onDragCancel = {
+                            scrubIndex = null
+                            onScrub(null)
+                        },
+                        onHorizontalDrag = { change, _ ->
+                            change.consume()
+                            val idx = ((change.position.x / size.width.toFloat()) * (points.size - 1))
+                                .toInt()
+                                .coerceIn(0, points.size - 1)
+                            scrubIndex = idx
+                            onScrub(points[idx])
+                        }
+                    )
+                }
+            }
+    ) {
+        val widthPx = size.width
+        val heightPx = size.height
+        val bottomMarginPx = 20.dp.toPx()
+        val chartHeightPx = heightPx - bottomMarginPx
+
+        if (!isStacked) {
+            // Net Worth Line/Area
+            val allValues = points.map { it.netWorthPaise } + listOf(0L)
+            val minVal = allValues.minOrNull() ?: 0L
+            val maxVal = maxOf(allValues.maxOrNull() ?: 1L, 1L)
+            val valRange = (maxVal - minVal).coerceAtLeast(1L).toFloat()
+
+            fun toX(i: Int): Float {
+                return if (points.size <= 1) widthPx / 2f else (i.toFloat() / (points.size - 1).toFloat()) * widthPx
+            }
+
+            fun toY(value: Long): Float {
+                val fraction = (value - minVal).toFloat() / valRange
+                return chartHeightPx - (fraction * chartHeightPx)
+            }
+
+            // Zero baseline
+            val zeroY = toY(0L)
+            drawLine(
+                color = Color.Gray.copy(alpha = 0.3f),
+                start = Offset(0f, zeroY),
+                end = Offset(widthPx, zeroY),
+                strokeWidth = 1.dp.toPx()
+            )
+
+            // Area Gradient
+            if (points.size > 1) {
+                val areaPath = Path().apply {
+                    moveTo(toX(0), chartHeightPx)
+                    points.forEachIndexed { i, pt ->
+                        lineTo(toX(i), toY(pt.netWorthPaise))
+                    }
+                    lineTo(toX(points.size - 1), chartHeightPx)
+                    close()
+                }
+                drawPath(
+                    path = areaPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(netWorthColor.copy(alpha = 0.25f), Color.Transparent),
+                        startY = 0f,
+                        endY = chartHeightPx
+                    )
+                )
+
+                // Line
+                val linePath = Path().apply {
+                    moveTo(toX(0), toY(points[0].netWorthPaise))
+                    for (i in 1 until points.size) {
+                        lineTo(toX(i), toY(points[i].netWorthPaise))
+                    }
+                }
+                drawPath(
+                    path = linePath,
+                    color = netWorthColor,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+
+            // Data dots
+            points.forEachIndexed { i, pt ->
+                drawCircle(
+                    color = netWorthColor,
+                    radius = 3.5.dp.toPx(),
+                    center = Offset(toX(i), toY(pt.netWorthPaise))
+                )
+            }
+
+            // Scrub indicator
+            scrubIndex?.let { idx ->
+                if (idx in points.indices) {
+                    val pt = points[idx]
+                    val scrubX = toX(idx)
+                    val scrubY = toY(pt.netWorthPaise)
+
+                    drawLine(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        start = Offset(scrubX, 0f),
+                        end = Offset(scrubX, chartHeightPx),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawCircle(
+                        color = netWorthColor,
+                        radius = 6.dp.toPx(),
+                        center = Offset(scrubX, scrubY)
+                    )
+                }
+            }
+        } else {
+            // Stacked Assets & Liabilities
+            val maxAsset = points.maxOfOrNull { it.assetsPaise } ?: 1L
+            val maxLiab = points.maxOfOrNull { it.liabilitiesPaise } ?: 1L
+            val maxVal = maxOf(maxAsset, maxLiab, 1L).coerceAtLeast(1L).toFloat()
+
+            fun toX(i: Int): Float {
+                return if (points.size <= 1) widthPx / 2f else (i.toFloat() / (points.size - 1).toFloat()) * widthPx
+            }
+
+            val zeroY = chartHeightPx * 0.55f
+
+            fun toYAsset(value: Long): Float {
+                val fraction = value.toFloat() / maxVal
+                return zeroY - (fraction * (zeroY - 10.dp.toPx()))
+            }
+
+            fun toYLiab(value: Long): Float {
+                val fraction = value.toFloat() / maxVal
+                return zeroY + (fraction * (chartHeightPx - zeroY - 10.dp.toPx()))
+            }
+
+            // Zero baseline
+            drawLine(
+                color = Color.Gray.copy(alpha = 0.5f),
+                start = Offset(0f, zeroY),
+                end = Offset(widthPx, zeroY),
+                strokeWidth = 1.dp.toPx()
+            )
+
+            if (points.size > 1) {
+                // Assets Area & Line
+                val assetArea = Path().apply {
+                    moveTo(toX(0), zeroY)
+                    points.forEachIndexed { i, pt ->
+                        lineTo(toX(i), toYAsset(pt.assetsPaise))
+                    }
+                    lineTo(toX(points.size - 1), zeroY)
+                    close()
+                }
+                drawPath(
+                    path = assetArea,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(assetsColor.copy(alpha = 0.3f), Color.Transparent),
+                        startY = 0f,
+                        endY = zeroY
+                    )
+                )
+
+                val assetLine = Path().apply {
+                    moveTo(toX(0), toYAsset(points[0].assetsPaise))
+                    for (i in 1 until points.size) {
+                        lineTo(toX(i), toYAsset(points[i].assetsPaise))
+                    }
+                }
+                drawPath(path = assetLine, color = assetsColor, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+
+                // Liabilities Area & Line
+                val liabArea = Path().apply {
+                    moveTo(toX(0), zeroY)
+                    points.forEachIndexed { i, pt ->
+                        lineTo(toX(i), toYLiab(pt.liabilitiesPaise))
+                    }
+                    lineTo(toX(points.size - 1), zeroY)
+                    close()
+                }
+                drawPath(
+                    path = liabArea,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, liabilitiesColor.copy(alpha = 0.3f)),
+                        startY = zeroY,
+                        endY = chartHeightPx
+                    )
+                )
+
+                val liabLine = Path().apply {
+                    moveTo(toX(0), toYLiab(points[0].liabilitiesPaise))
+                    for (i in 1 until points.size) {
+                        lineTo(toX(i), toYLiab(points[i].liabilitiesPaise))
+                    }
+                }
+                drawPath(path = liabLine, color = liabilitiesColor, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+            }
+
+            // Scrub indicator
+            scrubIndex?.let { idx ->
+                if (idx in points.indices) {
+                    val pt = points[idx]
+                    val scrubX = toX(idx)
+                    val assetY = toYAsset(pt.assetsPaise)
+                    val liabY = toYLiab(pt.liabilitiesPaise)
+
+                    drawLine(
+                        color = Color.Black.copy(alpha = 0.4f),
+                        start = Offset(scrubX, 0f),
+                        end = Offset(scrubX, chartHeightPx),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawCircle(color = assetsColor, radius = 5.dp.toPx(), center = Offset(scrubX, assetY))
+                    drawCircle(color = liabilitiesColor, radius = 5.dp.toPx(), center = Offset(scrubX, liabY))
+                }
             }
         }
     }

@@ -268,3 +268,146 @@ fun ClusteredBarChartRender(
         }
     }
 }
+
+/**
+ * Render primitive for V10 Account composition diverging bar per Flow.md §17.2 V10.
+ * Left = Liabilities (debt), Center = zero baseline, Right = Assets.
+ */
+@Composable
+fun DivergingBarRender(
+    isAsset: Boolean,
+    absBalancePaise: Long,
+    maxAbsPaise: Long,
+    modifier: Modifier = Modifier,
+    height: Dp = 8.dp,
+    assetColor: Color = Color(0xFF009E73),
+    liabilityColor: Color = Color(0xFFD55E00),
+    trackColor: Color = Color(0xFFE5E5EA)
+) {
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+    ) {
+        val widthPx = size.width
+        val heightPx = size.height
+        val centerX = widthPx / 2f
+        val radius = CornerRadius(heightPx / 2f, heightPx / 2f)
+
+        // Draw background track
+        drawRoundRect(
+            color = trackColor.copy(alpha = 0.5f),
+            size = Size(widthPx, heightPx),
+            cornerRadius = radius
+        )
+
+        // Draw center zero divider
+        drawLine(
+            color = Color.Gray.copy(alpha = 0.6f),
+            start = Offset(centerX, 0f),
+            end = Offset(centerX, heightPx),
+            strokeWidth = 1.5.dp.toPx()
+        )
+
+        if (maxAbsPaise > 0L && absBalancePaise > 0L) {
+            val maxHalfWidth = centerX - 2.dp.toPx()
+            val barW = ((absBalancePaise.toFloat() / maxAbsPaise.toFloat()) * maxHalfWidth).coerceIn(2.dp.toPx(), maxHalfWidth)
+
+            if (isAsset) {
+                // Right side
+                drawRoundRect(
+                    color = assetColor,
+                    topLeft = Offset(centerX, 0f),
+                    size = Size(barW, heightPx),
+                    cornerRadius = radius
+                )
+            } else {
+                // Left side
+                drawRoundRect(
+                    color = liabilityColor,
+                    topLeft = Offset(centerX - barW, 0f),
+                    size = Size(barW, heightPx),
+                    cornerRadius = radius
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Render primitive for V10 Credit Card utilization gauge per Flow.md §17.2 V10.
+ * Visual zones: NORMAL (<30%), CAUTION (30-70%), HIGH (>70%).
+ * Supports D8 hatched overflow segment if utilizationBp > 10,000 (over limit).
+ */
+@Composable
+fun CreditCardGaugeRender(
+    utilizationBp: Int,
+    zone: com.tapledger.ui.charts.model.UtilizationZone,
+    modifier: Modifier = Modifier,
+    height: Dp = 8.dp,
+    trackColor: Color = Color(0xFFE5E5EA)
+) {
+    val zoneColor = when (zone) {
+        com.tapledger.ui.charts.model.UtilizationZone.NORMAL -> Color(0xFF009E73)
+        com.tapledger.ui.charts.model.UtilizationZone.CAUTION -> Color(0xFFE69F00)
+        com.tapledger.ui.charts.model.UtilizationZone.HIGH -> Color(0xFFBA1A1A)
+    }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+    ) {
+        val widthPx = size.width
+        val heightPx = size.height
+        val radius = CornerRadius(heightPx / 2f, heightPx / 2f)
+
+        // 1. Background track
+        drawRoundRect(
+            color = trackColor.copy(alpha = 0.5f),
+            size = Size(widthPx, heightPx),
+            cornerRadius = radius
+        )
+
+        // 2. Zone threshold markers at 30% and 70%
+        val x30 = widthPx * 0.30f
+        val x70 = widthPx * 0.70f
+        drawLine(
+            color = Color.Gray.copy(alpha = 0.4f),
+            start = Offset(x30, 0f),
+            end = Offset(x30, heightPx),
+            strokeWidth = 1.dp.toPx()
+        )
+        drawLine(
+            color = Color.Gray.copy(alpha = 0.4f),
+            start = Offset(x70, 0f),
+            end = Offset(x70, heightPx),
+            strokeWidth = 1.dp.toPx()
+        )
+
+        // 3. Filled utilization progress
+        if (utilizationBp > 0) {
+            val fillFraction = (minOf(utilizationBp, 10_000).toFloat() / 10_000f)
+            val fillW = widthPx * fillFraction
+            drawRoundRect(
+                color = zoneColor,
+                size = Size(fillW, heightPx),
+                cornerRadius = radius
+            )
+
+            // D8 Hatched overflow segment if over limit (> 10,000 bp)
+            if (utilizationBp > 10_000) {
+                drawRoundRect(
+                    color = ChartPalette.OverflowHatch,
+                    size = Size(widthPx, heightPx),
+                    cornerRadius = radius,
+                    style = Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f), 0f)
+                    )
+                )
+            }
+        }
+    }
+}
+

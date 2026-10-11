@@ -1,38 +1,32 @@
 package com.tapledger.ui.screens.accounts
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,25 +34,35 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.model.AccountType
 import com.tapledger.ui.components.AccountCard
 import com.tapledger.ui.components.EmptyState
-import com.tapledger.ui.components.MoneyIndicator
-import com.tapledger.ui.components.MoneySemantic
-import com.tapledger.ui.components.MoneyText
 import com.tapledger.ui.components.SectionHeader
 import com.tapledger.ui.components.SkeletonCard
 import com.tapledger.ui.components.SkeletonList
-import com.tapledger.ui.screens.dashboard.DashboardViewModel
+import com.tapledger.ui.screens.accounts.components.AccountCompositionCard
+import com.tapledger.ui.screens.accounts.components.NetWorthCard
 import com.tapledger.ui.theme.Spacing
-import com.tapledger.ui.theme.rememberAnimatedMoney
 
+/**
+ * Accounts & Balances screen (S_Acct) per Flow.md §17.2 V9 & V10.
+ * Hosts V9 Net worth line/area chart and V10 Account composition diverging bars
+ * and credit-card utilization gauges, followed by asset & liability accounts lists.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountsScreen(
-    dashboardViewModel: DashboardViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit
+    viewModel: AccountsViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit = {}
 ) {
-    val state by dashboardViewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearErrorMessage()
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -76,7 +80,8 @@ fun AccountsScreen(
                 ),
                 scrollBehavior = scrollBehavior
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         if (state.isLoading) {
             Column(
@@ -86,7 +91,8 @@ fun AccountsScreen(
                     .padding(Spacing.md),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                SkeletonCard(height = 110.dp)
+                SkeletonCard(height = 200.dp)
+                SkeletonCard(height = 160.dp)
                 SkeletonList(itemCount = 4)
             }
         } else if (state.accountSummaries.isEmpty()) {
@@ -97,14 +103,8 @@ fun AccountsScreen(
                 modifier = Modifier.padding(padding)
             )
         } else {
-            val assets = state.accountSummaries.filter { it.account.type != AccountType.CREDIT_CARD }
-            val liabilities = state.accountSummaries.filter { it.account.type == AccountType.CREDIT_CARD }
-
-            val totalAssetsPaise = assets.sumOf { it.currentBalancePaise }
-            val totalLiabilitiesPaise = liabilities.sumOf { it.currentBalancePaise }
-
-            val netWorthPaise = state.netWorth?.netWorthPaise ?: 0L
-            val animatedNetWorth by rememberAnimatedMoney(targetPaise = netWorthPaise)
+            val assets = state.accountSummaries.filter { it.account.type != AccountType.CREDIT_CARD && it.account.type != AccountType.LOAN }
+            val liabilities = state.accountSummaries.filter { it.account.type == AccountType.CREDIT_CARD || it.account.type == AccountType.LOAN }
 
             LazyColumn(
                 state = listState,
@@ -115,77 +115,30 @@ fun AccountsScreen(
                 contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                // 1. Net Worth Card with Long-safe animated money count-up
-                if (state.netWorth != null) {
-                    item(key = "net_worth_hero") {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .semantics(mergeDescendants = true) {
-                                    contentDescription = "Total Net Worth: ${animatedNetWorth / 100} rupees"
-                                },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                            ),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(Spacing.lg)
-                            ) {
-                                Text(
-                                    text = "Total Net Worth",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(Spacing.xxs))
-                                MoneyText(
-                                    amountPaise = animatedNetWorth,
-                                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                                    semantic = if (animatedNetWorth >= 0) MoneySemantic.Income else MoneySemantic.Expense
-                                )
-
-                                Spacer(modifier = Modifier.height(Spacing.sm))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = "Total Assets",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        MoneyText(
-                                            amountPaise = totalAssetsPaise,
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                            semantic = MoneySemantic.Income
-                                        )
-                                    }
-
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = "Total Liabilities",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        MoneyText(
-                                            amountPaise = totalLiabilitiesPaise,
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                            semantic = MoneySemantic.Debt,
-                                            indicator = MoneyIndicator.Owed
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                // 1. V9 Net Worth Card (Line/Area with scrubbing, ranges 3M/6M/1Y/All, stacked toggle, table toggle)
+                item(key = "net_worth_card") {
+                    NetWorthCard(
+                        chartState = state.netWorthChartState,
+                        currentNetWorthPaise = state.netWorthPaise,
+                        totalAssetsPaise = state.totalAssetsPaise,
+                        totalLiabilitiesPaise = state.totalLiabilitiesPaise,
+                        selectedRange = state.selectedRange,
+                        isStacked = state.isStackedView,
+                        showTable = state.showTable,
+                        onSelectRange = { viewModel.setRange(it) },
+                        onToggleStacked = { viewModel.toggleStackedView() },
+                        onToggleShowTable = { viewModel.toggleShowTable() }
+                    )
                 }
 
-                // 2. Assets Group
+                // 2. V10 Account Composition Card (Diverging bars & Credit Card utilization gauges)
+                item(key = "account_composition_card") {
+                    AccountCompositionCard(
+                        compositionState = state.accountCompositionState
+                    )
+                }
+
+                // 3. Assets Group
                 if (assets.isNotEmpty()) {
                     item(key = "assets_header") {
                         SectionHeader(
@@ -211,7 +164,7 @@ fun AccountsScreen(
                     }
                 }
 
-                // 3. Liabilities Group
+                // 4. Liabilities Group
                 if (liabilities.isNotEmpty()) {
                     item(key = "liabilities_header") {
                         SectionHeader(

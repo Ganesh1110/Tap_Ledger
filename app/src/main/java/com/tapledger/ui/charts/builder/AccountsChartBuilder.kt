@@ -17,7 +17,6 @@ import com.tapledger.ui.charts.model.NetWorthPoint
 import com.tapledger.ui.charts.model.NetWorthTableRow
 import com.tapledger.ui.charts.model.UtilizationZone
 import com.tapledger.ui.charts.util.ChartMath
-import org.json.JSONObject
 import kotlin.math.abs
 
 enum class NetWorthRange(val monthsCount: Int?) {
@@ -90,29 +89,15 @@ object AccountsChartBuilder {
                 val label = "${p.month}/${p.year % 100}"
 
                 val (assets, liabilities, nw) = if (close != null && close.closingBalancesJson.isNotBlank()) {
-                    // Extract from closing_balances_json
+                    val balanceMap = parseClosingBalancesJson(close.closingBalancesJson)
                     var a = 0L
                     var l = 0L
-                    try {
-                        val json = JSONObject(close.closingBalancesJson)
-                        for (acc in activeAccounts) {
-                            val accBal = json.optLong(acc.id.toString(), 0L)
-                            if (acc.type == AccountType.CREDIT_CARD || acc.type == AccountType.LOAN) {
-                                l = Math.addExact(l, abs(accBal))
-                            } else {
-                                a = Math.addExact(a, accBal)
-                            }
-                        }
-                    } catch (_: Exception) {
-                        // Fallback to calculation
-                        for (acc in activeAccounts) {
-                            val accTxs = allTransactions.filter { it.accountId == acc.id }
-                            val bal = AccountBalanceCalculator.calculateAccountBalance(acc, accTxs, asOfEpochMillis = pointTime).currentBalancePaise
-                            if (acc.type == AccountType.CREDIT_CARD || acc.type == AccountType.LOAN) {
-                                l = Math.addExact(l, abs(bal))
-                            } else {
-                                a = Math.addExact(a, bal)
-                            }
+                    for (acc in activeAccounts) {
+                        val accBal = balanceMap[acc.id] ?: 0L
+                        if (acc.type == AccountType.CREDIT_CARD || acc.type == AccountType.LOAN) {
+                            l = Math.addExact(l, abs(accBal))
+                        } else {
+                            a = Math.addExact(a, accBal)
                         }
                     }
                     Triple(a, l, Math.subtractExact(a, l))
@@ -293,5 +278,23 @@ object AccountsChartBuilder {
         } catch (e: ArithmeticException) {
             ChartState.Error("Arithmetic overflow calculating account composition: ${e.message}")
         }
+    }
+
+    private fun parseClosingBalancesJson(jsonStr: String): Map<Long, Long> {
+        val map = mutableMapOf<Long, Long>()
+        val clean = jsonStr.trim().removePrefix("{").removeSuffix("}").trim()
+        if (clean.isEmpty()) return map
+        val pairs = clean.split(",")
+        for (pair in pairs) {
+            val parts = pair.split(":")
+            if (parts.size == 2) {
+                val key = parts[0].trim().replace("\"", "").toLongOrNull()
+                val value = parts[1].trim().toLongOrNull()
+                if (key != null && value != null) {
+                    map[key] = value
+                }
+            }
+        }
+        return map
     }
 }

@@ -1,0 +1,138 @@
+package com.tapledger.ui.screens.accounts
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.tapledger.core.database.dao.BudgetPeriodDao
+import com.tapledger.core.database.dao.MonthCloseDao
+import com.tapledger.core.database.dao.TransactionDao
+import com.tapledger.core.model.AccountType
+import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.data.repository.AccountRepository
+import com.tapledger.data.repository.TransactionRepository
+import com.tapledger.domain.calculator.AccountBalanceCalculator
+import com.tapledger.ui.charts.builder.AccountsChartBuilder
+import com.tapledger.ui.charts.builder.NetWorthRange
+import com.tapledger.ui.charts.model.ChartState
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import kotlin.math.abs
+
+/**
+ * ViewModel for Accounts & Balances screen per Flow.md §17.2 V9 & V10.
+ * Pure presentation over AccountBalanceCalculator and AccountsChartBuilder.
+ * End-to-end Long paise and Int permille/bp. Zero Float, Double, or BigDecimal.
+ */
+@HiltViewModel
+class AccountsViewModel @Inject constructor(
+    private val accountRepository: AccountRepository,
+    private val transactionRepository: TransactionRepository,
+    private val transactionDao: TransactionDao,
+    private val monthCloseDao: MonthCloseDao,
+    private val budgetPeriodDao: BudgetPeriodDao
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(AccountsUiState())
+    val uiState: StateFlow<AccountsUiState> = _uiState.asStateFlow()
+
+    init {
+        loadData()
+        viewModelScope.launch {
+            transactionRepository.observeAllTransactions().collect {
+                loadData()
+            }
+        }
+    }
+
+    fun loadData() {
+        viewModelScope.launch {
+            try {
+                val accounts = accountRepository.getAllAccountsSync()
+                val allTxs = transactionDao.getAllTransactionsSync()
+                val nowIST = DateTimeUtils.nowEpochMillis()
+
+                val accountSummaries = accounts.map { account ->
+                    val txs = transactionDao.getBalanceTransactionsForAccount(account.id, account.openingBalanceDate)
+                    AccountBalanceCalculator.calculateAccountBalance(account, txs, asOfEpochMillis = nowIST)
+                }
+
+                val assets = accountSummaries.filter { it.account.type != AccountType.CREDIT_CARD && it.account.type != AccountType.LOAN }
+                val liabilities = accountSummaries.filter { it.account.type == AccountType.CREDIT_CARD || it.account.type == AccountType.LOAN }
+                val totalAssets = assets.sumOf { it.currentBalancePaise }
+                val totalLiabilities = liabilities.sumOf { abs(it.currentBalancePaise) }
+                val netWorth = Math.subtractExact(totalAssets, totalLiabilities)
+
+                val monthCloses = monthCloseDao.getAllMonthClosesSync()
+                val periods = budgetPeriodDao.getAllPeriodsSync()
+                val range = _uiState.value.selectedRange
+
+                val (netWorthChart, composition) = withContext(Dispatchers.Default) {
+                    val nw = AccountsChartBuilder.buildNetWorthChart(
+                        range = range,
+                        accounts = accounts,
+                        allTransactions = allTxs,
+                        monthCloses = monthCloses,
+                        periods = periods,
+                        asOfNow = nowIST
+                    )
+                    val comp = AccountsChartBuilder.buildAccountComposition(
+                        accounts = accounts,
+                        allTransactions = allTxs,
+                        asOfNow = nowIST
+                    )
+                    nw to comp
+                }
+
+                val unassignedMessage = when {
+                    netWorthChart is ChartState.Data -> netWorthChart.data.unassignedExcludedMessage
+                    composition is ChartState.Data -> composition.data.unassignedExcludedMessage
+                    else -> null
+                }
+
+                _uiState.update { current ->
+                    current.copy(
+                        isLoading = false,
+                        accountSummaries = accountSummaries,
+                        totalAssetsPaise = totalAssets,
+                        totalLiabilitiesPaise = totalLiabilities,
+                        netWorthPaise = netWorth,
+                        netWorthChartState = netWorthChart,
+                        accountCompositionState = composition,
+                        unassignedExcludedMessage = unassignedMessage,
+                        errorMessage = null
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Failed to load account analytics"
+                    )
+                }
+            }
+        }
+    }
+
+    fun setRange(range: NetWorthRange) {
+        _uiState.update { it.copy(selectedRange = range) }
+        loadData()
+    }
+
+    fun toggleStackedView() {
+        _uiState.update { it.copy(isStackedView = !it.isStackedView) }
+    }
+
+    fun toggleShowTable() {
+        _uiState.update { it.copy(showTable = !it.showTable) }
+    }
+
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+}
