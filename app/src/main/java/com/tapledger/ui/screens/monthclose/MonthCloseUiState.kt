@@ -2,6 +2,8 @@ package com.tapledger.ui.screens.monthclose
 
 import com.tapledger.core.database.entity.MonthCloseEntity
 import com.tapledger.domain.model.BudgetPeriodSummary
+import com.tapledger.ui.charts.model.AdvanceRolloverChartModel
+import com.tapledger.ui.charts.model.ChartState
 
 data class MonthCloseUiState(
     val isLoading: Boolean = true,
@@ -10,5 +12,6 @@ data class MonthCloseUiState(
     val summary: BudgetPeriodSummary? = null,
     val monthCloseRecord: MonthCloseEntity? = null,
     val pendingCount: Int = 0,
+    val advanceRolloverState: ChartState<AdvanceRolloverChartModel> = ChartState.Loading,
     val errorMessage: String? = null
 )

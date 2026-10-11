@@ -78,6 +78,8 @@ import com.tapledger.ui.components.TransactionRow
 import com.tapledger.ui.theme.Spacing
 import kotlinx.coroutines.launch
 
+import com.tapledger.ui.screens.transactions.components.SpendingHeatmapCard
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TransactionsScreen(
@@ -233,21 +235,6 @@ fun TransactionsScreen(
                 Box(modifier = Modifier.padding(Spacing.md)) {
                     SkeletonList(itemCount = 5)
                 }
-            } else if (state.filteredTransactions.isEmpty()) {
-                EmptyState(
-                    title = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null) "No matching transactions" else "No transactions yet",
-                    subtitle = if (state.searchQuery.isNotEmpty()) "Try adjusting your search or filters." else "Add your first transaction or wait for SMS notifications.",
-                    icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                    actionLabel = if (state.searchQuery.isNotEmpty()) "Clear Filters" else "Add Transaction",
-                    onActionClick = {
-                        if (state.searchQuery.isNotEmpty() || state.selectedStatus != null) {
-                            viewModel.onSearchQueryChanged("")
-                            viewModel.onStatusSelected(null)
-                        } else {
-                            onNavigateToManualEntry()
-                        }
-                    }
-                )
             } else {
                 LazyColumn(
                     state = listState,
@@ -260,6 +247,35 @@ fun TransactionsScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
+                    item(key = "spending_heatmap") {
+                        SpendingHeatmapCard(
+                            heatmapState = state.heatmapState,
+                            selectedDateEpoch = state.selectedDateFilterEpoch,
+                            onSelectDay = viewModel::onSelectHeatmapDay,
+                            onClearDateFilter = viewModel::clearDateFilter,
+                            modifier = Modifier.padding(bottom = Spacing.xs)
+                        )
+                    }
+
+                    if (state.filteredTransactions.isEmpty()) {
+                        item(key = "empty_state") {
+                            EmptyState(
+                                title = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "No matching transactions" else "No transactions yet",
+                                subtitle = if (state.searchQuery.isNotEmpty() || state.selectedDateFilterEpoch != null) "Try adjusting your search or date filter." else "Add your first transaction or wait for SMS notifications.",
+                                icon = Icons.AutoMirrored.Filled.ReceiptLong,
+                                actionLabel = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "Clear Filters" else "Add Transaction",
+                                onActionClick = {
+                                    if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) {
+                                        viewModel.onSearchQueryChanged("")
+                                        viewModel.onStatusSelected(null)
+                                        viewModel.clearDateFilter()
+                                    } else {
+                                        onNavigateToManualEntry()
+                                    }
+                                }
+                            )
+                        }
+                    } else {
                     for ((dateStr, txsOnDate) in groupedByDate) {
                         stickyHeader(key = "header_$dateStr") {
                             Box(
@@ -315,6 +331,7 @@ fun TransactionsScreen(
             }
         }
     }
+}
 
     // Transaction Details Bottom Sheet
     selectedTxForDetails?.let { tx ->

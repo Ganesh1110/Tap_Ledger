@@ -52,10 +52,12 @@ class DataDiagnosticsViewModel @Inject constructor(
             try {
                 _uiState.update { it.copy(isAuditRunning = true) }
                 val issues = diagnosticsRepository.runIntegrityAudit()
+                val severityBarState = com.tapledger.ui.charts.builder.DiagnosticsChartBuilder.buildDiagnosticsSeverityBar(issues)
                 _uiState.update {
                     it.copy(
                         isAuditRunning = false,
                         issues = issues,
+                        severityBarState = severityBarState,
                         lastScannedAt = com.tapledger.core.util.DateTimeUtils.nowEpochMillis(),
                         errorMessage = null
                     )

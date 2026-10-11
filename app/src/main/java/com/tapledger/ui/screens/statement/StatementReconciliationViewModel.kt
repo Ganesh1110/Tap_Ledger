@@ -8,6 +8,8 @@ import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.data.repository.BudgetRepository
 import com.tapledger.data.repository.StatementRepository
 import com.tapledger.data.statement.StatementReconciliationEngine
+import com.tapledger.ui.charts.builder.ReconciliationChartBuilder
+import com.tapledger.ui.charts.model.ChartState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -83,10 +85,22 @@ class StatementReconciliationViewModel @Inject constructor(
                     lines = lines,
                     reportedClosingBalancePaise = importEntity.closingBalancePaise
                 )
+                val bridgeState = try {
+                    val proof = statementRepository.getReconciliationProof(importEntity.id)
+                    if (proof != null) {
+                        ReconciliationChartBuilder.buildReconciliationBridge(proof)
+                    } else {
+                        ChartState.Empty("No reconciliation proof available")
+                    }
+                } catch (e: Exception) {
+                    ChartState.Error(e.message ?: "Failed to compute reconciliation bridge")
+                }
+
                 _uiState.update {
                     it.copy(
                         selectedImportLines = lines,
-                        isArithmeticConsistent = isConsistent
+                        isArithmeticConsistent = isConsistent,
+                        reconciliationBridgeState = bridgeState
                     )
                 }
             }

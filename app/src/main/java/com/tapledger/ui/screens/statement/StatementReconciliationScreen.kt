@@ -356,6 +356,13 @@ fun StatementReconciliationScreen(
                             }
                         }
                     }
+
+                    // 3.5 V12 Reconciliation Bridge Card
+                    item(key = "reconciliation_bridge_card") {
+                        com.tapledger.ui.screens.statement.components.ReconciliationBridgeCard(
+                            bridgeState = state.reconciliationBridgeState
+                        )
+                    }
                 }
 
                 // 4. Collapsible Group: Missing in App (Actionable)

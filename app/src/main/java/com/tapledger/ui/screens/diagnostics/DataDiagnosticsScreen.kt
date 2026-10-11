@@ -249,6 +249,13 @@ fun DataDiagnosticsScreen(
                         }
                     }
 
+                    // V13 Diagnostics Severity Bar Card
+                    item(key = "severity_bar_card") {
+                        com.tapledger.ui.screens.diagnostics.components.DiagnosticsSeverityBarCard(
+                            severityBarState = state.severityBarState
+                        )
+                    }
+
                     if (state.issues.isNotEmpty()) {
                         items(state.issues, key = { "${it.ruleId}_${it.entityType}_${it.entityId}_${it.message}" }) { issue ->
                             IntegrityIssueCard(issue = issue)

@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.MonthCloseRepository
+import com.tapledger.domain.monthclose.MonthCloseEngine
+import com.tapledger.ui.charts.builder.MonthCloseChartBuilder
+import com.tapledger.ui.charts.model.ChartState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +18,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MonthCloseViewModel @Inject constructor(
-    private val monthCloseRepository: MonthCloseRepository
+    private val monthCloseRepository: MonthCloseRepository,
+    private val monthCloseEngine: MonthCloseEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MonthCloseUiState())
@@ -35,6 +39,17 @@ class MonthCloseViewModel @Inject constructor(
                 val summary = monthCloseRepository.getPeriodSummary(currentYear, currentMonth)
 
                 val periodId = summary?.period?.id ?: 0L
+                val rolloverState = if (periodId > 0L) {
+                    try {
+                        val preview = monthCloseEngine.preview(periodId)
+                        MonthCloseChartBuilder.buildAdvanceRolloverBars(preview)
+                    } catch (e: Exception) {
+                        ChartState.Error(e.message ?: "Failed to generate rollover preview")
+                    }
+                } else {
+                    ChartState.Empty("No active budget period")
+                }
+
                 if (periodId > 0L) {
                     monthCloseRepository.observeMonthCloseForPeriod(periodId).collect { monthClose ->
                         _uiState.update {
@@ -44,6 +59,7 @@ class MonthCloseViewModel @Inject constructor(
                                 currentMonth = currentMonth,
                                 summary = summary,
                                 monthCloseRecord = monthClose,
+                                advanceRolloverState = rolloverState,
                                 errorMessage = null
                             )
                         }
@@ -55,6 +71,7 @@ class MonthCloseViewModel @Inject constructor(
                             currentYear = currentYear,
                             currentMonth = currentMonth,
                             summary = summary,
+                            advanceRolloverState = rolloverState,
                             errorMessage = null
                         )
                     }

@@ -411,3 +411,177 @@ fun CreditCardGaugeRender(
     }
 }
 
+/**
+ * Render primitive for V11 Advance Rollover diverging bar per Flow.md §17.2 V11.
+ * Left = Deficits (applied deficit solid, uncovered pool hatched),
+ * Right = Positive Rollovers (carry solid, sweep).
+ */
+@Composable
+fun AdvanceRolloverBarRender(
+    carryPaise: Long,
+    sweepPaise: Long,
+    appliedDeficitPaise: Long,
+    uncoveredPoolPaise: Long,
+    maxPaise: Long,
+    modifier: Modifier = Modifier,
+    height: Dp = 10.dp,
+    carryColor: Color = Color(0xFF009E73),
+    deficitColor: Color = Color(0xFFD55E00),
+    poolColor: Color = ChartPalette.OverflowHatch,
+    trackColor: Color = Color(0xFFE5E5EA)
+) {
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+    ) {
+        val widthPx = size.width
+        val heightPx = size.height
+        val centerX = widthPx / 2f
+        val radius = CornerRadius(heightPx / 2f, heightPx / 2f)
+
+        // Background track
+        drawRoundRect(
+            color = trackColor.copy(alpha = 0.5f),
+            size = Size(widthPx, heightPx),
+            cornerRadius = radius
+        )
+
+        // Center zero line
+        drawLine(
+            color = Color.Gray.copy(alpha = 0.6f),
+            start = Offset(centerX, 0f),
+            end = Offset(centerX, heightPx),
+            strokeWidth = 1.5.dp.toPx()
+        )
+
+        val maxSafe = maxOf(maxPaise, 1L)
+        val maxHalfWidth = centerX - 2.dp.toPx()
+
+        // 1. Right side: Carry / positive surplus
+        val rightVal = carryPaise + sweepPaise
+        if (rightVal > 0L) {
+            val rightFraction = (rightVal.toFloat() / maxSafe.toFloat()).coerceIn(0f, 1f)
+            val rightW = (rightFraction * maxHalfWidth).coerceIn(2.dp.toPx(), maxHalfWidth)
+            drawRoundRect(
+                color = carryColor,
+                topLeft = Offset(centerX, 0f),
+                size = Size(rightW, heightPx),
+                cornerRadius = radius
+            )
+        }
+
+        // 2. Left side: Deficits (applied deficit solid + uncovered pool hatched)
+        val deficitW = if (appliedDeficitPaise > 0L) {
+            val frac = (appliedDeficitPaise.toFloat() / maxSafe.toFloat()).coerceIn(0f, 1f)
+            (frac * maxHalfWidth).coerceIn(2.dp.toPx(), maxHalfWidth)
+        } else 0f
+
+        if (deficitW > 0f) {
+            drawRoundRect(
+                color = deficitColor,
+                topLeft = Offset(centerX - deficitW, 0f),
+                size = Size(deficitW, heightPx),
+                cornerRadius = radius
+            )
+        }
+
+        if (uncoveredPoolPaise > 0L) {
+            val poolFrac = (uncoveredPoolPaise.toFloat() / maxSafe.toFloat()).coerceIn(0f, 1f)
+            val poolW = (poolFrac * maxHalfWidth).coerceIn(2.dp.toPx(), (maxHalfWidth - deficitW).coerceAtLeast(0f))
+            if (poolW > 0f) {
+                val startX = centerX - deficitW - poolW
+                drawRoundRect(
+                    color = poolColor.copy(alpha = 0.4f),
+                    topLeft = Offset(startX, 0f),
+                    size = Size(poolW, heightPx),
+                    cornerRadius = radius
+                )
+                drawRoundRect(
+                    color = poolColor,
+                    topLeft = Offset(startX, 0f),
+                    size = Size(poolW, heightPx),
+                    cornerRadius = radius,
+                    style = Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f), 0f)
+                    )
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Render primitive for V13 Diagnostics severity segmented bar per Flow.md §17.2 V13.
+ * Draws segmented bar with CRITICAL (crimson), ERROR (vermilion), and WARNING (amber).
+ */
+@Composable
+fun DiagnosticsSeverityBarRender(
+    criticalCount: Int,
+    errorCount: Int,
+    warningCount: Int,
+    modifier: Modifier = Modifier,
+    height: Dp = 12.dp,
+    criticalColor: Color = Color(0xFFBA1A1A),
+    errorColor: Color = Color(0xFFD55E00),
+    warningColor: Color = Color(0xFFE69F00),
+    trackColor: Color = Color(0xFFE5E5EA)
+) {
+    val total = criticalCount + errorCount + warningCount
+    if (total == 0) return
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+    ) {
+        val widthPx = size.width
+        val heightPx = size.height
+        val radius = CornerRadius(heightPx / 2f, heightPx / 2f)
+
+        // Draw track
+        drawRoundRect(
+            color = trackColor.copy(alpha = 0.5f),
+            size = Size(widthPx, heightPx),
+            cornerRadius = radius
+        )
+
+        val totalF = total.toFloat()
+        var currentX = 0f
+
+        if (criticalCount > 0) {
+            val w = widthPx * (criticalCount.toFloat() / totalF)
+            drawRoundRect(
+                color = criticalColor,
+                topLeft = Offset(currentX, 0f),
+                size = Size(w, heightPx),
+                cornerRadius = radius
+            )
+            currentX += w
+        }
+
+        if (errorCount > 0) {
+            val w = widthPx * (errorCount.toFloat() / totalF)
+            drawRoundRect(
+                color = errorColor,
+                topLeft = Offset(currentX, 0f),
+                size = Size(w, heightPx),
+                cornerRadius = radius
+            )
+            currentX += w
+        }
+
+        if (warningCount > 0) {
+            val w = widthPx * (warningCount.toFloat() / totalF)
+            drawRoundRect(
+                color = warningColor,
+                topLeft = Offset(currentX, 0f),
+                size = Size(w, heightPx),
+                cornerRadius = radius
+            )
+        }
+    }
+}
+
+

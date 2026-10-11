@@ -316,6 +316,12 @@ fun MonthCloseScreen(
                         )
                     }
 
+                    item(key = "advance_rollover_card") {
+                        com.tapledger.ui.screens.monthclose.components.AdvanceRolloverCard(
+                            rolloverState = state.advanceRolloverState
+                        )
+                    }
+
                     items(
                         items = sum.categorySummaries,
                         key = { "carry_${it.allocation.categoryId}" }
