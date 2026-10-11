@@ -41,4 +41,42 @@ class DateTimeUtilsTest {
         assertThat(endDate.hour).isEqualTo(0)
         assertThat(endDate.minute).isEqualTo(0)
     }
+
+    @Test
+    fun testI11_EveryIstDayIsExactly86400000msAndMonthBoundariesPrecision() {
+        val millisPerDay = 86_400_000L
+
+        // Invariant I11: Asia/Kolkata has no DST transitions; every single day is exactly 86,400,000 ms
+        val testYearMonths = listOf(
+            Triple(2025, 2, 28), // 28-day Feb
+            Triple(2028, 2, 29), // 29-day Feb (leap year 2028)
+            Triple(2026, 4, 30), // 30-day April
+            Triple(2026, 10, 31) // 31-day October
+        )
+
+        for ((year, month, expectedDays) in testYearMonths) {
+            val startMillis = DateTimeUtils.getStartOfMonthEpochMillis(year, month)
+            val endMillis = DateTimeUtils.getEndOfMonthEpochMillis(year, month)
+
+            // Assert exact millisecond duration of the month
+            val durationMillis = endMillis - startMillis
+            val expectedDurationMillis = expectedDays.toLong() * millisPerDay
+            assertThat(durationMillis).isEqualTo(expectedDurationMillis)
+
+            // Assert every day in this month spans exactly 86,400,000 ms starting at 00:00:00 IST
+            for (day in 1..expectedDays) {
+                val dayStart = startMillis + (day - 1).toLong() * millisPerDay
+                val zdt = DateTimeUtils.toZonedDateTime(dayStart)
+
+                assertThat(zdt.year).isEqualTo(year)
+                assertThat(zdt.monthValue).isEqualTo(month)
+                assertThat(zdt.dayOfMonth).isEqualTo(day)
+                assertThat(zdt.hour).isEqualTo(0)
+                assertThat(zdt.minute).isEqualTo(0)
+                assertThat(zdt.second).isEqualTo(0)
+                assertThat(zdt.nano).isEqualTo(0)
+                assertThat(zdt.zone).isEqualTo(DateTimeUtils.IST_ZONE)
+            }
+        }
+    }
 }

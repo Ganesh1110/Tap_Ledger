@@ -36,7 +36,8 @@ class NavigationFlowTest {
             Screen.CategoryManagement,
             Screen.StatementReconciliation,
             Screen.MonthClose,
-            Screen.DataDiagnostics
+            Screen.DataDiagnostics,
+            Screen.Insights
         )
 
         val routes = screens.map { it.route }
@@ -51,6 +52,7 @@ class NavigationFlowTest {
         assertThat(routes).contains("statements")
         assertThat(routes).contains("month_close")
         assertThat(routes).contains("diagnostics")
+        assertThat(routes).contains("insights")
 
         // Unique routes invariant
         assertThat(routes.distinct().size).isEqualTo(screens.size)

@@ -52,8 +52,8 @@ fun LineAreaRender(
             .fillMaxWidth()
             .height(height)
             .pointerInput(points) {
-                if (onScrub != null) {
-                    detectDragGestures(
+                if (onScrub != null && points.isNotEmpty()) {
+                    detectHorizontalDragGestures(
                         onDragStart = { offset ->
                             val idx = ((offset.x / size.width.toFloat()) * (points.size - 1))
                                 .toInt()
@@ -69,7 +69,8 @@ fun LineAreaRender(
                             scrubIndex = null
                             onScrub(null)
                         },
-                        onDrag = { change, _ ->
+                        onHorizontalDrag = { change, _ ->
+                            change.consume()
                             val idx = ((change.position.x / size.width.toFloat()) * (points.size - 1))
                                 .toInt()
                                 .coerceIn(0, points.size - 1)

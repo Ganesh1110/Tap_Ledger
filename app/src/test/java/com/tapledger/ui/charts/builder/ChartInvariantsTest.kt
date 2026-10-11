@@ -628,4 +628,67 @@ class ChartInvariantsTest {
         assertThat(savingsItemUnder.isExceeded).isFalse()
         assertThat(savingsItemUnder.isWarning).isFalse()
     }
+
+    // --- Invariant I11: IST Boundary Precision & 86,400,000 ms Day ---
+    @Test
+    fun testI11_EveryIstDayIsExactly86400000msAndMonthBoundariesPrecision() {
+        val millisPerDay = 86_400_000L
+        val testYearMonths = listOf(
+            Triple(2025, 2, 28), // 28-day Feb
+            Triple(2028, 2, 29), // 29-day Feb (leap year 2028)
+            Triple(2026, 4, 30), // 30-day April
+            Triple(2026, 10, 31) // 31-day October
+        )
+
+        for ((year, month, expectedDays) in testYearMonths) {
+            val startMillis = com.tapledger.core.util.DateTimeUtils.getStartOfMonthEpochMillis(year, month)
+            val endMillis = com.tapledger.core.util.DateTimeUtils.getEndOfMonthEpochMillis(year, month)
+            val durationMillis = endMillis - startMillis
+            val expectedDurationMillis = expectedDays.toLong() * millisPerDay
+            assertThat(durationMillis).isEqualTo(expectedDurationMillis)
+
+            for (day in 1..expectedDays) {
+                val dayStart = startMillis + (day - 1).toLong() * millisPerDay
+                val zdt = com.tapledger.core.util.DateTimeUtils.toZonedDateTime(dayStart)
+                assertThat(zdt.year).isEqualTo(year)
+                assertThat(zdt.monthValue).isEqualTo(month)
+                assertThat(zdt.dayOfMonth).isEqualTo(day)
+                assertThat(zdt.hour).isEqualTo(0)
+                assertThat(zdt.minute).isEqualTo(0)
+                assertThat(zdt.second).isEqualTo(0)
+                assertThat(zdt.nano).isEqualTo(0)
+                assertThat(zdt.zone).isEqualTo(com.tapledger.core.util.DateTimeUtils.IST_ZONE)
+            }
+        }
+    }
+
+    // --- Invariant I14: Float Permitted ONLY Inside ui/charts/render/** ---
+    @Test
+    fun testI14_FloatPermittedOnlyInsideRenderPackage() {
+        val scanner = com.tapledger.core.model.ZeroFloatScannerTest()
+
+        // 1. Core / financial model rejects Float
+        val coreViolations = scanner.scanLine("com/tapledger/core/model/Budget.kt", 1, "val amount: Float = 100.0f")
+        assertThat(coreViolations).hasSize(1)
+        assertThat(coreViolations[0].message).contains("forbidden 'Float' outside render")
+
+        // 2. Core rejects toFloat()
+        val toFloatViolations = scanner.scanLine("com/tapledger/domain/calculator/BudgetCalculator.kt", 1, "val r = paise.toFloat() / 100")
+        assertThat(toFloatViolations).hasSize(1)
+        assertThat(toFloatViolations[0].message).contains("forbidden 'toFloat()' outside render")
+
+        // 3. UI Screen rejects Float
+        val uiViolations = scanner.scanLine("com/tapledger/ui/screens/dashboard/DashboardScreen.kt", 1, "val p: Float = 0.5f")
+        assertThat(uiViolations).hasSize(1)
+        assertThat(uiViolations[0].message).contains("forbidden 'Float' outside render")
+
+        // 4. Render package allows Float
+        val renderViolations = scanner.scanLine("com/tapledger/ui/charts/render/RingChartRender.kt", 1, "val sweepAngle: Float = 180f")
+        assertThat(renderViolations).isEmpty()
+
+        // 5. Double and BigDecimal are banned EVERYWHERE including render
+        val renderDoubleViolations = scanner.scanLine("com/tapledger/ui/charts/render/RingChartRender.kt", 1, "val d: Double = 100.0")
+        assertThat(renderDoubleViolations).hasSize(1)
+        assertThat(renderDoubleViolations[0].message).contains("forbidden 'Double'")
+    }
 }
