@@ -66,6 +66,14 @@ object DateTimeUtils {
         return zdt.toLocalDate().atStartOfDay(IST_ZONE).toInstant().toEpochMilli()
     }
 
+    /**
+     * Calculates the end of day epoch millis (23:59:59.999) for a given timestamp in Asia/Kolkata (Flow.md §11.2, §11.3).
+     */
+    fun getEndOfDayEpochMillis(epochMillis: Long): Long {
+        val zdt = toZonedDateTime(epochMillis)
+        return zdt.toLocalDate().plusDays(1).atStartOfDay(IST_ZONE).toInstant().toEpochMilli() - 1L
+    }
+
     fun formatTime(epochMillis: Long): String {
         return toZonedDateTime(epochMillis).format(TIME_FORMATTER)
     }

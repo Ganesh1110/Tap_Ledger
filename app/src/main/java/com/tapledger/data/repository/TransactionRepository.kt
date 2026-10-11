@@ -75,7 +75,8 @@ class TransactionRepository @Inject constructor(
         source: TransactionSource = TransactionSource.MANUAL,
         sourceFingerprint: String? = null,
         note: String? = null,
-        allocations: List<Pair<Long, Long>> = emptyList() // Pair<categoryId, amountPaise>
+        allocations: List<Pair<Long, Long>> = emptyList(), // Pair<categoryId, amountPaise>
+        originalOccurredAt: Long? = null
     ): Long {
         require(amountPaise > 0L) { "Expense amount must be positive" }
 
@@ -103,6 +104,7 @@ class TransactionRepository @Inject constructor(
                 merchantNormalized = merchantNormalized,
                 upiReference = upiReference,
                 occurredAt = occurredAt,
+                originalOccurredAt = originalOccurredAt,
                 createdAt = now,
                 updatedAt = now,
                 status = status,
@@ -151,7 +153,8 @@ class TransactionRepository @Inject constructor(
         upiReference: String? = null,
         source: TransactionSource = TransactionSource.MANUAL,
         sourceFingerprint: String? = null,
-        note: String? = null
+        note: String? = null,
+        originalOccurredAt: Long? = null
     ): Long {
         require(amountPaise > 0L) { "Income amount must be positive" }
         val now = DateTimeUtils.nowEpochMillis()
@@ -166,6 +169,7 @@ class TransactionRepository @Inject constructor(
                 merchantNormalized = merchantNormalized,
                 upiReference = upiReference,
                 occurredAt = occurredAt,
+                originalOccurredAt = originalOccurredAt,
                 createdAt = now,
                 updatedAt = now,
                 status = TransactionStatus.CONFIRMED,

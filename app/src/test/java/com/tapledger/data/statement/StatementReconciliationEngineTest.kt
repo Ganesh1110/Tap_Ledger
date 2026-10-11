@@ -87,7 +87,12 @@ class StatementReconciliationEngineTest {
             )
         )
 
-        val matchedLines = StatementReconciliationEngine.matchStatementLines(lines, txs)
+        val matchedLines = StatementReconciliationEngine.matchStatementLines(
+            lines = lines,
+            transactions = txs,
+            periodStart = 1000L,
+            periodEnd = 2000L
+        )
 
         // Exactly one should match transaction 101, the other must be MISSING_IN_APP
         assertThat(matchedLines[0].matchStatus).isEqualTo(StatementMatchStatus.MATCHED)
