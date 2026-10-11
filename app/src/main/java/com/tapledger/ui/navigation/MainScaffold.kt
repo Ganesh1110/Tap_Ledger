@@ -25,6 +25,10 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.hilt.navigation.compose.hiltViewModel
+
 data class BottomNavItem(
     val route: String,
     val title: String,
@@ -41,11 +45,31 @@ val BOTTOM_NAV_ITEMS = listOf(
 @Composable
 fun MainScaffold(
     startDestination: String = Screen.Dashboard.route,
-    initialDashboardScrollIndex: Int = 0
+    initialDashboardScrollIndex: Int = 0,
+    viewModel: MainViewModel = hiltViewModel()
 ) {
+    val isOnboarded by viewModel.isOnboarded.collectAsState()
+    if (isOnboarded == null) {
+        return
+    }
+
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    val effectiveStartDestination = if (isOnboarded == false) Screen.Onboarding.route else startDestination
+
+    LaunchedEffect(isOnboarded) {
+        if (isOnboarded == true && currentRoute == Screen.Onboarding.route) {
+            navController.navigate(Screen.Dashboard.route) {
+                popUpTo(Screen.Onboarding.route) { inclusive = true }
+            }
+        } else if (isOnboarded == false && currentRoute != null && currentRoute != Screen.Onboarding.route) {
+            navController.navigate(Screen.Onboarding.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
 
     val isPrimaryDestination = BOTTOM_NAV_ITEMS.any { it.route == currentRoute }
 
@@ -97,7 +121,7 @@ fun MainScaffold(
         ) {
             TapLedgerNavGraph(
                 navController = navController,
-                startDestination = startDestination,
+                startDestination = effectiveStartDestination,
                 initialDashboardScrollIndex = initialDashboardScrollIndex,
                 modifier = Modifier.fillMaxSize()
             )

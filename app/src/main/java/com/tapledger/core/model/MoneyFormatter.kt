@@ -75,6 +75,22 @@ object MoneyFormatter {
     }
 
     /**
+     * Parses user-entered opening balance amounts.
+     * Returns 0L for inputs that evaluate to zero after stripping formatting ("0", "0.0", "0.00", "₹0")
+     * and otherwise delegates to the strict §1.2 parser (₹100 Cr cap, no sub-paise, no negatives).
+     */
+    fun parseOpeningBalance(input: String): Long {
+        val trimmed = input.trim()
+        var cleaned = trimmed.trimEnd('.').replace(Regex("/-\\s*$"), "").trimEnd('.')
+        cleaned = cleaned.replace(Regex("[₹,\\s]|Rs\\.?|INR", RegexOption.IGNORE_CASE), "").trim()
+        if (cleaned.isEmpty()) throw IllegalArgumentException("Empty amount: $input")
+        if (cleaned == "0" || cleaned == "0.0" || cleaned == "0.00" || cleaned == "00") {
+            return 0L
+        }
+        return parseRupeesStringToPaise(trimmed, allowZero = true)
+    }
+
+    /**
      * Converts rupees and paise directly to Long paise without floating point issues.
      */
     fun toPaise(rupees: Long, paise: Long = 0L): Long {

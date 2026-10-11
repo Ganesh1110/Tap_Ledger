@@ -21,11 +21,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -67,6 +71,7 @@ fun BackupRestoreScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var backupToRestore by remember { mutableStateOf<BackupFileInfo?>(null) }
+    var showEraseDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -291,6 +296,46 @@ fun BackupRestoreScreen(
                     }
                 }
             }
+
+            // Danger Zone: Erase All Data & Start Over
+            item {
+                Spacer(modifier = Modifier.height(Spacing.lg))
+                SectionHeader(
+                    title = "Danger Zone",
+                    subtitle = "Irreversible data erasure & first-run reset"
+                )
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = ExpenseRed.copy(alpha = 0.08f)),
+                    border = BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.35f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Text(
+                            text = "Erase All Data & Start Over",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ExpenseRed
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Permanently deletes all accounts, transactions, and envelopes. Creates an automatic safety backup and resets the app to initial onboarding.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.md))
+                        Button(
+                            onClick = { showEraseDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text("Erase All Data & Start Over")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -307,6 +352,47 @@ fun BackupRestoreScreen(
                 viewModel.restoreBackup(file)
             },
             onDismiss = { backupToRestore = null }
+        )
+    }
+
+    // Erase All Data Dialog (§15.1)
+    if (showEraseDialog) {
+        var eraseConfirmationText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showEraseDialog = false },
+            title = { Text("Erase All Data?", fontWeight = FontWeight.Bold, color = ExpenseRed) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "This will erase all accounts, transactions, and envelopes. A safety backup will be created in your app storage before erasing. To proceed, please type ERASE below.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = eraseConfirmationText,
+                        onValueChange = { eraseConfirmationText = it },
+                        label = { Text("Type ERASE to confirm") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showEraseDialog = false
+                        viewModel.eraseAllData()
+                    },
+                    enabled = eraseConfirmationText.trim() == "ERASE",
+                    colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)
+                ) {
+                    Text("Permanently Erase")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEraseDialog = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

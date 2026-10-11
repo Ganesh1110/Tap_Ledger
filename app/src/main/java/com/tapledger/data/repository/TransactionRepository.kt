@@ -857,6 +857,55 @@ class TransactionRepository @Inject constructor(
     }
 
     /**
+     * Atomically records a balance correction transaction (Flow.md §6.4).
+     * Direction is IN if delta > 0, OUT if delta < 0.
+     * Amount is |delta|.
+     * Status is CONFIRMED. Source is MANUAL. Notes is "Balance correction".
+     * Allocations: empty (zero rows).
+     * Records an AuditLog entry.
+     */
+    suspend fun recordBalanceAdjustment(
+        accountId: Long,
+        deltaPaise: Long,
+        notes: String = "Balance correction"
+    ): Long {
+        require(deltaPaise != 0L) { "Adjustment delta must be non-zero" }
+        val now = DateTimeUtils.nowEpochMillis()
+        val direction = if (deltaPaise > 0L) TransactionDirection.IN else TransactionDirection.OUT
+        val amountPaise = kotlin.math.abs(deltaPaise)
+
+        return transactionRunner.run {
+            val tx = TransactionEntity(
+                accountId = accountId,
+                kind = TransactionKind.ADJUSTMENT,
+                direction = direction,
+                amountPaise = amountPaise,
+                occurredAt = now,
+                createdAt = now,
+                updatedAt = now,
+                status = TransactionStatus.CONFIRMED,
+                source = TransactionSource.MANUAL,
+                notes = notes
+            )
+            val txId = transactionDao.insert(tx)
+            val savedTx = tx.copy(id = txId)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = txId,
+                    action = AuditAction.CREATED,
+                    beforeSnapshotJson = null,
+                    afterSnapshotJson = savedTx.toJsonSnapshot(),
+                    reason = "Balance correction (delta: $deltaPaise paise)",
+                    createdAt = now
+                )
+            )
+
+            txId
+        }
+    }
+
+    /**
      * Links an existing refund transaction to an original transaction (Flow.md §9.2).
      * Apportions the refund amount across categories using Capacity-Capped Largest-Remainder algorithm.
      * Enforces Rules R1 and R2.

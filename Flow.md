@@ -1,6 +1,6 @@
 # TapLedger: Complete System Flows & Mathematical Specification
 
-> **Version:** 2.7 (Formal Specification & Production Engine Architecture)  
+> **Version:** 2.8 (Formal Specification & Production Engine Architecture)  
 > **Target OS:** Android 10+ (API 29–36, Android 16 Ready), Optimized for Xiaomi/HyperOS, Samsung OneUI, and Pixel  
 > **Core Architectural Principles:** Single-user, 100% offline-first, Zero floating-point arithmetic (`Long` paise only), Transfer-level double-entry and envelope integrity, Asia/Kolkata (`IST`) timezone.
 
@@ -14,6 +14,7 @@
 4. [Transaction Lifecycle & Complete State Machine](#4-transaction-lifecycle--complete-state-machine)
 5. [Pending Inbox & Adaptive Merchant Learning](#5-pending-inbox--adaptive-merchant-learning)
 6. [Account Balance, Drift & Net Worth Mathematics](#6-account-balance-drift--net-worth-mathematics)
+   - [6.4 Correct Balance & Adjustment Protocol](#64-correct-balance--adjustment-protocol)
 7. [Transfer Architecture & Counterparty Pairing](#7-transfer-architecture--counterparty-pairing)
 8. [50/30/20 Envelope Budgeting System](#8-503020-envelope-budgeting-system)
 9. [Multi-Split Category Allocation & Capacity-Capped Refund Math](#9-multi-split-category-allocation--capacity-capped-refund-math)
@@ -23,6 +24,7 @@
 13. [Atomic Backup, Manifest Bundling & Safe Restore Protocol](#13-atomic-backup-manifest-bundling--safe-restore-protocol)
 14. [Security, Privacy, and System Health Architecture](#14-security-privacy-and-system-health-architecture)
 15. [End-to-End Application Screen Flow](#15-end-to-end-application-screen-flow)
+   - [15.1 First-Run Onboarding Specification](#151-first-run-onboarding-specification)
 16. [Engineering Guarantees & Non-Claims](#16-engineering-guarantees--non-claims)
 17. [Visual Analytics Layer](#17-visual-analytics-layer)
 
@@ -363,6 +365,27 @@ $$\mathbf{BalanceDrift} = t.\text{checkpoint\_balance\_paise} - \text{ExpectedBa
   1. $t$ is the **latest** ingested checkpoint for account $A$.
   2. Account $A$ has **zero** unassigned `PENDING` transactions.
   3. A 5-minute stability window has elapsed since notification ingestion (absorbing out-of-order SMS deliveries).
+
+### 6.4 Correct Balance & Adjustment Protocol
+
+- **Accounts Screen Action:** Per-account "Correct Balance" action opens a sheet showing the current computed balance and a field "Actual balance right now" (for `CREDIT_CARD` and `LOAN`, "Amount owed now", entered positive and converted to a negative target).
+- **Delta Calculation:**
+  $$\Delta = \text{target} - \text{currentBalance} \quad (\text{signed Long paise})$$
+  - If $\Delta = 0\text{L}$: The UI displays "Already matches" and writes zero rows to the database.
+  - If $\Delta \neq 0\text{L}$: Atomically creates exactly **ONE** transaction:
+    - `kind` = `ADJUSTMENT`
+    - `direction` = `IN` if $\Delta > 0$ else `OUT`
+    - `amount_paise` = $|\Delta|$
+    - `status` = `CONFIRMED`
+    - `source` = `MANUAL`
+    - `occurred_at` = $\text{now}$
+    - `notes` = "Balance correction"
+    - `account_id` = that account
+    - Allocations: Empty (zero rows in `transaction_allocations`)
+  - **Audit Log:** Recorded with action `CREATED` and an atomic snapshot before/after.
+- **Budget Immutability Invariant:** `ADJUSTMENT` transactions never count as income, spending, or a budget envelope category (§8.1, §8.3); they strictly affect account balances and net worth.
+- **Starting Balance Edit Rules:** "Edit Starting Balance" remains accessible but is **DISABLED** once the account's opening balance is locked (§6.1 rule 5), displaying an explanation pointing the user to "Correct Balance". While enabled, it displays the warning: *"This rewrites history and the net worth trend; to fix today's mismatch use Correct Balance"*.
+- **Guidance Invariant:** Guidance or UI strings must never suggest logging an Expense to correct an account balance mismatch.
 
 ---
 
@@ -751,7 +774,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph OnboardingFlow ["First-Run Onboarding Flow"]
-        S_Onboard["First-Run Onboarding Screen\n• Welcome & Privacy Guarantees\n• Seed Accounts & Opening Balances\n• Planned Income & 50/30/20 Targets\n• Notification Listener Permission\n• Persistent SAF Folder Setup\n• Passphrase / 12-Word Recovery Key"]
+        S_Onboard["First-Run Onboarding Stepper (O1–O6)\n• O1 Welcome & Privacy (Restore CTA)\n• O2 Planned Monthly Income\n• O3 Accounts, Cash & Balances\n• O4 Envelope Targets Split (50/30/20)\n• O5 Reliability & Backup Setup\n• O6 Review & Atomic Commit"]
     end
 
     subgraph BottomNav ["Bottom Navigation Tabs (4 Core Pillars)"]
@@ -768,6 +791,7 @@ flowchart TD
         S_Transfer["Transfer Pairing Modal\n• Select Source & Destination\n• Link Existing Counterparty Leg"]
         S_CatMgmt["Category Management Screen\n• Add/Edit Envelopes\n• Inter-Envelope Transfer\n• Reorder by Bucket"]
         S_AcctEdit["Add / Edit Account Screen\n• Account Type, Last4, Limit\n• Opening Balance Setup"]
+        S_CorrectBalance["Correct Balance Sheet\n• Actual Balance Right Now\n• Atomic ADJUSTMENT Transaction"]
         S_PeriodSetup["Period & Income Setup Screen\n• Income Target Planning\n• Review Auto-Populated Envelopes\n• Reopen Latest Closed Period CTA"]
         S_Stmt["Statement Reconciliation Screen\n• CSV Import & Arithmetic Check\n• Stepper (Import → Match → Review)\n• Proof of Reconciliation Audit"]
         S_Close["Month Close Screen\n• Pre-Close Checklist Gates (Scoped to M)\n• Advance Rollover Projections\n• Period Lock Confirmation Sheet\n• Reopen Latest Closed Month Action"]
@@ -795,6 +819,7 @@ flowchart TD
     S_Budget -->|"Contextual FAB"| S_CatMgmt
 
     S_Acct -->|"Contextual FAB / Add Account"| S_AcctEdit
+    S_Acct -->|"Correct Balance Action"| S_CorrectBalance
     S_Acct -->|"Vault Action"| S_Backup
     S_Acct -->|"Settings Gear"| S_Settings
 
@@ -807,6 +832,23 @@ flowchart TD
 
     S_Settings -->|"Data Diagnostics Action"| S_Diag
 ```
+
+### 15.1 First-Run Onboarding Specification
+
+Step order (a stepper with Back, state kept in `SavedStateHandle` so it survives rotation and process death; drafts are **NEVER** written to the database before the final commit):
+
+- **O1 Welcome & privacy:** Includes a "Restore existing backup" action (`-> S_Backup`).
+- **O2 Take-home income:** Monthly net amount in ₹, must be $> 0$, with helper text *"the amount that reaches your bank each month"*. It becomes `budget_periods.income_paise` (planned target, §8.1) for the current IST month.
+- **O3 Accounts & balances:** "As of" date defaulting to today ($\text{StartOfDayIST}$) that may be changed to any day inside the current month:
+  - **a) Bank / wallet accounts (repeatable):** Name (required, unique case-insensitively, $\le 40$ chars), type `BANK` or `WALLET`, last 4 digits (optional, exactly 4 digits, warn if matching another account), balance $\ge 0$ (zero allowed), and a toggle *"Savings account (transfers into it count toward Savings)"* mapped to `is_savings`.
+  - **b) Cash in hand:** Exactly one `CASH` account, default name "Cash", balance $\ge 0$ (zero allowed). It is always created.
+  - **c) Credit cards (optional, "Skip if none"):** Name, last 4 (optional), outstanding amount owed $\ge 0$ (entered as a positive number and **STORED NEGATIVE** per §6.1 rule 4), credit limit (optional, $> 0$ if given), statement day and due day (optional, 1–31).
+  *(INVESTMENT and LOAN accounts are added later via `S_AcctEdit`, not part of onboarding).*
+- **O4 Targets:** Show planned income and the §8.1 split (Needs $50\%$, Wants $30\%$, Savings = remainder, integer math) in ₹. Default category distribution: within each bucket, split the bucket target equally across that bucket's active categories using integer division, with remainder paise allocated to the category with the lowest `default_sort_order`. $\sum$ per bucket must equal the bucket target exactly ($B3/B4$ hold). A bucket with no active categories keeps its target unallocated and shows a warning. The user may edit amounts and cannot exceed the bucket target.
+- **O5 Reliability & backup:** Existing reliability and backup setup steps preserved (notification listener access, `POST_NOTIFICATIONS`, SAF folder, passphrase / 12-word recovery key).
+- **O6 Review & finish:** Lists everything entered with edit shortcuts, plus a Net Worth preview (Assets, Liabilities, Net Worth) computed by the existing identity (§6.2) through a **PURE** function exposed by `AccountBalanceCalculator` and shared with the real calculation (no second implementation).
+- **Commit (One Transaction):** Inserts accounts (`opening_balance_paise` signed, `opening_balance_date` = $\text{StartOfDayIST}$ of the chosen date, which must fall in the current `OPEN` period); gets-or-creates the current period via the existing bounded lifecycle; sets `income_paise`; inserts base allocations from O4; sets `is_reviewed = true`. Then navigates to the Dashboard.
+- **Input UX:** Decimal keypad, live Indian grouping while typing (integer-only formatting), per-field inline errors, sticky Continue button above the IME, content descriptions on every field, no clipping at $200\%$ font scale, light and dark themes.
 
 ---
 

@@ -2,7 +2,6 @@ package com.tapledger.ui.screens.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tapledger.core.database.DatabaseSeeder
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.MonthCloseDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
@@ -53,7 +52,6 @@ data class DashboardUiState(
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val seeder: DatabaseSeeder,
     private val accountRepository: AccountRepository,
     private val budgetRepository: BudgetRepository,
     private val transactionRepository: TransactionRepository,
@@ -68,8 +66,6 @@ class DashboardViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            // Seed database if launching for the first time
-            seeder.seedInitialDataIfEmpty()
             val today = LocalDate.now(DateTimeUtils.IST_ZONE)
             loadDashboard(today.year, today.monthValue)
 

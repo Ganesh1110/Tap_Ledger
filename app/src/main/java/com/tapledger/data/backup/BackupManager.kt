@@ -2,6 +2,7 @@ package com.tapledger.data.backup
 
 import android.content.Context
 import androidx.sqlite.db.SimpleSQLiteQuery
+import com.tapledger.core.database.ReferenceCategories
 import com.tapledger.core.database.TapLedgerDatabase
 import com.tapledger.domain.validator.DataIntegrityChecker
 import com.tapledger.service.FinancialIngestionPipeline
@@ -394,6 +395,40 @@ class BackupManager @Inject constructor(
                 zis.closeEntry()
                 entry = zis.nextEntry
             }
+        }
+    }
+
+    /**
+     * Erases all user data and resets application to first-run state (Flow.md §15.1).
+     * 1. Creates a safety backup of current data.
+     * 2. Closes Room database.
+     * 3. Deletes DB, WAL, and SHM files.
+     * 4. Reopens fresh database and seeds reference categories.
+     */
+    suspend fun eraseAllDataAndReset(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            // 1. Create Safety Backup
+            createSafetyBackup()
+
+            // 2. Delete database files
+            val dbFile = context.getDatabasePath(TapLedgerDatabase.DATABASE_NAME)
+            val walFile = File(dbFile.parentFile, "${TapLedgerDatabase.DATABASE_NAME}-wal")
+            val shmFile = File(dbFile.parentFile, "${TapLedgerDatabase.DATABASE_NAME}-shm")
+
+            database.close()
+            if (dbFile.exists()) dbFile.delete()
+            if (walFile.exists()) walFile.delete()
+            if (shmFile.exists()) shmFile.delete()
+
+            // 3. Reopen fresh database
+            database.openHelper.writableDatabase
+
+            // 4. Seed reference categories
+            ReferenceCategories.seedIfEmpty(database.categoryDao())
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

@@ -134,9 +134,40 @@ class AccountsViewModel @Inject constructor(
         _uiState.update { it.copy(showTable = !it.showTable) }
     }
 
+    suspend fun isOpeningBalanceLocked(account: AccountEntity): Boolean {
+        val startOfDay = DateTimeUtils.getStartOfDayEpochMillis(account.openingBalanceDate)
+        return budgetPeriodDao.getClosedPeriodEndingAfter(startOfDay) != null
+    }
+
+    fun correctAccountBalance(account: AccountEntity, targetBalancePaise: Long, notes: String = "Balance correction") {
+        viewModelScope.launch {
+            try {
+                val txs = transactionDao.getBalanceTransactionsForAccount(account.id, account.openingBalanceDate)
+                val current = AccountBalanceCalculator.calculateAccountBalance(
+                    account = account,
+                    transactions = txs,
+                    asOfEpochMillis = DateTimeUtils.nowEpochMillis()
+                )
+                val delta = targetBalancePaise - current.currentBalancePaise
+                if (delta != 0L) {
+                    transactionRepository.recordBalanceAdjustment(account.id, delta, notes)
+                    loadData()
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to correct balance") }
+            }
+        }
+    }
+
     fun updateAccountOpeningBalance(account: AccountEntity, newOpeningBalanceRupees: String) {
         viewModelScope.launch {
             try {
+                if (isOpeningBalanceLocked(account)) {
+                    _uiState.update {
+                        it.copy(errorMessage = "Opening balance is locked because this period is closed. To adjust today's balance, use Correct Balance.")
+                    }
+                    return@launch
+                }
                 val newPaise = MoneyFormatter.toPaise(newOpeningBalanceRupees)
                 val updated = account.copy(
                     openingBalancePaise = newPaise,

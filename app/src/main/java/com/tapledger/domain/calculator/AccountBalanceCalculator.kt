@@ -102,22 +102,20 @@ object AccountBalanceCalculator {
     }
 
     /**
-     * Computes Net Worth across all active accounts (Flow.md §6.2):
-     * Assets      = Σ max( Balance(A), 0)
-     * Liabilities = Σ max(−Balance(A), 0)      // type-agnostic
-     * NetWorth    = Assets − Liabilities = Σ Balance(A)
+     * PURE function computing Net Worth from a list of signed balances (Flow.md §6.2):
+     * Assets      = Σ max( Balance, 0 )
+     * Liabilities = Σ max( -Balance, 0 )
+     * NetWorth    = Assets - Liabilities = Σ Balance
      */
-    fun calculateNetWorth(summaries: List<AccountBalanceSummary>): NetWorthSummary {
+    fun calculateNetWorthFromBalances(signedBalancesPaise: List<Long>): NetWorthSummary {
         var totalAssets = 0L
         var totalLiabilities = 0L
 
-        for (summary in summaries) {
-            if (!summary.account.isActive) continue
-            val balance = summary.currentBalancePaise
+        for (balance in signedBalancesPaise) {
             if (balance >= 0) {
-                totalAssets += balance
+                totalAssets = Math.addExact(totalAssets, balance)
             } else {
-                totalLiabilities += -balance
+                totalLiabilities = Math.addExact(totalLiabilities, -balance)
             }
         }
 
@@ -126,6 +124,19 @@ object AccountBalanceCalculator {
             totalLiabilitiesPaise = totalLiabilities,
             netWorthPaise = totalAssets - totalLiabilities
         )
+    }
+
+    /**
+     * Computes Net Worth across all active accounts (Flow.md §6.2):
+     * Assets      = Σ max( Balance(A), 0)
+     * Liabilities = Σ max(−Balance(A), 0)      // type-agnostic
+     * NetWorth    = Assets − Liabilities = Σ Balance(A)
+     */
+    fun calculateNetWorth(summaries: List<AccountBalanceSummary>): NetWorthSummary {
+        val activeBalances = summaries
+            .filter { it.account.isActive }
+            .map { it.currentBalancePaise }
+        return calculateNetWorthFromBalances(activeBalances)
     }
 
     /**

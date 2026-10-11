@@ -38,6 +38,7 @@ sealed class Screen(val route: String) {
     object MonthClose : Screen("month_close")
     object DataDiagnostics : Screen("diagnostics")
     object Insights : Screen("insights")
+    object Onboarding : Screen("onboarding")
 }
 
 @Composable
@@ -134,6 +135,18 @@ fun TapLedgerNavGraph(
         composable(Screen.Insights.route) {
             InsightsScreen(
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.Onboarding.route) {
+            com.tapledger.ui.screens.onboarding.OnboardingScreen(
+                onOnboardingComplete = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                },
+                onNavigateToRestoreBackup = {
+                    navController.navigate(Screen.BackupRestore.route)
+                }
             )
         }
     }

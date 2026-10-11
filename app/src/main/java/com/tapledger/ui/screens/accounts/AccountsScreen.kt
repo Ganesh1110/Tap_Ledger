@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.model.AccountType
+import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.domain.model.AccountBalanceSummary
 import com.tapledger.ui.components.AccountCard
 import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.components.SectionHeader
@@ -51,7 +55,11 @@ import com.tapledger.ui.components.SkeletonCard
 import com.tapledger.ui.components.SkeletonList
 import com.tapledger.ui.screens.accounts.components.AccountCompositionCard
 import com.tapledger.ui.screens.accounts.components.NetWorthCard
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * Accounts & Balances screen (S_Acct) per Flow.md §17.2 V9 & V10.
@@ -68,7 +76,12 @@ fun AccountsScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var editingAccount by remember { mutableStateOf<AccountEntity?>(null) }
+    var selectedSummary by remember { mutableStateOf<AccountBalanceSummary?>(null) }
+    var showActionDialog by remember { mutableStateOf(false) }
+    var showCorrectBalanceDialog by remember { mutableStateOf(false) }
+    var showEditStartingDialog by remember { mutableStateOf(false) }
+    var isStartingLocked by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
@@ -165,10 +178,19 @@ fun AccountsScreen(
                         key = { "asset_${it.account.id}" }
                     ) { summary ->
                         Column {
-                            AccountCard(summary = summary, onClick = { editingAccount = summary.account })
+                            AccountCard(
+                                summary = summary,
+                                onClick = {
+                                    selectedSummary = summary
+                                    coroutineScope.launch {
+                                        isStartingLocked = viewModel.isOpeningBalanceLocked(summary.account)
+                                    }
+                                    showActionDialog = true
+                                }
+                            )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Last reconciled with opening balance • Tap to edit starting balance",
+                                text = "Tap for options • Correct balance or edit opening balance",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = Spacing.sm)
@@ -191,10 +213,19 @@ fun AccountsScreen(
                         key = { "liability_${it.account.id}" }
                     ) { summary ->
                         Column {
-                            AccountCard(summary = summary, onClick = { editingAccount = summary.account })
+                            AccountCard(
+                                summary = summary,
+                                onClick = {
+                                    selectedSummary = summary
+                                    coroutineScope.launch {
+                                        isStartingLocked = viewModel.isOpeningBalanceLocked(summary.account)
+                                    }
+                                    showActionDialog = true
+                                }
+                            )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Reconciled against credit limit & statement cycle • Tap to edit starting balance",
+                                text = "Tap for options • Correct balance or edit opening balance",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = Spacing.sm)
@@ -206,8 +237,145 @@ fun AccountsScreen(
         }
     }
 
-    editingAccount?.let { acc ->
-        var openingRupees by remember {
+    // Action Selection Dialog
+    if (showActionDialog && selectedSummary != null) {
+        val summary = selectedSummary!!
+        AlertDialog(
+            onDismissRequest = { showActionDialog = false },
+            title = { Text(summary.account.name) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Current App Balance: ${MoneyFormatter.formatPaiseToRupees(summary.currentBalancePaise)}",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            showActionDialog = false
+                            showCorrectBalanceDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Correct Balance", fontWeight = FontWeight.Bold)
+                            Text("Fix today's balance via adjustment (Recommended)", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            showActionDialog = false
+                            showEditStartingDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Edit Starting Balance")
+                            Text(
+                                if (isStartingLocked) "Locked (period is closed)" else "Rewrites historical starting balance",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showActionDialog = false }) { Text("Close") }
+            }
+        )
+    }
+
+    // Correct Balance Dialog (§6.4)
+    if (showCorrectBalanceDialog && selectedSummary != null) {
+        val summary = selectedSummary!!
+        val isCredit = summary.account.type == AccountType.CREDIT_CARD || summary.account.type == AccountType.LOAN
+        var targetInput by remember(summary) {
+            val initial = if (isCredit) {
+                if (summary.currentBalancePaise < 0L) (-summary.currentBalancePaise / 100).toString() else "0"
+            } else {
+                if (summary.currentBalancePaise > 0L) (summary.currentBalancePaise / 100).toString() else "0"
+            }
+            mutableStateOf(initial)
+        }
+
+        val targetPaise = try {
+            val parsed = MoneyFormatter.parseOpeningBalance(targetInput)
+            if (isCredit) {
+                if (parsed == 0L) 0L else -parsed
+            } else parsed
+        } catch (_: Exception) {
+            summary.currentBalancePaise
+        }
+        val deltaPaise = targetPaise - summary.currentBalancePaise
+
+        AlertDialog(
+            onDismissRequest = { showCorrectBalanceDialog = false },
+            title = { Text("Correct ${summary.account.name} Balance") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Current App Balance: ${MoneyFormatter.formatPaiseToRupees(summary.currentBalancePaise)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = targetInput,
+                        onValueChange = { targetInput = it },
+                        label = { Text(if (isCredit) "Actual Amount Owed Right Now (₹)" else "Actual Balance Right Now (₹)") },
+                        prefix = { Text("₹ ") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (deltaPaise == 0L) {
+                        Text(
+                            "Already matches current balance. Zero adjustments needed.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else if (deltaPaise > 0L) {
+                        Text(
+                            "+${MoneyFormatter.formatPaiseToRupees(deltaPaise)} adjustment (Inflow)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = IncomeGreen
+                        )
+                    } else {
+                        Text(
+                            "-${MoneyFormatter.formatPaiseToRupees(-deltaPaise)} adjustment (Outflow)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ExpenseRed
+                        )
+                    }
+                    Text(
+                        text = "Creates 1 CONFIRMED ADJUSTMENT transaction. Does not affect budget spending or envelope categories.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.correctAccountBalance(summary.account, targetPaise)
+                        showCorrectBalanceDialog = false
+                    },
+                    enabled = deltaPaise != 0L
+                ) {
+                    Text("Apply Correction")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCorrectBalanceDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Edit Starting Balance Dialog (§6.1 rule 5 & §6.4)
+    if (showEditStartingDialog && selectedSummary != null) {
+        val summary = selectedSummary!!
+        val acc = summary.account
+        var openingRupees by remember(acc) {
             mutableStateOf(
                 if (acc.openingBalancePaise != 0L) {
                     val whole = acc.openingBalancePaise / 100
@@ -218,42 +386,50 @@ fun AccountsScreen(
         }
 
         AlertDialog(
-            onDismissRequest = { editingAccount = null },
+            onDismissRequest = { showEditStartingDialog = false },
             title = { Text("Edit ${acc.name} Starting Balance") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "Updating the starting balance recalculates your real-time account balance and total Net Worth.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = openingRupees,
-                        onValueChange = { openingRupees = it },
-                        label = { Text("Starting Balance (₹)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Decimal,
-                            imeAction = ImeAction.Done
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (isStartingLocked) {
+                        Text(
+                            text = "Opening balance is locked because this budget period is closed (§6.1 rule 5). To adjust today's balance, use Correct Balance.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ExpenseRed
+                        )
+                    } else {
+                        Text(
+                            text = "Warning: This rewrites history and your net worth trend; to fix today's mismatch use Correct Balance.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        OutlinedTextField(
+                            value = openingRupees,
+                            onValueChange = { openingRupees = it },
+                            label = { Text("Starting Balance (₹)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Done
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.updateAccountOpeningBalance(acc, openingRupees)
-                        editingAccount = null
+                if (!isStartingLocked) {
+                    Button(
+                        onClick = {
+                            viewModel.updateAccountOpeningBalance(acc, openingRupees)
+                            showEditStartingDialog = false
+                        }
+                    ) {
+                        Text("Save Balance")
                     }
-                ) {
-                    Text("Save Balance")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { editingAccount = null }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showEditStartingDialog = false }) { Text("Cancel") }
             }
         )
     }

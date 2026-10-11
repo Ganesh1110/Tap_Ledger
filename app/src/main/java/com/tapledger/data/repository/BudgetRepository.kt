@@ -36,7 +36,7 @@ class BudgetRepository @Inject constructor(
         return getOrCreateBudgetPeriod(ym.year, ym.monthValue)
     }
 
-    suspend fun getOrCreateBudgetPeriod(year: Int, month: Int, defaultIncomePaise: Long = 52_000_00L): BudgetPeriodEntity {
+    suspend fun getOrCreateBudgetPeriod(year: Int, month: Int, defaultIncomePaise: Long = 0L): BudgetPeriodEntity {
         val targetYm = java.time.YearMonth.of(year, month)
         val nowYm = DateTimeUtils.toYearMonth(DateTimeUtils.nowEpochMillis())
         val maxAllowedYm = nowYm.plusMonths(3)

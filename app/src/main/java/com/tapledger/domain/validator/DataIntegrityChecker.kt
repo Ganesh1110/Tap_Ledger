@@ -30,13 +30,13 @@ import javax.inject.Singleton
  * T1..T4, A1..A4, B1..B4, C1, P1, M1, M2, S1, R1, R2.
  */
 @Singleton
-class DataIntegrityChecker @Inject constructor() {
+open class DataIntegrityChecker @Inject constructor() {
 
     /**
      * Executes all 19 invariant checks across database records.
      * Returns a list of actionable issues found.
      */
-    fun verifyIntegrity(
+    open fun verifyIntegrity(
         accounts: List<AccountEntity>,
         categories: List<CategoryEntity>,
         periods: List<BudgetPeriodEntity>,

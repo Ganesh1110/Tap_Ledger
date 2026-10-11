@@ -145,4 +145,23 @@ class BackupRestoreViewModel @Inject constructor(
             }
         }
     }
+
+    fun eraseAllData() {
+        _uiState.value = _uiState.value.copy(message = null)
+        viewModelScope.launch {
+            val result = backupManager.eraseAllDataAndReset()
+            if (result.isSuccess) {
+                refreshBackupList()
+                _uiState.value = _uiState.value.copy(
+                    message = "All data erased successfully. Resetting to first-run onboarding.",
+                    isError = false
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    message = "Failed to erase data: ${result.exceptionOrNull()?.message}",
+                    isError = true
+                )
+            }
+        }
+    }
 }
