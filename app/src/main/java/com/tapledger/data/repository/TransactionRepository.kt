@@ -18,6 +18,7 @@ import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.domain.calculator.RefundApportionmentCalculator
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import javax.inject.Inject
@@ -723,6 +724,9 @@ class TransactionRepository @Inject constructor(
 
     /**
      * Atomically records a refund, optionally linked to original transaction (Flow.md §4, §9.2).
+     * When linked to a categorized transaction with split allocations, automatically apportions
+     * the refund across categories using the Capacity-Capped Largest-Remainder algorithm (§9.2).
+     * Enforces Rules R1 (R1_CUMULATIVE_REFUND_EXCEEDED) and R2 (R2_REFUND_EXCEEDS_CATEGORY_CAP).
      */
     suspend fun recordRefund(
         accountId: Long,
@@ -738,7 +742,73 @@ class TransactionRepository @Inject constructor(
         val now = DateTimeUtils.nowEpochMillis()
 
         return transactionRunner.run {
-            val status = if (categoryId != null) TransactionStatus.CATEGORIZED else TransactionStatus.PENDING
+            if (isPeriodClosed(occurredAt)) {
+                throw IllegalStateException("Cannot record refund in a closed budget period (Rule M1)")
+            }
+
+            var determinedStatus = if (categoryId != null) TransactionStatus.CATEGORIZED else TransactionStatus.PENDING
+            val allocationsToInsert = mutableListOf<Pair<Long, Long>>() // categoryId to amountPaise
+
+            if (refundOfTransactionId != null) {
+                val originalTx = transactionDao.getById(refundOfTransactionId)
+                    ?: throw IllegalArgumentException("Original transaction #$refundOfTransactionId not found")
+
+                val originalAllocations = transactionAllocationDao.getForTransaction(refundOfTransactionId)
+                val priorRefunds = transactionDao.getRefundsForTransaction(refundOfTransactionId)
+                    .filter { it.status != TransactionStatus.VOIDED && it.status != TransactionStatus.IGNORED }
+                val priorAllocations = priorRefunds.flatMap { transactionAllocationDao.getForTransaction(it.id) }
+
+                if (originalAllocations.isNotEmpty()) {
+                    val capacities = originalAllocations.map { orig ->
+                        val priorForCat = priorAllocations.filter { it.categoryId == orig.categoryId }.sumOf { it.amountPaise }
+                        RefundApportionmentCalculator.CategoryCapacity(
+                            categoryId = orig.categoryId,
+                            originalAllocationPaise = orig.amountPaise,
+                            priorRefundsPaise = priorForCat
+                        )
+                    }
+
+                    val totalCap = capacities.sumOf { it.remainingCapacityPaise }
+                    if (amountPaise > totalCap) {
+                        throw IllegalArgumentException(
+                            "Rule R1_CUMULATIVE_REFUND_EXCEEDED: Refund amount ($amountPaise paise) exceeds remaining capacity ($totalCap paise)"
+                        )
+                    }
+
+                    if (categoryId != null) {
+                        val cap = capacities.find { it.categoryId == categoryId }
+                            ?: throw IllegalArgumentException("Category #$categoryId is not in original transaction splits")
+                        if (amountPaise > cap.remainingCapacityPaise) {
+                            throw IllegalArgumentException(
+                                "Rule R2_REFUND_EXCEEDS_CATEGORY_CAP: Refund amount ($amountPaise paise) exceeds remaining capacity for category #$categoryId (${cap.remainingCapacityPaise} paise)"
+                            )
+                        }
+                        allocationsToInsert.add(categoryId to amountPaise)
+                        determinedStatus = TransactionStatus.CATEGORIZED
+                    } else {
+                        val result = RefundApportionmentCalculator.apportionRefund(amountPaise, capacities)
+                        for (apportioned in result.apportionments) {
+                            allocationsToInsert.add(apportioned.categoryId to apportioned.amountPaise)
+                        }
+                        determinedStatus = TransactionStatus.CATEGORIZED
+                    }
+                } else {
+                    // Original transaction was unallocated/pending
+                    val priorTotalRefunded = priorRefunds.sumOf { it.amountPaise }
+                    val remainingCap = originalTx.amountPaise - priorTotalRefunded
+                    if (amountPaise > remainingCap) {
+                        throw IllegalArgumentException(
+                            "Rule R1_CUMULATIVE_REFUND_EXCEEDED: Refund amount ($amountPaise paise) exceeds original transaction remaining capacity ($remainingCap paise)"
+                        )
+                    }
+                    if (categoryId != null) {
+                        allocationsToInsert.add(categoryId to amountPaise)
+                        determinedStatus = TransactionStatus.CATEGORIZED
+                    }
+                }
+            } else if (categoryId != null) {
+                allocationsToInsert.add(categoryId to amountPaise)
+            }
 
             val tx = TransactionEntity(
                 accountId = accountId,
@@ -749,21 +819,22 @@ class TransactionRepository @Inject constructor(
                 occurredAt = occurredAt,
                 createdAt = now,
                 updatedAt = now,
-                status = status,
+                status = determinedStatus,
                 source = source,
                 refundOfTransactionId = refundOfTransactionId,
                 notes = note
             )
             val txId = transactionDao.insert(tx)
 
-            if (categoryId != null) {
-                transactionAllocationDao.insert(
+            if (allocationsToInsert.isNotEmpty()) {
+                val allocEntities = allocationsToInsert.map { (catId, amt) ->
                     TransactionAllocationEntity(
                         transactionId = txId,
-                        categoryId = categoryId,
-                        amountPaise = amountPaise
+                        categoryId = catId,
+                        amountPaise = amt
                     )
-                )
+                }
+                transactionAllocationDao.insertAll(allocEntities)
             }
 
             auditLogDao.insert(
@@ -772,12 +843,110 @@ class TransactionRepository @Inject constructor(
                     action = AuditAction.CREATED,
                     beforeSnapshotJson = null,
                     afterSnapshotJson = tx.copy(id = txId).toJsonSnapshot(),
-                    reason = "Refund record",
+                    reason = if (refundOfTransactionId != null) "Refund linked to transaction #$refundOfTransactionId" else "Refund record",
                     createdAt = now
                 )
             )
 
             txId
+        }
+    }
+
+    /**
+     * Links an existing refund transaction to an original transaction (Flow.md §9.2).
+     * Apportions the refund amount across categories using Capacity-Capped Largest-Remainder algorithm.
+     * Enforces Rules R1 and R2.
+     */
+    suspend fun linkRefundToTransaction(
+        refundTransactionId: Long,
+        originalTransactionId: Long,
+        reason: String? = null
+    ) {
+        val now = DateTimeUtils.nowEpochMillis()
+
+        transactionRunner.run {
+            val refundTx = transactionDao.getById(refundTransactionId)
+                ?: throw IllegalArgumentException("Refund transaction #$refundTransactionId not found")
+            val originalTx = transactionDao.getById(originalTransactionId)
+                ?: throw IllegalArgumentException("Original transaction #$originalTransactionId not found")
+
+            require(refundTx.kind == TransactionKind.REFUND) {
+                "Transaction #$refundTransactionId is not a REFUND (kind: ${refundTx.kind})"
+            }
+
+            if (isPeriodClosed(refundTx.occurredAt)) {
+                throw IllegalStateException("Cannot alter refund in a closed budget period (Rule M1)")
+            }
+
+            val originalAllocations = transactionAllocationDao.getForTransaction(originalTransactionId)
+            val priorRefunds = transactionDao.getRefundsForTransaction(originalTransactionId)
+                .filter { it.id != refundTransactionId && it.status != TransactionStatus.VOIDED && it.status != TransactionStatus.IGNORED }
+            val priorAllocations = priorRefunds.flatMap { transactionAllocationDao.getForTransaction(it.id) }
+
+            val allocationsToInsert = mutableListOf<Pair<Long, Long>>()
+            var determinedStatus = refundTx.status
+
+            if (originalAllocations.isNotEmpty()) {
+                val capacities = originalAllocations.map { orig ->
+                    val priorForCat = priorAllocations.filter { it.categoryId == orig.categoryId }.sumOf { it.amountPaise }
+                    RefundApportionmentCalculator.CategoryCapacity(
+                        categoryId = orig.categoryId,
+                        originalAllocationPaise = orig.amountPaise,
+                        priorRefundsPaise = priorForCat
+                    )
+                }
+
+                val totalCap = capacities.sumOf { it.remainingCapacityPaise }
+                if (refundTx.amountPaise > totalCap) {
+                    throw IllegalArgumentException(
+                        "Rule R1_CUMULATIVE_REFUND_EXCEEDED: Refund amount (${refundTx.amountPaise} paise) exceeds remaining capacity ($totalCap paise)"
+                    )
+                }
+
+                val result = RefundApportionmentCalculator.apportionRefund(refundTx.amountPaise, capacities)
+                for (apportioned in result.apportionments) {
+                    allocationsToInsert.add(apportioned.categoryId to apportioned.amountPaise)
+                }
+                determinedStatus = TransactionStatus.CATEGORIZED
+            } else {
+                val priorTotalRefunded = priorRefunds.sumOf { it.amountPaise }
+                val remainingCap = originalTx.amountPaise - priorTotalRefunded
+                if (refundTx.amountPaise > remainingCap) {
+                    throw IllegalArgumentException(
+                        "Rule R1_CUMULATIVE_REFUND_EXCEEDED: Refund amount (${refundTx.amountPaise} paise) exceeds remaining capacity ($remainingCap paise)"
+                    )
+                }
+            }
+
+            transactionAllocationDao.deleteForTransaction(refundTransactionId)
+            if (allocationsToInsert.isNotEmpty()) {
+                val entities = allocationsToInsert.map { (catId, amt) ->
+                    TransactionAllocationEntity(
+                        transactionId = refundTransactionId,
+                        categoryId = catId,
+                        amountPaise = amt
+                    )
+                }
+                transactionAllocationDao.insertAll(entities)
+            }
+
+            val updatedTx = refundTx.copy(
+                refundOfTransactionId = originalTransactionId,
+                status = determinedStatus,
+                updatedAt = now
+            )
+            transactionDao.update(updatedTx)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = refundTransactionId,
+                    action = AuditAction.UPDATED,
+                    beforeSnapshotJson = refundTx.toJsonSnapshot(),
+                    afterSnapshotJson = updatedTx.toJsonSnapshot(),
+                    reason = reason ?: "Linked refund to transaction #$originalTransactionId",
+                    createdAt = now
+                )
+            )
         }
     }
 
@@ -902,6 +1071,47 @@ class TransactionRepository @Inject constructor(
             }
             require(allocations.all { it.second > 0L }) { "Split allocation amount must be positive" }
             require(allocations.map { it.first }.toSet().size == allocations.size) { "Duplicate category in split" }
+
+            if (tx.kind == TransactionKind.REFUND && tx.refundOfTransactionId != null) {
+                val originalTx = transactionDao.getById(tx.refundOfTransactionId)
+                    ?: throw IllegalArgumentException("Original transaction #${tx.refundOfTransactionId} not found")
+
+                val originalAllocations = transactionAllocationDao.getForTransaction(tx.refundOfTransactionId)
+                val priorRefunds = transactionDao.getRefundsForTransaction(tx.refundOfTransactionId)
+                    .filter { it.id != tx.id && it.status != TransactionStatus.VOIDED && it.status != TransactionStatus.IGNORED }
+                val priorAllocations = priorRefunds.flatMap { transactionAllocationDao.getForTransaction(it.id) }
+
+                if (originalAllocations.isNotEmpty()) {
+                    val capacities = originalAllocations.associate { orig ->
+                        val priorForCat = priorAllocations.filter { it.categoryId == orig.categoryId }.sumOf { it.amountPaise }
+                        orig.categoryId to (orig.amountPaise - priorForCat)
+                    }
+                    val totalCap = capacities.values.sum()
+                    if (totalAllocated > totalCap) {
+                        throw IllegalArgumentException(
+                            "Rule R1_CUMULATIVE_REFUND_EXCEEDED: Refund allocations sum ($totalAllocated paise) exceeds remaining capacity ($totalCap paise)"
+                        )
+                    }
+
+                    for ((catId, amt) in allocations) {
+                        val cap = capacities[catId]
+                            ?: throw IllegalArgumentException("Category #$catId was not part of original transaction splits")
+                        if (amt > cap) {
+                            throw IllegalArgumentException(
+                                "Rule R2_REFUND_EXCEEDS_CATEGORY_CAP: Refund allocation for category #$catId ($amt paise) exceeds remaining capacity ($cap paise)"
+                            )
+                        }
+                    }
+                } else {
+                    val priorTotal = priorRefunds.sumOf { it.amountPaise }
+                    val remainingCap = originalTx.amountPaise - priorTotal
+                    if (totalAllocated > remainingCap) {
+                        throw IllegalArgumentException(
+                            "Rule R1_CUMULATIVE_REFUND_EXCEEDED: Refund allocations sum ($totalAllocated paise) exceeds remaining capacity ($remainingCap paise)"
+                        )
+                    }
+                }
+            }
 
             // Remove existing allocations
             transactionAllocationDao.deleteForTransaction(transactionId)
