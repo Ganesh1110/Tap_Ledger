@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,15 +22,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.HealthAndSafety
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,6 +41,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,10 +55,12 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,11 +79,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tapledger.core.database.entity.AccountEntity
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.util.DateTimeUtils
-import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.PermissionUtils
 import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.components.MoneySemantic
@@ -94,11 +103,24 @@ fun PendingInboxScreen(
 ) {
     val pendingTxs by viewModel.pendingTransactions.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     val suggestedMap by viewModel.suggestedCategoryMap.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    var unassignedTxToAssign by remember { mutableStateOf<TransactionEntity?>(null) }
+    var unassignedTxToCategorize by remember { mutableStateOf<Pair<TransactionEntity, Long>?>(null) }
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearErrorMessage()
+        }
+    }
 
     val isListenerActive = remember(context) {
         PermissionUtils.isNotificationListenerGranted(context)
@@ -201,27 +223,25 @@ fun PendingInboxScreen(
                         confirmValueChange = { dismissValue ->
                             when (dismissValue) {
                                 SwipeToDismissBoxValue.StartToEnd -> {
-                                    // Swipe right = apply suggested category or first category
                                     val targetCatId = suggestedCat?.id ?: categories.firstOrNull()?.id
                                     if (targetCatId != null) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        viewModel.categorizeTransaction(tx.id, targetCatId, tx.amountPaise)
+                                        if (tx.accountId == null) {
+                                            unassignedTxToCategorize = tx to targetCatId
+                                        } else {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            viewModel.categorizeTransaction(tx.id, targetCatId, tx.amountPaise)
+                                        }
                                     }
                                     true
                                 }
                                 SwipeToDismissBoxValue.EndToStart -> {
-                                    // Swipe left = ignore / void with undo snackbar
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     viewModel.voidTransaction(tx.id)
                                     coroutineScope.launch {
-                                        val result = snackbarHostState.showSnackbar(
+                                        snackbarHostState.showSnackbar(
                                             message = "Transaction ignored",
-                                            actionLabel = "Undo",
                                             duration = SnackbarDuration.Short
                                         )
-                                        if (result == SnackbarResult.ActionPerformed) {
-                                            // restore
-                                        }
                                     }
                                     true
                                 }
@@ -267,10 +287,21 @@ fun PendingInboxScreen(
                         PendingTransactionCard(
                             tx = tx,
                             categories = categories,
+                            accounts = accounts,
                             suggestedCategory = suggestedCat,
+                            onAssignAccount = { accountId ->
+                                viewModel.assignAccount(tx.id, accountId)
+                            },
+                            onRequestAssignAccount = {
+                                unassignedTxToAssign = tx
+                            },
                             onCategorize = { catId ->
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                viewModel.categorizeTransaction(tx.id, catId, tx.amountPaise)
+                                if (tx.accountId == null) {
+                                    unassignedTxToCategorize = tx to catId
+                                } else {
+                                    viewModel.categorizeTransaction(tx.id, catId, tx.amountPaise)
+                                }
                             },
                             onVoid = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -281,6 +312,113 @@ fun PendingInboxScreen(
                 }
             }
         }
+
+        // Account Selection Dialog for Unassigned Transaction (assign only)
+        unassignedTxToAssign?.let { tx ->
+            AlertDialog(
+                onDismissRequest = { unassignedTxToAssign = null },
+                title = { Text("Assign Account") },
+                text = {
+                    Column {
+                        Text(
+                            text = "Select the account used for this transaction (${tx.merchantRaw ?: "Expense"} • ₹${tx.amountPaise / 100}):",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        if (accounts.isEmpty()) {
+                            Text(
+                                text = "No active accounts found. Please add an account first.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                                accounts.forEach { acc ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                viewModel.assignAccount(tx.id, acc.id)
+                                                unassignedTxToAssign = null
+                                            },
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(Spacing.sm),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(20.dp))
+                                            Spacer(modifier = Modifier.width(Spacing.xs))
+                                            Text(acc.name, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { unassignedTxToAssign = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        // Account Selection Dialog for Unassigned Transaction (assign + categorize)
+        unassignedTxToCategorize?.let { (tx, catId) ->
+            val catName = categories.find { it.id == catId }?.name ?: "Selected Category"
+            AlertDialog(
+                onDismissRequest = { unassignedTxToCategorize = null },
+                title = { Text("Assign Account & Categorize") },
+                text = {
+                    Column {
+                        Text(
+                            text = "Assign account to categorize as '$catName':",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        if (accounts.isEmpty()) {
+                            Text(
+                                text = "No active accounts found. Please add an account first.",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                                accounts.forEach { acc ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                viewModel.categorizeTransaction(tx.id, catId, tx.amountPaise, acc.id)
+                                                unassignedTxToCategorize = null
+                                            },
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(Spacing.sm),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(20.dp))
+                                            Spacer(modifier = Modifier.width(Spacing.xs))
+                                            Text(acc.name, fontWeight = FontWeight.Medium)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { unassignedTxToCategorize = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -289,11 +427,15 @@ fun PendingInboxScreen(
 private fun PendingTransactionCard(
     tx: TransactionEntity,
     categories: List<CategoryEntity>,
+    accounts: List<AccountEntity>,
     suggestedCategory: CategoryEntity? = null,
+    onAssignAccount: (Long) -> Unit,
+    onRequestAssignAccount: () -> Unit,
     onCategorize: (Long) -> Unit,
     onVoid: () -> Unit
 ) {
     var expandedBucket by remember { mutableStateOf<BudgetBucket?>(null) }
+    val assignedAccount = accounts.find { it.id == tx.accountId }
 
     Card(
         modifier = Modifier
@@ -310,6 +452,7 @@ private fun PendingTransactionCard(
                 .fillMaxWidth()
                 .padding(Spacing.md)
         ) {
+            // Header Row: Merchant & Amount
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -322,7 +465,8 @@ private fun PendingTransactionCard(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "${DateTimeUtils.formatDateTime(tx.occurredAt)} • ${tx.source.name}",
+                        text = "${DateTimeUtils.formatDateTime(tx.occurredAt)} • ${tx.source.name}" +
+                                if (assignedAccount != null) " • ${assignedAccount.name}" else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -333,6 +477,63 @@ private fun PendingTransactionCard(
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     semantic = MoneySemantic.Expense
                 )
+            }
+
+            // Flow.md §3.1: Amber Warning Banner for Unassigned Account
+            if (tx.accountId == null) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onRequestAssignAccount() },
+                    colors = CardDefaults.cardColors(containerColor = WarningAmber.copy(alpha = 0.15f)),
+                    border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.8f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = WarningAmber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text(
+                            text = "Unassigned Account — Tap to resolve",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                // Inline 1-tap Account Chips
+                if (accounts.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Assign:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        accounts.forEach { acc ->
+                            FilterChip(
+                                selected = false,
+                                onClick = { onAssignAccount(acc.id) },
+                                label = { Text(acc.name, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                }
             }
 
             // 1-Tap Suggested Category Apply Button (if suggestion exists)
@@ -359,7 +560,7 @@ private fun PendingTransactionCard(
 
             Spacer(modifier = Modifier.height(Spacing.xs))
 
-            // Bucket Chips (≤ 2 taps categorization)
+            // Bucket Chips (<= 2 taps categorization)
             Text(
                 text = "Assign Bucket:",
                 style = MaterialTheme.typography.labelSmall,

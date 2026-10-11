@@ -135,10 +135,14 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         }
 
         serviceScope.launch {
-            val result = financialIngestionPipeline.processEvent(event)
-            if (result is IngestionResult.Success) {
-                Log.i("TapLedgerListener", "Ingested tx #${result.transactionId}: ${result.parsedEvent.amountPaise} paise")
-                showCapturedNotification(result)
+            try {
+                val result = financialIngestionPipeline.processEvent(event)
+                if (result is IngestionResult.Success) {
+                    Log.i("TapLedgerListener", "Ingested tx #${result.transactionId}: ${result.parsedEvent.amountPaise} paise")
+                    showCapturedNotification(result)
+                }
+            } catch (e: Exception) {
+                Log.e("TapLedgerListener", "Error processing notification event", e)
             }
         }
     }

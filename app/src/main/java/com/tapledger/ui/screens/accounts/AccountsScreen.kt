@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,19 +13,30 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.sp
+import com.tapledger.core.database.entity.AccountEntity
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +68,7 @@ fun AccountsScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var editingAccount by remember { mutableStateOf<AccountEntity?>(null) }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
@@ -152,10 +165,10 @@ fun AccountsScreen(
                         key = { "asset_${it.account.id}" }
                     ) { summary ->
                         Column {
-                            AccountCard(summary = summary)
+                            AccountCard(summary = summary, onClick = { editingAccount = summary.account })
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Last reconciled with opening balance",
+                                text = "Last reconciled with opening balance • Tap to edit starting balance",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = Spacing.sm)
@@ -178,10 +191,10 @@ fun AccountsScreen(
                         key = { "liability_${it.account.id}" }
                     ) { summary ->
                         Column {
-                            AccountCard(summary = summary)
+                            AccountCard(summary = summary, onClick = { editingAccount = summary.account })
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Reconciled against credit limit & statement cycle",
+                                text = "Reconciled against credit limit & statement cycle • Tap to edit starting balance",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = Spacing.sm)
@@ -191,5 +204,57 @@ fun AccountsScreen(
                 }
             }
         }
+    }
+
+    editingAccount?.let { acc ->
+        var openingRupees by remember {
+            mutableStateOf(
+                if (acc.openingBalancePaise != 0L) {
+                    val whole = acc.openingBalancePaise / 100
+                    val remainder = kotlin.math.abs(acc.openingBalancePaise % 100)
+                    if (remainder == 0L) "$whole" else "%d.%02d".format(whole, remainder)
+                } else ""
+            )
+        }
+
+        AlertDialog(
+            onDismissRequest = { editingAccount = null },
+            title = { Text("Edit ${acc.name} Starting Balance") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Updating the starting balance recalculates your real-time account balance and total Net Worth.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = openingRupees,
+                        onValueChange = { openingRupees = it },
+                        label = { Text("Starting Balance (₹)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.updateAccountOpeningBalance(acc, openingRupees)
+                        editingAccount = null
+                    }
+                ) {
+                    Text("Save Balance")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingAccount = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

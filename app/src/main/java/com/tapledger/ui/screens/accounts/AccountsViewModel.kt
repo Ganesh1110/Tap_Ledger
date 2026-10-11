@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.MonthCloseDao
 import com.tapledger.core.database.dao.TransactionDao
+import com.tapledger.core.database.entity.AccountEntity
 import com.tapledger.core.model.AccountType
+import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.TransactionRepository
@@ -130,6 +132,22 @@ class AccountsViewModel @Inject constructor(
 
     fun toggleShowTable() {
         _uiState.update { it.copy(showTable = !it.showTable) }
+    }
+
+    fun updateAccountOpeningBalance(account: AccountEntity, newOpeningBalanceRupees: String) {
+        viewModelScope.launch {
+            try {
+                val newPaise = MoneyFormatter.toPaise(newOpeningBalanceRupees)
+                val updated = account.copy(
+                    openingBalancePaise = newPaise,
+                    updatedAt = DateTimeUtils.nowEpochMillis()
+                )
+                accountRepository.updateAccount(updated)
+                loadData()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Invalid starting balance amount") }
+            }
+        }
     }
 
     fun clearErrorMessage() {

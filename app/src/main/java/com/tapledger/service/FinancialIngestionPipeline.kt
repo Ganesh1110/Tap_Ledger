@@ -100,6 +100,20 @@ class FinancialIngestionPipeline @Inject constructor(
         val resolvedAccountId = resolveAccount(parsed)
 
         // 4. Step 2: Deduplication Check (Flow.md §3.1, §3.2)
+        // Check 2.0: Exact match with source_fingerprint (Exact notification redelivery / duplicate)
+        val fingerprintMatch = transactionDao.findBySourceFingerprint(parsed.sourceFingerprint)
+        if (fingerprintMatch != null) {
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = fingerprintMatch.id,
+                    action = AuditAction.DUPLICATE_DROPPED,
+                    reason = "Exact duplicate sourceFingerprint=${parsed.sourceFingerprint}",
+                    createdAt = now
+                )
+            )
+            return IngestionResult.DroppedExactDuplicate(fingerprintMatch.id, parsed.upiReference)
+        }
+
         // Check 2A: Exact match with non-null upi_reference
         if (!parsed.upiReference.isNullOrBlank()) {
             val exactMatch = if (resolvedAccountId != null) {
@@ -204,38 +218,44 @@ class FinancialIngestionPipeline @Inject constructor(
         budgetRepository.getOrCreateBudgetPeriodForTimestamp(effectiveOccurredAt)
 
         // 6. Room Atomic Insert: transactions (status = PENDING)
-        val txId = transactionRunner.run {
-            val tx = TransactionEntity(
-                accountId = resolvedAccountId,
-                kind = parsed.kind,
-                direction = parsed.direction,
-                amountPaise = parsed.amountPaise,
-                merchantRaw = parsed.merchantRaw,
-                merchantNormalized = parsed.merchantNormalized,
-                upiReference = parsed.upiReference,
-                occurredAt = effectiveOccurredAt,
-                originalOccurredAt = originalOccurredAt,
-                createdAt = now,
-                updatedAt = now,
-                status = TransactionStatus.PENDING,
-                source = parsed.source,
-                sourceFingerprint = parsed.sourceFingerprint,
-                possibleDuplicateOfId = possibleDuplicateOfId,
-                checkpointBalancePaise = parsed.reportedAvailableBalancePaise,
-                checkpointType = parsed.checkpointType ?: if (parsed.reportedAvailableBalancePaise != null) com.tapledger.core.model.CheckpointType.AVAILABLE_BALANCE else null
-            )
-            val insertedId = transactionDao.insert(tx)
-
-            auditLogDao.insert(
-                AuditLogEntity(
-                    transactionId = insertedId,
-                    action = AuditAction.CREATED,
-                    reason = "Notification Ingestion from ${event.packageName}",
-                    createdAt = now
+        val txId = try {
+            transactionRunner.run {
+                val tx = TransactionEntity(
+                    accountId = resolvedAccountId,
+                    kind = parsed.kind,
+                    direction = parsed.direction,
+                    amountPaise = parsed.amountPaise,
+                    merchantRaw = parsed.merchantRaw,
+                    merchantNormalized = parsed.merchantNormalized,
+                    upiReference = parsed.upiReference,
+                    occurredAt = effectiveOccurredAt,
+                    originalOccurredAt = originalOccurredAt,
+                    createdAt = now,
+                    updatedAt = now,
+                    status = TransactionStatus.PENDING,
+                    source = parsed.source,
+                    sourceFingerprint = parsed.sourceFingerprint,
+                    possibleDuplicateOfId = possibleDuplicateOfId,
+                    checkpointBalancePaise = parsed.reportedAvailableBalancePaise,
+                    checkpointType = parsed.checkpointType ?: if (parsed.reportedAvailableBalancePaise != null) com.tapledger.core.model.CheckpointType.AVAILABLE_BALANCE else null
                 )
-            )
+                val insertedId = transactionDao.insert(tx)
 
-            insertedId
+                auditLogDao.insert(
+                    AuditLogEntity(
+                        transactionId = insertedId,
+                        action = AuditAction.CREATED,
+                        reason = "Notification Ingestion from ${event.packageName}",
+                        createdAt = now
+                    )
+                )
+
+                insertedId
+            }
+        } catch (e: android.database.sqlite.SQLiteConstraintException) {
+            val existing = transactionDao.findBySourceFingerprint(parsed.sourceFingerprint)
+            val fallbackId = existing?.id ?: 0L
+            return IngestionResult.DroppedExactDuplicate(fallbackId, parsed.upiReference)
         }
 
         return IngestionResult.Success(

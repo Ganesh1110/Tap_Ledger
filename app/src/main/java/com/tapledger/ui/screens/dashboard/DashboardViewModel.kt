@@ -7,8 +7,10 @@ import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.MonthCloseDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
+import com.tapledger.core.database.entity.AccountEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.BudgetPeriodStatus
+import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.BudgetRepository
@@ -158,5 +160,21 @@ class DashboardViewModel @Inject constructor(
             _uiState.value.currentYear to (_uiState.value.currentMonth - 1)
         }
         loadDashboard(newYear, newMonth)
+    }
+
+    fun updateAccountOpeningBalance(account: AccountEntity, newOpeningBalanceRupees: String) {
+        viewModelScope.launch {
+            try {
+                val newPaise = MoneyFormatter.toPaise(newOpeningBalanceRupees)
+                val updated = account.copy(
+                    openingBalancePaise = newPaise,
+                    updatedAt = DateTimeUtils.nowEpochMillis()
+                )
+                accountRepository.updateAccount(updated)
+                loadDashboard()
+            } catch (e: Exception) {
+                // handle invalid input
+            }
+        }
     }
 }
