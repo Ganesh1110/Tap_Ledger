@@ -124,9 +124,75 @@ class TransactionStateMachineTest {
         override fun observeRecentAudits(limit: Int): Flow<List<AuditLogEntity>> = emptyFlow()
     }
 
+    private class FakeAccountDao : com.tapledger.core.database.dao.AccountDao {
+        val storage = mutableMapOf<Long, com.tapledger.core.database.entity.AccountEntity>()
+        private var nextId = 1L
+
+        override suspend fun insert(account: com.tapledger.core.database.entity.AccountEntity): Long {
+            val id = if (account.id == 0L) nextId++ else account.id
+            storage[id] = account.copy(id = id)
+            return id
+        }
+        override suspend fun insertAll(accounts: List<com.tapledger.core.database.entity.AccountEntity>): List<Long> = accounts.map { insert(it) }
+        override suspend fun update(account: com.tapledger.core.database.entity.AccountEntity) { storage[account.id] = account }
+        override suspend fun getById(id: Long): com.tapledger.core.database.entity.AccountEntity? = storage[id]
+        override fun getAllActiveAccounts(): Flow<List<com.tapledger.core.database.entity.AccountEntity>> = emptyFlow()
+        override suspend fun getAllAccountsSync(): List<com.tapledger.core.database.entity.AccountEntity> = storage.values.toList()
+        override suspend fun findByLast4(last4: String): com.tapledger.core.database.entity.AccountEntity? = storage.values.firstOrNull { it.identifierLast4 == last4 && it.isActive }
+        override suspend fun findAllActiveByLast4(last4: String): List<com.tapledger.core.database.entity.AccountEntity> = storage.values.filter { it.identifierLast4 == last4 && it.isActive }
+        override suspend fun getActiveBankAccounts(): List<com.tapledger.core.database.entity.AccountEntity> = storage.values.filter { it.type == com.tapledger.core.model.AccountType.BANK && it.isActive }
+    }
+
+    private class FakeCategoryDao : com.tapledger.core.database.dao.CategoryDao {
+        val storage = mutableMapOf<Long, com.tapledger.core.database.entity.CategoryEntity>()
+        private var nextId = 1L
+
+        override suspend fun insert(category: com.tapledger.core.database.entity.CategoryEntity): Long {
+            val id = if (category.id == 0L) nextId++ else category.id
+            storage[id] = category.copy(id = id)
+            return id
+        }
+        override suspend fun insertAll(categories: List<com.tapledger.core.database.entity.CategoryEntity>): List<Long> = categories.map { insert(it) }
+        override suspend fun update(category: com.tapledger.core.database.entity.CategoryEntity) { storage[category.id] = category }
+        override suspend fun getById(id: Long): com.tapledger.core.database.entity.CategoryEntity? = storage[id]
+        override fun getAllActiveCategories(): Flow<List<com.tapledger.core.database.entity.CategoryEntity>> = emptyFlow()
+        override suspend fun getAllCategoriesSync(): List<com.tapledger.core.database.entity.CategoryEntity> = storage.values.toList()
+        override suspend fun getByName(name: String): com.tapledger.core.database.entity.CategoryEntity? = storage.values.firstOrNull { it.name == name }
+        override suspend fun getMaxSortOrder(): Int? = storage.values.maxOfOrNull { it.defaultSortOrder }
+    }
+
+    private class FakeBudgetPeriodDao : com.tapledger.core.database.dao.BudgetPeriodDao {
+        val storage = mutableMapOf<Long, com.tapledger.core.database.entity.BudgetPeriodEntity>()
+        private var nextId = 1L
+
+        override suspend fun insert(budgetPeriod: com.tapledger.core.database.entity.BudgetPeriodEntity): Long {
+            val id = if (budgetPeriod.id == 0L) nextId++ else budgetPeriod.id
+            storage[id] = budgetPeriod.copy(id = id)
+            return id
+        }
+        override suspend fun update(budgetPeriod: com.tapledger.core.database.entity.BudgetPeriodEntity) { storage[budgetPeriod.id] = budgetPeriod }
+        override suspend fun getById(id: Long): com.tapledger.core.database.entity.BudgetPeriodEntity? = storage[id]
+        override suspend fun getByYearMonth(year: Int, month: Int): com.tapledger.core.database.entity.BudgetPeriodEntity? = storage.values.firstOrNull { it.year == year && it.month == month }
+        override fun observeByYearMonth(year: Int, month: Int): Flow<com.tapledger.core.database.entity.BudgetPeriodEntity?> = emptyFlow()
+        override fun getAllPeriods(): Flow<List<com.tapledger.core.database.entity.BudgetPeriodEntity>> = emptyFlow()
+        override suspend fun getAllPeriodsSync(): List<com.tapledger.core.database.entity.BudgetPeriodEntity> = storage.values.toList()
+        override suspend fun getPeriodForTimestamp(timestamp: Long): com.tapledger.core.database.entity.BudgetPeriodEntity? = storage.values.firstOrNull { timestamp >= it.startAt && timestamp < it.endAt }
+        override suspend fun getEarliestPeriod(): com.tapledger.core.database.entity.BudgetPeriodEntity? = storage.values.minByOrNull { it.startAt }
+        override suspend fun getLatestPeriod(): com.tapledger.core.database.entity.BudgetPeriodEntity? = storage.values.maxByOrNull { it.startAt }
+        override suspend fun getOpenPeriodForTimestamp(timestamp: Long): com.tapledger.core.database.entity.BudgetPeriodEntity? = storage.values.firstOrNull { it.status == com.tapledger.core.model.BudgetPeriodStatus.OPEN && timestamp >= it.startAt && timestamp < it.endAt }
+        override suspend fun getFirstOpenPeriod(): com.tapledger.core.database.entity.BudgetPeriodEntity? = storage.values.filter { it.status == com.tapledger.core.model.BudgetPeriodStatus.OPEN }.minByOrNull { it.startAt }
+        override suspend fun getClosedPeriodEndingAfter(startOfDayTimestamp: Long): com.tapledger.core.database.entity.BudgetPeriodEntity? =
+            storage.values.firstOrNull { it.status == com.tapledger.core.model.BudgetPeriodStatus.CLOSED && it.endAt > startOfDayTimestamp }
+        override suspend fun getClosedPeriodForTimestamp(timestamp: Long): com.tapledger.core.database.entity.BudgetPeriodEntity? =
+            storage.values.firstOrNull { it.status == com.tapledger.core.model.BudgetPeriodStatus.CLOSED && timestamp >= it.startAt && timestamp < it.endAt }
+    }
+
     private lateinit var transactionDao: FakeTransactionDao
     private lateinit var allocationDao: FakeTransactionAllocationDao
     private lateinit var auditLogDao: FakeAuditLogDao
+    private lateinit var accountDao: FakeAccountDao
+    private lateinit var categoryDao: FakeCategoryDao
+    private lateinit var budgetPeriodDao: FakeBudgetPeriodDao
     private lateinit var repository: TransactionRepository
 
     @Before
@@ -134,12 +200,18 @@ class TransactionStateMachineTest {
         transactionDao = FakeTransactionDao()
         allocationDao = FakeTransactionAllocationDao()
         auditLogDao = FakeAuditLogDao()
+        accountDao = FakeAccountDao()
+        categoryDao = FakeCategoryDao()
+        budgetPeriodDao = FakeBudgetPeriodDao()
 
         repository = TransactionRepository(
             transactionRunner = DirectTransactionRunner(),
             transactionDao = transactionDao,
             transactionAllocationDao = allocationDao,
-            auditLogDao = auditLogDao
+            auditLogDao = auditLogDao,
+            accountDao = accountDao,
+            categoryDao = categoryDao,
+            budgetPeriodDao = budgetPeriodDao
         )
     }
 

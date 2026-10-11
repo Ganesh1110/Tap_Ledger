@@ -49,4 +49,7 @@ interface BudgetPeriodDao {
 
     @Query("SELECT * FROM budget_periods WHERE status = 'CLOSED' AND end_at > :startOfDayTimestamp LIMIT 1")
     suspend fun getClosedPeriodEndingAfter(startOfDayTimestamp: Long): BudgetPeriodEntity?
+
+    @Query("SELECT * FROM budget_periods WHERE status = 'CLOSED' AND :timestamp >= start_at AND :timestamp < end_at LIMIT 1")
+    suspend fun getClosedPeriodForTimestamp(timestamp: Long): BudgetPeriodEntity?
 }

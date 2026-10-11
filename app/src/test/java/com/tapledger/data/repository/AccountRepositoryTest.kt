@@ -80,6 +80,8 @@ class AccountRepositoryTest {
         override suspend fun getFirstOpenPeriod(): BudgetPeriodEntity? = storage.values.filter { it.status == BudgetPeriodStatus.OPEN }.minByOrNull { it.startAt }
         override suspend fun getClosedPeriodEndingAfter(startOfDayTimestamp: Long): BudgetPeriodEntity? =
             storage.values.firstOrNull { it.status == BudgetPeriodStatus.CLOSED && it.endAt > startOfDayTimestamp }
+        override suspend fun getClosedPeriodForTimestamp(timestamp: Long): BudgetPeriodEntity? =
+            storage.values.firstOrNull { it.status == BudgetPeriodStatus.CLOSED && timestamp >= it.startAt && timestamp < it.endAt }
     }
 
     private class FakeTransactionDao : TransactionDao {
