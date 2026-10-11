@@ -84,7 +84,6 @@ import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
-import com.tapledger.ui.theme.rememberAnimatedProgress
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -328,8 +327,7 @@ private fun CategoryManageRow(
     val spent = itemState.spentPaise
     val remaining = itemState.remainingPaise
 
-    val rawProgress = if (totalBudget > 0L) spent.toFloat() / totalBudget.toFloat() else 0f
-    val animatedProgress by rememberAnimatedProgress(targetFraction = rawProgress.coerceIn(0f, 1f))
+    val percentageBp = com.tapledger.ui.charts.util.ChartMath.computeBasisPoints(spent, totalBudget)
 
     // Default policies per bucket
     val bucketDefaultPolicy = when (itemState.category.defaultBucket) {
@@ -342,7 +340,7 @@ private fun CategoryManageRow(
     val isOverBudget = spent > totalBudget && totalBudget > 0L
     val progressColor = when {
         isOverBudget -> ExpenseRed
-        rawProgress >= 0.8f -> WarningAmber
+        percentageBp >= 8000 -> WarningAmber
         else -> IncomeGreen
     }
 
@@ -409,15 +407,14 @@ private fun CategoryManageRow(
             Spacer(modifier = Modifier.height(Spacing.xs))
 
             // Single continuous progress track
-            LinearProgressIndicator(
-                progress = { animatedProgress },
+            com.tapledger.ui.charts.render.ProgressBarRender(
+                percentageBp = percentageBp,
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                strokeCap = StrokeCap.Round
+                    .clip(RoundedCornerShape(3.dp))
             )
 
             Spacer(modifier = Modifier.height(Spacing.xs))

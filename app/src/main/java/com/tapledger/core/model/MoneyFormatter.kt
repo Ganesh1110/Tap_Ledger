@@ -132,4 +132,38 @@ object MoneyFormatter {
         }
         return "$formattedRest,$last3"
     }
+
+    /**
+     * Formats Long paise to compact Indian notation for chart axis ticks per Flow.md §17.1 D6.
+     * rupees = abs(paise)/100 (truncated).
+     * Under 1,000 gives "₹N"; under 1,00,000 gives one truncated decimal + "K";
+     * under 1,00,00,000 gives "L"; otherwise "Cr". Drop a trailing ".0"; prefix "-" if negative.
+     * Strictly integer math only.
+     */
+    fun formatCompactIndian(paise: Long): String {
+        val isNegative = paise < 0L
+        val absPaise = if (isNegative) -paise else paise
+        val rupees = absPaise / 100L
+
+        val formatted = when {
+            rupees < 1_000L -> "₹$rupees"
+            rupees < 1_00_000L -> {
+                val k = rupees / 1_000L
+                val rem = (rupees % 1_000L) / 100L
+                if (rem > 0L) "₹$k.${rem}K" else "₹${k}K"
+            }
+            rupees < 1_00_00_000L -> {
+                val l = rupees / 1_00_000L
+                val rem = (rupees % 1_00_000L) / 10_000L
+                if (rem > 0L) "₹$l.${rem}L" else "₹${l}L"
+            }
+            else -> {
+                val cr = rupees / 1_00_00_000L
+                val rem = (rupees % 1_00_00_000L) / 10_00_000L
+                if (rem > 0L) "₹$cr.${rem}Cr" else "₹${cr}Cr"
+            }
+        }
+
+        return if (isNegative) "-$formatted" else formatted
+    }
 }

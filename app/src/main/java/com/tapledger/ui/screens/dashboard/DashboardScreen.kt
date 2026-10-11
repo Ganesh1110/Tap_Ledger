@@ -105,7 +105,6 @@ import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
-import com.tapledger.ui.theme.rememberAnimatedProgress
 
 @Composable
 fun DashboardScreen(
@@ -583,12 +582,11 @@ private fun DashboardHeroCard(
     val totalSpent = budgetSummary.totalSpentPaise
     val remainingPaise = totalBudget - totalSpent
 
-    val rawProgress = if (totalBudget > 0L) totalSpent.toFloat() / totalBudget.toFloat() else 0f
-    val animatedProgress by rememberAnimatedProgress(targetFraction = rawProgress.coerceIn(0f, 1f))
-    val percentUsed = (rawProgress * 100).toInt()
+    val percentageBp = com.tapledger.ui.charts.util.ChartMath.computeBasisPoints(totalSpent, totalBudget)
+    val percentUsed = percentageBp / 100
 
     val isOverBudget = totalSpent > totalBudget && totalBudget > 0L
-    val isWarning = rawProgress >= 0.8f && !isOverBudget
+    val isWarning = percentageBp >= 8000 && !isOverBudget
 
     val progressColor = when {
         isOverBudget -> ExpenseRed
@@ -649,15 +647,14 @@ private fun DashboardHeroCard(
             Spacer(modifier = Modifier.height(Spacing.md))
 
             // Progress bar
-            LinearProgressIndicator(
-                progress = { animatedProgress },
+            com.tapledger.ui.charts.render.ProgressBarRender(
+                percentageBp = percentageBp,
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(10.dp)
-                    .clip(RoundedCornerShape(5.dp)),
-                color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                strokeCap = StrokeCap.Round
+                    .clip(RoundedCornerShape(5.dp))
             )
 
             Spacer(modifier = Modifier.height(Spacing.xs))
@@ -713,8 +710,7 @@ private fun DashboardCategoryRow(
     val netSpent = summary.netSpentPaise
     val remaining = summary.remainingPaise
 
-    val rawProgress = if (totalBudget > 0L) netSpent.toFloat() / totalBudget.toFloat() else 0f
-    val animatedProgress by rememberAnimatedProgress(targetFraction = rawProgress.coerceIn(0f, 1f))
+    val percentageBp = com.tapledger.ui.charts.util.ChartMath.computeBasisPoints(netSpent, totalBudget)
 
     val progressColor = when {
         summary.isExceeded -> ExpenseRed
@@ -784,15 +780,14 @@ private fun DashboardCategoryRow(
             Spacer(modifier = Modifier.height(Spacing.xs))
 
             // Single continuous progress track
-            LinearProgressIndicator(
-                progress = { animatedProgress },
+            com.tapledger.ui.charts.render.ProgressBarRender(
+                percentageBp = percentageBp,
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                strokeCap = StrokeCap.Round
+                    .clip(RoundedCornerShape(3.dp))
             )
 
             Spacer(modifier = Modifier.height(Spacing.xs))

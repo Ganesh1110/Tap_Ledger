@@ -149,15 +149,37 @@ Scope: Full codebase gap analysis and traceability matrix across all phases.
 
 ---
 
-## Summary of Audit Findings
+### Phase 13: Visual Analytics Layer (§17)
 
-1. **Floating-Point Violations:** `MerchantMapEntity` contains `confidence: Float`. `MoneyFormatter` uses `BigDecimal` and does not implement the spec'd string-based integer parsing.
-2. **Schema Incompatibilities:** Every table except `budget_adjustments` and `budget_allocations` differs from the Flow.md §2 schema (missing columns, wrong nullability, missing indexes).
-3. **Missing SQLite Immutability Triggers:** Rule M1 triggers are completely absent.
-4. **Missing DAO Guard:** `BudgetAllocationDao` lacks the negative budget check (`Base >= AdvNeg + AdjOut - AdjIn - AdvPos`).
-5. **State Machine Incompleteness:** `CONFIRMED` state is missing. Void/Restore does not preserve `previous_status`.
-6. **Net Worth Calculation Defect:** `AccountBalanceCalculator` discriminates by account type instead of following the type-agnostic `Assets - Liabilities = Σ Balance` identity.
-7. **Advance Ledger & Month-Close Arithmetic:** Advance ledger does not support `source_period_id` and `applied_to_period_id`. Budget envelope formula ignores advance ledger rows. Month-close deficit headroom capping and prioritized pool absorption are absent.
-8. **Reconciliation Proof Defect:** Mathematical proof algebraic identity check is absent.
-9. **Data Integrity Auditor:** Checks only an ad-hoc subset of ~6 rules with non-standard codes; missing 13 of the 19 formal rules.
-10. **Backup & Restore Protocol:** Missing Argon2id encryption, magic byte detection (`TPLF` vs `PK\x03\x04`), manifest bundling, notification spooling, and automatic rollback guard.
+| Spec §    | Requirement                                                                   | File / Class                                      |   Status    | Discrepancy Details                                                                                                                  | Test Name                                                   |
+| :-------- | :---------------------------------------------------------------------------- | :------------------------------------------------ | :---------: | :----------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------- |
+| **§17.1** | Shared Presentation Definitions (D1–D9, integer math, palette, formatCompact) | `MoneyFormatter.kt`, `ChartDefinitions.kt`, render | **MISSING** | Basis points (D1), largest remainder percent (D2), pace (D3), projection (D4), nice ticks (D5), compact Indian labels (D6), Okabe-Ito palette (D9). | `ChartDefinitionsTest.kt`, `ContrastAccessibilityTest.kt`   |
+| **§17.2** | V1–V4 Dashboard Visuals (Hero ring, burn-up, bucket rings, 6-period trend)   | `DashboardScreen.kt`, `DashboardViewModel.kt`     | **MISSING** | Dashboard hero ring with pace (V1), burn-up line with projection (V2), 50/30/20 bucket rings (V3), and 6-period clustered trend (V4). | `DashboardVisualsTest.kt`                                   |
+| **§17.2** | V5–V6 Budget Visuals (Bullet bars, category donut with refund exclusions)     | `CategoryManagementScreen.kt`, Budget screens     | **MISSING** | Category envelope bullet bars with rollover segments (V5), category donut with D2 percentages and refund exclusions (V6).            | `BudgetVisualsTest.kt`                                      |
+| **§17.2** | V7–V8 Transaction & Merchant Visuals (Calendar heatmap, top 8 merchants)     | `TransactionsScreen.kt`, `InsightsScreen.kt`      | **MISSING** | Daily spending calendar heatmap in 5 integer quantiles (V7), top 8 merchants by categorized expense (V8).                             | `TransactionVisualsTest.kt`                                 |
+| **§17.2** | V9–V10 Account & Net Worth Visuals (Net worth line/area, account composition) | `AccountsScreen.kt`, `AccountsViewModel.kt`       | **MISSING** | Net worth line with 3M/6M/1Y/All ranges and scrub (V9), diverging asset/liability bars and CC utilization gauge (V10).               | `AccountVisualsTest.kt`                                     |
+| **§17.2** | V11–V13 Close, Reconciliation & Diagnostics Visuals                           | `MonthCloseScreen.kt`, `StatementScreen.kt`, etc. | **MISSING** | Month-close advance rollover preview bars (V11), reconciliation waterfall bridge (V12), diagnostics severity bar (V13).              | `CloseAndReconciliationVisualsTest.kt`                       |
+| **§17.2** | Insights Sub-Screen (S_Insights) & Navigation                                 | `InsightsScreen.kt`, `TapLedgerNavGraph.kt`       | **MISSING** | Dedicated Insights sub-screen with 4 tabs (Cash flow, Calendar, Merchants, Categories) accessed from Dashboard.                      | `InsightsNavigationTest.kt`                                 |
+| **§17.7** | Zero-Float Static Analysis Allowlist & Invariant Suite (I1–I14)               | `ZeroFloatScannerTest.kt`, Invariant tests        | **MISSING** | Narrow allowlist permitting Float strictly in `ui/charts/render/**`; 14 formal invariants verified by named unit tests.               | `ZeroFloatScannerTest.kt`, `VisualInvariantsTest.kt`        |
+
+---
+
+## Current Audit Status & Summary
+
+1. **Phases 1–12 (Flow.md v2.6 Conformance): COMPLETE & FULLY IMPLEMENTED.**
+   - Money Core (§1): 64-bit integer paise throughout all calculation engines, DAOs, and models. Zero floating-point arithmetic.
+   - Database Schema, Migrations & Rule M1 Triggers (§2, §8.2, §13.2): Fully verified and active.
+   - Notification Ingestion & Deduplication (§3, §5.1, §5.2): 3-tier pipeline with 60s window and UPI reference checks.
+   - Transaction Lifecycle & Undo Framework (§4, §12): 5-state finite state machine with reversible soft deletes.
+   - Account Balance, Drift & Net Worth Mathematics (§6): Type-agnostic balance summation ($Assets - Liabilities = NetWorth$).
+   - Transfer Architecture & Pairing (§7): Two-legged transfers with atomic counterparty linkages.
+   - 50/30/20 Envelope Budget Engine (§8): Needs/Wants/Savings envelopes, rule B2 DAO guard, goal status for savings.
+   - Multi-Split & Capacity-Capped Refunds (§9): Apportionment logic capped by original category spend capacity.
+   - Budget Period Lifecycle & Month-Close Engine (§10): Sequential ordered closing, headroom-capped deficit absorption, and atomic reopen.
+   - Bank Statement Reconciliation Engine & Proof (§11): 5-term algebraic identity proved across boundaries.
+   - Data Integrity & Invariant Auditor (§12): All 19 formal invariant rules implemented and checked.
+   - Atomic Backup, Security & System Architecture (§13, §14, §15): Argon2id + AES-256-GCM backup, crash-resilient disk spooling with `fsync`, automatic rollback guard, `allowBackup="false"`, no internet, `FLAG_SECURE`.
+2. **Phase 13 (Visual Analytics Layer - Flow.md v2.7 §17): IN PROGRESS (Phase 0 Complete).**
+   - Specification amendment complete (§17 added with definitions D1–D9, catalog V1–V13, invariants I1–I14, scanner rule §17.7).
+   - Visual Analytics Layer is strictly read-only presentation over authoritative existing calculation engines.
+

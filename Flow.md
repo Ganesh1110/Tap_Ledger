@@ -1,6 +1,6 @@
 # TapLedger: Complete System Flows & Mathematical Specification
 
-> **Version:** 2.6 (Formal Specification & Production Engine Architecture)  
+> **Version:** 2.7 (Formal Specification & Production Engine Architecture)  
 > **Target OS:** Android 10+ (API 29–36, Android 16 Ready), Optimized for Xiaomi/HyperOS, Samsung OneUI, and Pixel  
 > **Core Architectural Principles:** Single-user, 100% offline-first, Zero floating-point arithmetic (`Long` paise only), Transfer-level double-entry and envelope integrity, Asia/Kolkata (`IST`) timezone.
 
@@ -24,6 +24,7 @@
 14. [Security, Privacy, and System Health Architecture](#14-security-privacy-and-system-health-architecture)
 15. [End-to-End Application Screen Flow](#15-end-to-end-application-screen-flow)
 16. [Engineering Guarantees & Non-Claims](#16-engineering-guarantees--non-claims)
+17. [Visual Analytics Layer](#17-visual-analytics-layer)
 
 ---
 
@@ -774,6 +775,7 @@ flowchart TD
         S_Backup["Backup & Restore Screen\n• Persistent SAF Folder Setup\n• Encrypted .tapledger Export\n• PRAGMA Integrity Checks\n• Safe Restore Protocol"]
         S_Setup["Reliability Setup Screen\n• HyperOS / OneUI Permission Cards\n• Restricted Settings Unlock Guide"]
         S_Settings["Settings & Security Screen\n• Biometric App Lock Toggle\n• Auto-purge Alert Retention\n• Diagnostic Auditor Entry"]
+        S_Insights["Insights Screen\n• Cash Flow (12-Period Trend)\n• Spending Calendar Heatmap\n• Top Merchants Breakdown\n• Category Donut with Period Selector"]
     end
 
     S_Onboard -->|"Complete Setup"| S_Dash
@@ -784,6 +786,7 @@ flowchart TD
     S_Dash -->|"Reconcile Pill"| S_Stmt
     S_Dash -->|"Close Month Pill"| S_Close
     S_Dash -->|"Tap Month Switcher Header"| S_PeriodSetup
+    S_Dash -->|"Insights Action"| S_Insights
 
     S_Tx -->|"Contextual FAB"| S_Manual
     S_Tx -->|"Tap Transaction Row"| S_TxDetail
@@ -813,3 +816,82 @@ flowchart TD
 2. **Crash & Power-Loss Resistance:** All SQLite mutations execute in `WAL` mode inside Room transactions (`database.withTransaction {}`). Uncommitted changes are rolled back on power loss.
 3. **Transfer-Level Double-Entry & Envelope Integrity:** Transfers enforce balanced two-legged accounting (`T3`), split allocations equal parent transaction amounts (`A1`), and overspending is persistently rolled forward without violating budget non-negativity (`B2`, §10.3).
 4. **Local Network Isolation:** The application declares no internet permissions, ensuring financial data cannot be transmitted over the network by the app itself. _(User-exported files via SAF are as secure as the external storage destination chosen by the user; local app-private storage is unencrypted at rest and accessible on rooted devices)._
+5. **Presentation Projection Non-Claims:** Projection lines (D4) and pace estimates (D3) are display-only visual estimates, not ledger values. They are never recorded in database tables or month-close records.
+
+---
+
+## 17. Visual Analytics Layer
+
+The Visual Analytics Layer is a strictly READ-ONLY presentation layer operating over the authoritative calculation engines (`BudgetCalculator`, `AccountBalanceCalculator`, `MonthCloseEngine`, `StatementReconciliationEngine`, `MoneyFormatter`, `DateTimeUtils`).
+
+### 17.1 Shared Presentation Definitions
+
+- **D1 Basis points:** $\text{bp} = \lfloor \text{part} \times 10{,}000 / \text{whole} \rfloor$; $\text{whole} \le 0$ gives $0$.
+- **D2 Percent labels:** slices are apportioned in bp by largest remainder so they sum to exactly $10{,}000$ (tie-break: larger remainder, then larger value, then ascending id). Display = $\text{bp}/100$ with 2 decimals, via integer math.
+- **D3 Pace (OPEN period containing now only):** $\text{totalDays} = (\text{end\_at} - \text{start\_at}) / 86{,}400{,}000$; $\text{elapsedDays} = \text{clamp}(\lfloor (\text{nowIST} - \text{start\_at}) / 86{,}400{,}000 \rfloor + 1, 1, \text{totalDays})$; $\text{expectedSpend} = \lfloor \text{budget} \times \text{elapsedDays} / \text{totalDays} \rfloor$.
+- **D4 Projection (display-only estimate):** $\text{projected} = \lfloor \text{spent} \times \text{totalDays} / \text{elapsedDays} \rfloor$, shown only when $\text{elapsedDays} \ge 5$, labeled "Projection (estimate, not a ledger value)", drawn dashed.
+- **D5 Nice axis ticks:** step is the smallest value of the form $\{1, 2, 5\} \times 10^k$ paise that yields $\le 5$ intervals; $\text{axis max} = \lceil \text{max} / \text{step} \rceil \times \text{step}$; the zero baseline is always present; negatives are supported.
+- **D6 Compact Indian labels (axis ticks only; tooltips and cards use full formatPaiseToRupees):** $\text{rupees} = \lfloor |\text{paise}| / 100 \rfloor$. Under 1,000 gives "₹N"; under 1,00,000 gives one truncated decimal + "K"; under 1,00,00,000 gives "L"; otherwise "Cr". Drop a trailing ".0"; prefix "-" if negative. Add `formatCompactIndian` to `MoneyFormatter` with tests.
+- **D7 Money animation:** interpolate Long as $\text{start} + (\text{end} - \text{start}) \times \text{permille} / 1000$ ($\text{permille}$ is an Int $0..1000$, `Math.multiplyExact`). Never Float*Long. If the system animator duration scale is 0, render the final state with no animation.
+- **D8 Ring/bar fill is capped at 100% visually.** When $\text{percentageUsed} > 100$, draw a hatched overflow segment plus a "!" icon (Needs/Wants only).
+- **D9 Palette: color-blind-safe (Okabe-Ito based).** Needs = `#0072B2`, Wants = `#E69F00`, Savings = `#009E73`. Income/expense text keeps the existing `IncomeGreen`/`ExpenseRed` tokens. Series never rely on color alone (add labels, patterns, or icons). Provide light and dark variants. Contrast $\ge 4.5:1$ for text and $\ge 3:1$ for graphical objects against their surface, verified by a `src/test` contrast test (floating math is allowed in `src/test` only).
+
+### 17.2 Visual Catalog
+
+- **V1 Dashboard hero ring (S_Dash):** `DashboardHeroSpend` / `DashboardHeroBudget` (§8.5), center = remaining, color by the §8.4 state, pace tick via D3. For a CLOSED period show the final value, no pace.
+- **V2 Burn-up line (S_Dash, expandable):** cumulative daily Needs+Wants NetSpent vs the linear pace line vs the budget cap, plus the D4 projection. **INVARIANT:** the last cumulative point $\equiv$ `DashboardHeroSpend`. Split transactions contribute per allocation; bucket resolution must match `BudgetCalculator` (`bucket_snapshot`).
+- **V3 Bucket rings 50/30/20 (S_Dash):** three rings. Needs and Wants show NetSpent vs AdjustedBudget. Savings shows ActualSavings vs its AdjustedBudget as a goal (check icon when `isGoalAchieved`).
+- **V4 Six-period trend (S_Dash):** clustered bars of actual income, spent, and saved from `month_closes`, plus a savings-rate line ($\text{total\_saved} \times 10{,}000 / \text{actual\_income}$ bp, hidden if income is 0). The current OPEN period is shown hatched and labeled "In progress".
+- **V5 Envelope bullet bars (S_Budget):** per category, spent vs AdjustedBudget, a base marker, a striped carried-in segment (AdvPos), a shaded applied-deficit segment (AdvNeg), and D8 overflow. Savings uses goal styling.
+- **V6 Category donut (S_Budget toggle):** Needs+Wants categories with $\text{NetSpent} > 0$, top 6 plus "Other", D2 percentages. Net-negative (refund-heavy) categories are excluded from the donut and listed in the legend as "Net refund". Tap shows a selection card.
+- **V7 Spending calendar heatmap (S_Tx header and Insights):** daily Needs+Wants NetSpent in 5 intensity levels by integer quantile. Tapping a day applies the existing date filter if present, otherwise shows a tooltip.
+- **V8 Top merchants (Insights):** top 8 by CATEGORIZED expense, grouped by the same normalized merchant key the ingestion pipeline uses.
+- **V9 Net worth line/area (S_Acct):** ranges 3M / 6M / 1Y / All. Points are month-ends via the existing $\text{Balance}(A, \text{asOf})$ plus a live point for now. Horizontal-drag scrub shows date and ₹ value, and vertical scroll must pass through. Toggle to Assets/Liabilities stacked view. **INVARIANTS:** the final point $\equiv$ current NetWorth; points for CLOSED periods equal `month_closes.closing_balances_json` totals.
+- **V10 Account composition (S_Acct):** diverging bars per account (assets right, liabilities left, sorted by $|\text{balance}|$) and a credit-card utilization gauge using the §6.2 Utilization% formula. Gauge zones (presentation only): <30 normal, 30-70 caution, >70 high, each with an icon and label.
+- **V11 Advance rollover bars (S_Close):** per-category diverging bars for carry (POSITIVE), sweep, applied deficit (NEGATIVE), and uncovered pool (hatched). Data comes from a read-only `MonthCloseEngine.preview(periodId)` that runs the identical logic without writing. **INVARIANT (property test):** preview rows $\equiv$ the ledger rows produced by the real close.
+- **V12 Reconciliation bridge (S_Stmt):** waterfall $\text{AppBalance}(\text{end}) \to \text{opening diff} \to \text{MISSING\_IN\_APP} \to \text{MISSING\_IN\_STMT} \to \text{DISCREPANCY} \to \text{TIMING\_DIFFERENCE} \to \text{StmtClosing}$, driven by the existing `computeReconciliationProof` output. A non-zero residual is drawn as a red bar and the screen must not show "Reconciled".
+- **V13 (P2) Diagnostics severity bar (S_Diag):** count of violations by CRITICAL / ERROR / WARNING from `DataIntegrityChecker`.
+- **Insights screen (S_Insights):** reached from a Dashboard "Insights" action: tabs = Cash flow (V4 over 12 periods), Calendar (V7), Merchants (V8), Categories (V6 with a period selector).
+
+### 17.3 UI Requirements for Every Chart
+
+1. **Presentation States:** Every visual must handle loading skeleton, empty state (with explanatory prompt), error state, and populated data state. Edge cases—zero budget, zero income, a single data point, and negative NetSpent—must all render cleanly without division by zero.
+2. **Accessibility (a11y):**
+   - Provide a dynamic `contentDescription` summarizing the visual with formatted ₹ amounts.
+   - Provide an accessible "Show as table" tabular toggle for complex multi-series charts (V2, V4, V9, V11, V12).
+   - Ensure touch targets $\ge 48\,\text{dp}$.
+   - Guarantee zero visual clipping at 200% system font scale.
+   - Complete support for both Material 3 Light and Dark color schemes.
+3. **Performance & Composition Hygiene:**
+   - Visual data builders are pure $O(n)$ transformations executing on `Dispatchers.Default`.
+   - All chart state models are annotated `@Immutable`.
+   - Custom drawing utilizes `drawWithCache` for path caching (zero memory allocations per drawing frame).
+   - ViewModels expose presentation states via `StateFlow` configured with `stateIn(WhileSubscribed(5_000))`.
+   - Data loading executes with a bounded number of DAO queries independent of transaction row counts; never load full transaction entity lists for presentation-tier aggregation.
+4. **Typography & Formatting:**
+   - All text labels sourced from Android string resources (`@StringRes`).
+   - All rupee values formatted strictly via `MoneyFormatter` utilizing tabular numerals (`FontFeatureSettings = "tnum"`).
+
+### 17.4 Required Invariant Tests
+
+- **I1:** V2 last cumulative point $\equiv$ `DashboardHeroSpend`.
+- **I2:** V6 slices sum to included total and basis points sum to exactly $10{,}000$.
+- **I3:** V3 bucket totals $\equiv$ `BudgetCalculator` bucket sums.
+- **I4:** V4 closed period points $\equiv$ `month_closes` historical totals.
+- **I5:** V9 final point $\equiv$ current NetWorth, and closed period points $\equiv$ `closing_balances_json`.
+- **I6:** V10 $\sum \text{assets} - \sum \text{liabilities} \equiv \text{NetWorth}$.
+- **I7:** V11 `MonthCloseEngine.preview(periodId)` rows $\equiv$ real month close advance ledger mutations.
+- **I8:** V12 residual $\equiv 0$ on valid data, and equals mathematical proof residual otherwise.
+- **I9:** `status IN ('IGNORED', 'VOIDED', 'PENDING', 'CONFIRMED')` excluded from spend visuals; `PENDING` included in balance visuals.
+- **I10:** `account_id IS NULL` excluded from balance visuals, and banner displayed when $N > 0$.
+- **I11:** IST boundary precision: 00:00 IST, 28/29/30/31-day months, and leap year 2028. Every IST day is exactly $86{,}400{,}000\,\text{ms}$.
+- **I12:** ₹100 Cr values do not overflow 64-bit paise arithmetic; overflow triggers `ChartState.Error`.
+- **I13:** Savings envelopes never render in red or with "Exceeded" status (§8.4).
+- **I14:** `Float` appears strictly inside `com.tapledger.ui.charts.render/**` and is rejected everywhere else.
+
+### 17.7 Zero-Float Static Analysis Allowlist & Enforcement
+
+1. **Storage & Financial Logic Invariant:** All financial numbers remain strictly signed 64-bit integer paise (`Long`), basis points (`Int`, 10,000 = 100%), and permille (`Int`, 0..1000). Primitives `Double` and `BigDecimal` remain 100% prohibited across the entire project repository.
+2. **Narrow UI Render Allowlist:** Primitive `Float` is permitted strictly within `com.tapledger.ui.charts.render/**` where Jetpack Compose canvas geometry (`DrawScope`, `Canvas`, `Path`, angles, coordinates) fundamentally requires it. All values entering this package must arrive as integer paise or basis points and be converted to float at the final drawing step.
+3. **Static Scanner Verification:** `ZeroFloatScannerTest` scans all Kotlin files in `app/src/main`. Any appearance of `Double` or `BigDecimal` anywhere, or `Float` outside `com.tapledger.ui.charts.render/**`, immediately fails the build.
+

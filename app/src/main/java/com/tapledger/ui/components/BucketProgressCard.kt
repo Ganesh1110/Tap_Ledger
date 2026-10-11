@@ -17,7 +17,6 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,11 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tapledger.core.model.BudgetBucket
+import com.tapledger.ui.charts.render.ProgressBarRender
+import com.tapledger.ui.charts.util.ChartMath
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
-import com.tapledger.ui.theme.rememberAnimatedProgress
 
 @Composable
 fun BucketProgressCard(
@@ -47,11 +47,10 @@ fun BucketProgressCard(
     percentageBudget: Int? = null // e.g. 50, 30, 20
 ) {
     val remainingPaise = allocatedPaise - spentPaise
-    val rawFraction = if (allocatedPaise > 0L) spentPaise.toFloat() / allocatedPaise.toFloat() else 0f
-    val animatedProgress by rememberAnimatedProgress(targetFraction = rawFraction.coerceIn(0f, 1f))
+    val percentageBp = ChartMath.computeBasisPoints(spentPaise, allocatedPaise)
 
     val isOverBudget = spentPaise > allocatedPaise && allocatedPaise > 0L
-    val isWarning = rawFraction >= 0.8f && !isOverBudget
+    val isWarning = percentageBp >= 8000 && !isOverBudget
 
     val progressColor = when {
         isOverBudget -> ExpenseRed
@@ -128,15 +127,14 @@ fun BucketProgressCard(
             Spacer(modifier = Modifier.height(Spacing.xs))
 
             // Progress track: single continuous bar with rounded caps
-            LinearProgressIndicator(
-                progress = { animatedProgress },
+            ProgressBarRender(
+                percentageBp = percentageBp,
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp)),
-                color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                strokeCap = StrokeCap.Round
+                    .clip(RoundedCornerShape(4.dp))
             )
 
             Spacer(modifier = Modifier.height(Spacing.sm))
