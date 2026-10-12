@@ -152,6 +152,49 @@ class StatementReconciliationViewModel @Inject constructor(
         }
     }
 
+    fun importPdfStatement(
+        accountId: Long,
+        inputStream: java.io.InputStream,
+        password: String? = null,
+        openingBalanceRupees: String = "",
+        closingBalanceRupees: String = "",
+        periodStart: Long? = null,
+        periodEnd: Long? = null,
+        onSuccess: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                val openingPaise = if (openingBalanceRupees.isNotBlank()) {
+                    try { MoneyFormatter.toPaise(openingBalanceRupees) } catch (_: Exception) { null }
+                } else null
+
+                val closingPaise = if (closingBalanceRupees.isNotBlank()) {
+                    try { MoneyFormatter.toPaise(closingBalanceRupees) } catch (_: Exception) { null }
+                } else null
+
+                val importId = statementRepository.importPdfStatement(
+                    accountId = accountId,
+                    inputStream = inputStream,
+                    password = password?.ifBlank { null },
+                    openingBalancePaise = openingPaise,
+                    closingBalancePaise = closingPaise,
+                    periodStart = periodStart,
+                    periodEnd = periodEnd
+                )
+
+                val newImport = statementRepository.getImportById(importId)
+                if (newImport != null) {
+                    selectImport(newImport)
+                }
+                onSuccess()
+            } catch (e: com.tapledger.data.statement.PdfPasswordRequiredException) {
+                _uiState.update { it.copy(errorMessage = e.message) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to parse and import PDF statement") }
+            }
+        }
+    }
+
     fun createAppTransactionFromLine(line: StatementLineEntity, categoryId: Long) {
         viewModelScope.launch {
             try {

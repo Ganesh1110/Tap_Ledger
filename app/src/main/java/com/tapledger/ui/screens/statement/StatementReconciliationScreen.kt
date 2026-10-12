@@ -22,16 +22,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,17 +53,33 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import com.tapledger.data.statement.PdfPasswordRequiredException
+import com.tapledger.data.statement.StatementPdfParser
+import java.io.ByteArrayInputStream
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import android.provider.OpenableColumns
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -127,7 +149,7 @@ fun StatementReconciliationScreen(
                 actions = {
                     if (state.imports.isNotEmpty()) {
                         IconButton(onClick = { showImportDialog = true }) {
-                            Icon(Icons.Default.FileUpload, contentDescription = "Import CSV")
+                            Icon(Icons.Default.FileUpload, contentDescription = "Import Statement")
                         }
                     }
                 },
@@ -171,14 +193,14 @@ fun StatementReconciliationScreen(
                 )
                 Spacer(modifier = Modifier.height(Spacing.xs))
                 Text(
-                    text = "Import a bank CSV statement to verify ledger entries against official statements.",
+                    text = "Import a bank PDF or CSV statement to verify ledger entries against official statements.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(Spacing.md))
 
-                // Short CSV format hint
+                // Format hint
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -187,14 +209,14 @@ fun StatementReconciliationScreen(
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Text(
-                            text = "Supported CSV Format:",
+                            text = "Supported Statement Formats:",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Date (YYYY-MM-DD), Narration/Merchant, Withdrawal/Debit, Deposit/Credit",
+                            text = "• Official Bank PDF Statements (HDFC, SBI, ICICI, Axis, etc.)\n• Password-protected PDFs supported securely on-device\n• Bank CSV exports with Date, Narration, Withdrawal, Deposit",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp
@@ -209,7 +231,7 @@ fun StatementReconciliationScreen(
                 ) {
                     Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text("Import CSV Statement")
+                    Text("Import PDF / CSV Statement")
                 }
             }
         } else {
@@ -455,10 +477,10 @@ fun StatementReconciliationScreen(
     }
 
     if (showImportDialog) {
-        ImportStatementCsvDialog(
+        ImportStatementDialog(
             accounts = state.accounts,
             onDismiss = { showImportDialog = false },
-            onImport = { accountId, csv, openRupees, closeRupees ->
+            onImportCsv = { accountId, csv, openRupees, closeRupees ->
                 val now = DateTimeUtils.nowEpochMillis()
                 viewModel.importCsvStatement(
                     accountId = accountId,
@@ -469,6 +491,21 @@ fun StatementReconciliationScreen(
                     periodEnd = now
                 )
                 showImportDialog = false
+            },
+            onImportPdf = { accountId, pdfBytes, password, openRupees, closeRupees, periodStart, periodEnd ->
+                val now = DateTimeUtils.nowEpochMillis()
+                viewModel.importPdfStatement(
+                    accountId = accountId,
+                    inputStream = ByteArrayInputStream(pdfBytes),
+                    password = password,
+                    openingBalanceRupees = openRupees,
+                    closingBalanceRupees = closeRupees,
+                    periodStart = periodStart ?: (now - (86400000L * 30)),
+                    periodEnd = periodEnd ?: now,
+                    onSuccess = {
+                        showImportDialog = false
+                    }
+                )
             }
         )
     }
@@ -577,23 +614,113 @@ private fun StatementLineCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ImportStatementCsvDialog(
+fun ImportStatementDialog(
     accounts: List<AccountEntity>,
     onDismiss: () -> Unit,
-    onImport: (Long, String, String, String) -> Unit
+    onImportCsv: (Long, String, String, String) -> Unit,
+    onImportPdf: (Long, ByteArray, String?, String, String, Long?, Long?) -> Unit,
+    initialTab: Int = 0
 ) {
+    var selectedTab by remember { mutableStateOf(initialTab) } // 0: PDF, 1: CSV
     var selectedAccount by remember { mutableStateOf<AccountEntity?>(accounts.firstOrNull()) }
-    var csvText by remember { mutableStateOf("") }
+    var showAccountMenu by remember { mutableStateOf(false) }
+
+    // Balances
     var openBalance by remember { mutableStateOf("") }
     var closeBalance by remember { mutableStateOf("") }
-    var showAccountMenu by remember { mutableStateOf(false) }
+
+    // CSV fields
+    var csvText by remember { mutableStateOf("") }
+
+    // PDF fields
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var pdfBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pdfFileName by remember { mutableStateOf<String?>(null) }
+    var isEncrypted by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var parsedLineCount by remember { mutableStateOf<Int?>(null) }
+    var parseError by remember { mutableStateOf<String?>(null) }
+    var isParsingPdf by remember { mutableStateOf(false) }
+    var detectedPeriodStart by remember { mutableStateOf<Long?>(null) }
+    var detectedPeriodEnd by remember { mutableStateOf<Long?>(null) }
+
+    fun inspectPdf(bytes: ByteArray, pwd: String?) {
+        isParsingPdf = true
+        coroutineScope.launch {
+            try {
+                val result = withContext(Dispatchers.Default) {
+                    StatementPdfParser.parsePdf(
+                        inputStream = ByteArrayInputStream(bytes),
+                        password = pwd?.ifBlank { null }
+                    )
+                }
+                isEncrypted = false
+                parseError = null
+                parsedLineCount = result.lines.size
+                if (result.detectedOpeningBalancePaise != null) {
+                    openBalance = String.format(Locale.US, "%.2f", result.detectedOpeningBalancePaise / 100.0)
+                }
+                if (result.detectedClosingBalancePaise != null) {
+                    closeBalance = String.format(Locale.US, "%.2f", result.detectedClosingBalancePaise / 100.0)
+                }
+                detectedPeriodStart = result.detectedPeriodStart
+                detectedPeriodEnd = result.detectedPeriodEnd
+            } catch (e: PdfPasswordRequiredException) {
+                isEncrypted = true
+                parseError = e.message
+                parsedLineCount = null
+            } catch (e: Exception) {
+                parseError = e.message ?: "Failed to read or parse PDF"
+                parsedLineCount = null
+            } finally {
+                isParsingPdf = false
+            }
+        }
+    }
+
+    val pdfLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            try {
+                var name = "statement.pdf"
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIdx != -1 && cursor.moveToFirst()) {
+                        name = cursor.getString(nameIdx)
+                    }
+                }
+                pdfFileName = name
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                pdfBytes = bytes
+                password = ""
+                isEncrypted = false
+                parseError = null
+                parsedLineCount = null
+                if (bytes != null) {
+                    inspectPdf(bytes, null)
+                }
+            } catch (e: Exception) {
+                parseError = e.message ?: "Failed to open PDF file"
+            }
+        }
+    }
+
+    val canConfirm = if (selectedTab == 0) {
+        selectedAccount != null && pdfBytes != null && (!isEncrypted || password.isNotBlank()) && !isParsingPdf
+    } else {
+        selectedAccount != null && csvText.isNotBlank()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Import Bank Statement CSV",
+                text = "Import Bank Statement",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -605,6 +732,23 @@ fun ImportStatementCsvDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                    ) {
+                        Text("Bank PDF")
+                    }
+                    SegmentedButton(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                    ) {
+                        Text("CSV / Text")
+                    }
+                }
+
                 Text("Select Account:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Box {
                     OutlinedButton(
@@ -629,47 +773,225 @@ fun ImportStatementCsvDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = openBalance,
-                    onValueChange = { openBalance = it },
-                    label = { Text("Opening Balance (₹)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (selectedTab == 0) {
+                    if (pdfBytes == null) {
+                        OutlinedButton(
+                            onClick = { pdfLauncher.launch("application/pdf") },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Select Bank PDF")
+                        }
+                        Text(
+                            text = "Supports official e-statements from HDFC, SBI, ICICI, Axis and others. PDF text extraction & decryption runs 100% offline on your device.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = pdfFileName ?: "statement.pdf",
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(onClick = { pdfLauncher.launch("application/pdf") }) {
+                                        Text("Change", fontSize = 12.sp)
+                                    }
+                                }
 
-                OutlinedTextField(
-                    value = closeBalance,
-                    onValueChange = { closeBalance = it },
-                    label = { Text("Closing Balance (₹)") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal,
-                        imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                                if (isParsingPdf) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                        Text("Analyzing statement...", fontSize = 12.sp)
+                                    }
+                                }
 
-                OutlinedTextField(
-                    value = csvText,
-                    onValueChange = { csvText = it },
-                    label = { Text("Paste CSV Content") },
-                    placeholder = { Text("Date,Narration,Withdrawal,Deposit\n2026-10-01,Groceries,450.00,0.00") },
-                    minLines = 4,
-                    maxLines = 8,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                                if (isEncrypted) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "Password Protected",
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                    OutlinedTextField(
+                                        value = password,
+                                        onValueChange = { password = it },
+                                        label = { Text("Statement Password") },
+                                        placeholder = { Text("e.g. PAN + DOB") },
+                                        singleLine = true,
+                                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                                Icon(
+                                                    imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                    contentDescription = "Toggle password visibility"
+                                                )
+                                            }
+                                        },
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Button(
+                                        onClick = {
+                                            pdfBytes?.let { inspectPdf(it, password) }
+                                        },
+                                        enabled = password.isNotBlank() && !isParsingPdf,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Unlock & Inspect")
+                                    }
+                                }
+
+                                if (parsedLineCount != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "Detected $parsedLineCount transactions",
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+
+                                if (parseError != null && !isEncrypted) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = parseError ?: "Parse failed",
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = openBalance,
+                            onValueChange = { openBalance = it },
+                            label = { Text("Opening Balance (₹)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Next
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = closeBalance,
+                            onValueChange = { closeBalance = it },
+                            label = { Text("Closing Balance (₹)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Done
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = openBalance,
+                        onValueChange = { openBalance = it },
+                        label = { Text("Opening Balance (₹)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Next
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = closeBalance,
+                        onValueChange = { closeBalance = it },
+                        label = { Text("Closing Balance (₹)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Next
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = csvText,
+                        onValueChange = { csvText = it },
+                        label = { Text("Paste CSV Content") },
+                        placeholder = { Text("Date,Narration,Withdrawal,Deposit\n2026-10-01,Groceries,450.00,0.00") },
+                        minLines = 4,
+                        maxLines = 8,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     val accId = selectedAccount?.id ?: return@Button
-                    onImport(accId, csvText, openBalance, closeBalance)
-                }
+                    if (selectedTab == 0) {
+                        val bytes = pdfBytes ?: return@Button
+                        onImportPdf(
+                            accId,
+                            bytes,
+                            password.ifBlank { null },
+                            openBalance,
+                            closeBalance,
+                            detectedPeriodStart,
+                            detectedPeriodEnd
+                        )
+                    } else {
+                        onImportCsv(accId, csvText, openBalance, closeBalance)
+                    }
+                },
+                enabled = canConfirm
             ) {
                 Text("Import")
             }
@@ -679,6 +1001,21 @@ fun ImportStatementCsvDialog(
                 Text("Cancel")
             }
         }
+    )
+}
+
+@Composable
+fun ImportStatementCsvDialog(
+    accounts: List<AccountEntity>,
+    onDismiss: () -> Unit,
+    onImport: (Long, String, String, String) -> Unit
+) {
+    ImportStatementDialog(
+        accounts = accounts,
+        onDismiss = onDismiss,
+        onImportCsv = onImport,
+        onImportPdf = { _, _, _, _, _, _, _ -> },
+        initialTab = 1
     )
 }
 

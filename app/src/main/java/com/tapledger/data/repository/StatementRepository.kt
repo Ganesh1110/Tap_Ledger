@@ -56,10 +56,73 @@ class StatementRepository @Inject constructor(
         periodEnd: Long
     ): Long {
         val now = DateTimeUtils.nowEpochMillis()
+        val dummyImportId = 0L
+        val rawLines = StatementCsvParser.parseCsv(csvContent, dummyImportId, now)
+        return importParsedLines(
+            accountId = accountId,
+            rawLines = rawLines,
+            format = format,
+            openingBalancePaise = openingBalancePaise,
+            closingBalancePaise = closingBalancePaise,
+            periodStart = periodStart,
+            periodEnd = periodEnd,
+            now = now
+        )
+    }
 
+    suspend fun importPdfStatement(
+        accountId: Long,
+        inputStream: java.io.InputStream,
+        password: String? = null,
+        openingBalancePaise: Long? = null,
+        closingBalancePaise: Long? = null,
+        periodStart: Long? = null,
+        periodEnd: Long? = null
+    ): Long {
+        val now = DateTimeUtils.nowEpochMillis()
+        val dummyImportId = 0L
+        val pdfResult = com.tapledger.data.statement.StatementPdfParser.parsePdf(
+            inputStream = inputStream,
+            password = password,
+            importId = dummyImportId,
+            createdAt = now
+        )
+        val finalOpening = openingBalancePaise?.takeIf { it != 0L }
+            ?: pdfResult.detectedOpeningBalancePaise
+            ?: 0L
+        val finalClosing = closingBalancePaise?.takeIf { it != 0L }
+            ?: pdfResult.detectedClosingBalancePaise
+            ?: 0L
+        val finalStart = periodStart?.takeIf { it != 0L }
+            ?: pdfResult.detectedPeriodStart
+            ?: DateTimeUtils.getStartOfDayEpochMillis(now)
+        val finalEnd = periodEnd?.takeIf { it != 0L }
+            ?: pdfResult.detectedPeriodEnd
+            ?: DateTimeUtils.getEndOfDayEpochMillis(now)
+
+        return importParsedLines(
+            accountId = accountId,
+            rawLines = pdfResult.lines,
+            format = "PDF",
+            openingBalancePaise = finalOpening,
+            closingBalancePaise = finalClosing,
+            periodStart = finalStart,
+            periodEnd = finalEnd,
+            now = now
+        )
+    }
+
+    private suspend fun importParsedLines(
+        accountId: Long,
+        rawLines: List<StatementLineEntity>,
+        format: String,
+        openingBalancePaise: Long,
+        closingBalancePaise: Long,
+        periodStart: Long,
+        periodEnd: Long,
+        now: Long
+    ): Long {
         return database.withTransaction {
-            val dummyImportId = 0L
-            val rawLines = StatementCsvParser.parseCsv(csvContent, dummyImportId, now)
             val totalDebits = rawLines.sumOf { it.debitPaise }
             val totalCredits = rawLines.sumOf { it.creditPaise }
             val lineCount = rawLines.size

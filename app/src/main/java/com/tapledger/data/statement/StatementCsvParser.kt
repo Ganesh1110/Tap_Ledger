@@ -14,7 +14,13 @@ import java.util.Locale
  * Supports HDFC, ICICI, SBI, Axis, and generic bank CSV dialects with header auto-detection
  * and strictly zero-float paise conversion.
  */
-object StatementCsvParser {
+object StatementCsvParser : StatementParser {
+
+    override fun parse(
+        content: String,
+        importId: Long,
+        createdAt: Long
+    ): List<StatementLineEntity> = parseCsv(content, importId, createdAt)
 
     private val DATE_FORMATTERS = listOf(
         DateTimeFormatter.ofPattern("dd-MM-yyyy"),
@@ -306,6 +312,9 @@ object StatementCsvParser {
             .replace("₹", "")
             .replace("Rs.", "", ignoreCase = true)
             .replace("INR", "", ignoreCase = true)
+            .replace("CR", "", ignoreCase = true)
+            .replace("DR", "", ignoreCase = true)
+            .replace("/-", "")
             .trim()
     }
 }
