@@ -46,6 +46,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -129,6 +130,13 @@ fun StatementReconciliationScreen(
         }
     }
 
+    LaunchedEffect(state.successMessage) {
+        state.successMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearSuccessMessage()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -147,15 +155,22 @@ fun StatementReconciliationScreen(
                     }
                 },
                 actions = {
-                    if (state.imports.isNotEmpty()) {
-                        IconButton(onClick = { showImportDialog = true }) {
-                            Icon(Icons.Default.FileUpload, contentDescription = "Import Statement")
-                        }
+                    IconButton(onClick = { showImportDialog = true }) {
+                        Icon(Icons.Default.FileUpload, contentDescription = "Import Statement")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { showImportDialog = true },
+                icon = { Icon(Icons.Default.FileUpload, contentDescription = null) },
+                text = { Text("Import PDF Statement") },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -710,11 +725,13 @@ fun ImportStatementDialog(
         }
     }
 
-    val canConfirm = if (selectedTab == 0) {
+    var isImporting by remember { mutableStateOf(false) }
+
+    val canConfirm = (if (selectedTab == 0) {
         selectedAccount != null && pdfBytes != null && (!isEncrypted || password.isNotBlank()) && !isParsingPdf
     } else {
         selectedAccount != null && csvText.isNotBlank()
-    }
+    }) && !isImporting
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -976,6 +993,7 @@ fun ImportStatementDialog(
             Button(
                 onClick = {
                     val accId = selectedAccount?.id ?: return@Button
+                    isImporting = true
                     if (selectedTab == 0) {
                         val bytes = pdfBytes ?: return@Button
                         onImportPdf(
@@ -993,7 +1011,17 @@ fun ImportStatementDialog(
                 },
                 enabled = canConfirm
             ) {
-                Text("Import")
+                if (isImporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Processing Statement...")
+                } else {
+                    Text(if (selectedTab == 0) "Import & Process PDF" else "Import & Process CSV")
+                }
             }
         },
         dismissButton = {

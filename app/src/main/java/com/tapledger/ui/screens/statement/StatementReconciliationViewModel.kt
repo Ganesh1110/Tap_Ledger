@@ -146,8 +146,19 @@ class StatementReconciliationViewModel @Inject constructor(
                 if (newImport != null) {
                     selectImport(newImport)
                 }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        successMessage = "Successfully processed ${newImport?.lineCount ?: 0} statement transactions"
+                    )
+                }
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to import CSV statement") }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Failed to import CSV statement"
+                    )
+                }
             }
         }
     }
@@ -163,6 +174,7 @@ class StatementReconciliationViewModel @Inject constructor(
         onSuccess: () -> Unit = {}
     ) {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             try {
                 val openingPaise = if (openingBalanceRupees.isNotBlank()) {
                     try { MoneyFormatter.toPaise(openingBalanceRupees) } catch (_: Exception) { null }
@@ -186,11 +198,22 @@ class StatementReconciliationViewModel @Inject constructor(
                 if (newImport != null) {
                     selectImport(newImport)
                 }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        successMessage = "Successfully processed ${newImport?.lineCount ?: 0} transactions from PDF statement"
+                    )
+                }
                 onSuccess()
             } catch (e: com.tapledger.data.statement.PdfPasswordRequiredException) {
-                _uiState.update { it.copy(errorMessage = e.message) }
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to parse and import PDF statement") }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.message ?: "Failed to parse and process PDF statement"
+                    )
+                }
             }
         }
     }
@@ -222,5 +245,9 @@ class StatementReconciliationViewModel @Inject constructor(
 
     fun clearErrorMessage() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    fun clearSuccessMessage() {
+        _uiState.update { it.copy(successMessage = null) }
     }
 }

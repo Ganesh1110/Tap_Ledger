@@ -101,7 +101,8 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.Accounts.route) {
             AccountsScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) }
             )
         }
         composable(Screen.BackupRestore.route) {

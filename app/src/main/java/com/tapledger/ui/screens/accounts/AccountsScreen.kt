@@ -14,9 +14,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,7 +76,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun AccountsScreen(
     viewModel: AccountsViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToStatements: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -101,6 +106,22 @@ fun AccountsScreen(
                         text = "Accounts & Balances",
                         fontWeight = FontWeight.Bold
                     )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToStatements) {
+                        Icon(
+                            imageVector = Icons.Default.FileUpload,
+                            contentDescription = "Import Statement PDF"
+                        )
+                    }
                 },
                 colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -261,6 +282,18 @@ fun AccountsScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Correct Balance", fontWeight = FontWeight.Bold)
                             Text("Fix today's balance via adjustment (Recommended)", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            showActionDialog = false
+                            onNavigateToStatements()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Import Statement (PDF / CSV)", fontWeight = FontWeight.Bold)
+                            Text("Reconcile ledger against official bank statement", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     OutlinedButton(

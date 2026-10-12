@@ -16,5 +16,6 @@ data class StatementReconciliationUiState(
     val selectedImportLines: List<StatementLineEntity> = emptyList(),
     val isArithmeticConsistent: Boolean = true,
     val reconciliationBridgeState: ChartState<ReconciliationBridgeModel> = ChartState.Loading,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val successMessage: String? = null
 )
