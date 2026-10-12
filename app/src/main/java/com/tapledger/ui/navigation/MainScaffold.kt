@@ -29,6 +29,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.hilt.navigation.compose.hiltViewModel
 
+import com.tapledger.ui.components.isKeyboardVisible
+
 data class BottomNavItem(
     val route: String,
     val title: String,
@@ -72,13 +74,14 @@ fun MainScaffold(
     }
 
     val isPrimaryDestination = BOTTOM_NAV_ITEMS.any { it.route == currentRoute }
+    val isKeyboardOpen = isKeyboardVisible()
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         // Zero insets for outer scaffold so top status-bar insets are never double-applied to screen TopAppBars
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (isPrimaryDestination) {
+            if (isPrimaryDestination && !isKeyboardOpen) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer
                 ) {

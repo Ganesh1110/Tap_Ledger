@@ -57,13 +57,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tapledger.ui.components.keyboardAware
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.tapledger.core.model.AccountType
 import com.tapledger.core.model.BudgetBucket
@@ -122,6 +126,7 @@ fun OnboardingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .keyboardAware()
         ) {
             when (state.step) {
                 OnboardingStep.O1_WELCOME -> {
@@ -289,10 +294,14 @@ private fun StepIncome(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(Spacing.lg),
-        verticalArrangement = Arrangement.SpaceBetween
+            .padding(Spacing.lg)
     ) {
-        Column {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+        ) {
             Text(
                 text = "What is your monthly take-home income?",
                 style = MaterialTheme.typography.headlineSmall,
@@ -315,7 +324,10 @@ private fun StepIncome(
                 label = { Text("Monthly Net Income") },
                 prefix = { Text("₹ ") },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
                 isError = error != null,
                 supportingText = {
                     if (error != null) {
@@ -327,6 +339,8 @@ private fun StepIncome(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+
+        Spacer(modifier = Modifier.height(Spacing.md))
 
         Button(
             onClick = onContinue,
@@ -355,8 +369,7 @@ private fun StepAccounts(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(Spacing.lg),
-        verticalArrangement = Arrangement.SpaceBetween
+            .padding(Spacing.lg)
     ) {
         LazyColumn(
             modifier = Modifier
@@ -609,8 +622,7 @@ private fun StepBudget(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(Spacing.lg),
-        verticalArrangement = Arrangement.SpaceBetween
+            .padding(Spacing.lg)
     ) {
         LazyColumn(
             modifier = Modifier

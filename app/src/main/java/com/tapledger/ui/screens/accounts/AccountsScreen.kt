@@ -2,6 +2,8 @@ package com.tapledger.ui.screens.accounts
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -312,7 +314,12 @@ fun AccountsScreen(
             onDismissRequest = { showCorrectBalanceDialog = false },
             title = { Text("Correct ${summary.account.name} Balance") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Text(
                         text = "Current App Balance: ${MoneyFormatter.formatPaiseToRupees(summary.currentBalancePaise)}",
                         style = MaterialTheme.typography.bodyMedium
@@ -389,7 +396,12 @@ fun AccountsScreen(
             onDismissRequest = { showEditStartingDialog = false },
             title = { Text("Edit ${acc.name} Starting Balance") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     if (isStartingLocked) {
                         Text(
                             text = "Opening balance is locked because this budget period is closed (§6.1 rule 5). To adjust today's balance, use Correct Balance.",

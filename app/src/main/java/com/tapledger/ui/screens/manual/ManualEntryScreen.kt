@@ -61,6 +61,7 @@ import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.Spacing
+import com.tapledger.ui.components.keyboardAware
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -140,6 +141,7 @@ fun ManualEntryScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = Spacing.md)
+                .keyboardAware(imePadding = false, imeNestedScroll = true)
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {

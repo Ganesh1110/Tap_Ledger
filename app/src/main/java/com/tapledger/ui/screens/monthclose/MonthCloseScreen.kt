@@ -1,6 +1,8 @@
 package com.tapledger.ui.screens.monthclose
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -382,7 +384,12 @@ fun MonthCloseScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
                     Text(
                         text = "After closing, this period becomes read-only. Unused budget will be carried forward or swept according to category rules, and overspending will be recorded in the Advance Ledger.",
                         style = MaterialTheme.typography.bodyMedium,

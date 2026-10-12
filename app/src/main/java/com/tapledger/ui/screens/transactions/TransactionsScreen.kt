@@ -58,6 +58,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import com.tapledger.ui.components.isKeyboardVisible
+import com.tapledger.ui.components.keyboardAware
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
@@ -133,20 +135,23 @@ fun TransactionsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                text = { Text("Add Transaction") },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                expanded = isExpandedFab,
-                onClick = onNavigateToManualEntry,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
+            if (!isKeyboardVisible()) {
+                ExtendedFloatingActionButton(
+                    text = { Text("Add Transaction") },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    expanded = isExpandedFab,
+                    onClick = onNavigateToManualEntry,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .keyboardAware()
         ) {
             // Search Input & Filter Chips Header
             Column(
