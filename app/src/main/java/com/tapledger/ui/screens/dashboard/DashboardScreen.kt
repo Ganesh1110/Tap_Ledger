@@ -531,7 +531,7 @@ fun DashboardScreen(
                     }
                 }
 
-                // 2. V1: Hero Ring Card
+                // 2. V1: Hero Ring Card (Total budget, spent, remaining, net worth)
                 item(key = "budget_hero_ring") {
                     DashboardHeroRingCard(
                         heroRingState = state.heroRingState,
@@ -539,29 +539,14 @@ fun DashboardScreen(
                     )
                 }
 
-                // 3. V2: Burn-Up Line Card
+                // 3. V2: Burn-Up Line Card (Pace vs cap, scrubbable)
                 item(key = "budget_burn_up") {
                     DashboardBurnUpCard(
                         burnUpState = state.burnUpChartState
                     )
                 }
 
-                // 4. V3: 50/30/20 Bucket Rings
-                item(key = "budget_bucket_rings") {
-                    DashboardBucketRingsCard(
-                        bucketRingsState = state.bucketRingsState,
-                        onManageCategories = onNavigateToCategories
-                    )
-                }
-
-                // 5. V4: Six-Period Trend Clustered Bars
-                item(key = "six_period_trend") {
-                    DashboardSixPeriodTrendCard(
-                        trendState = state.sixPeriodTrendState
-                    )
-                }
-
-                // 4. Category Budgets
+                // 4. Category Envelopes (Core daily operational view)
                 state.budgetSummary?.let { bs ->
                     item(key = "category_budgets_header") {
                         SectionHeader(
@@ -580,7 +565,29 @@ fun DashboardScreen(
                     }
                 }
 
-                // 5. Accounts (Compact cards)
+                // 5. Recent Activity (Quick ledger verification)
+                if (state.recentTransactions.isNotEmpty()) {
+                    item(key = "recent_activity_header") {
+                        SectionHeader(
+                            title = "Recent Activity",
+                            subtitle = "Latest ledger entries",
+                            actionText = "View All",
+                            onActionClick = onNavigateToTransactions
+                        )
+                    }
+
+                    items(
+                        items = state.recentTransactions,
+                        key = { "tx_${it.id}" }
+                    ) { tx ->
+                        TransactionRow(
+                            tx = tx,
+                            onClick = onNavigateToTransactions
+                        )
+                    }
+                }
+
+                // 6. Accounts (Available balances & credit owed)
                 if (state.accountSummaries.isNotEmpty()) {
                     item(key = "accounts_header") {
                         SectionHeader(
@@ -602,26 +609,20 @@ fun DashboardScreen(
                     }
                 }
 
-                // 6. Recent Activity
-                if (state.recentTransactions.isNotEmpty()) {
-                    item(key = "recent_activity_header") {
-                        SectionHeader(
-                            title = "Recent Activity",
-                            subtitle = "Latest ledger entries",
-                            actionText = "View All",
-                            onActionClick = onNavigateToTransactions
-                        )
-                    }
+                // 7. V3: 50/30/20 Budget Buckets
+                item(key = "budget_bucket_rings") {
+                    DashboardBucketRingsCard(
+                        bucketRingsState = state.bucketRingsState,
+                        onManageCategories = onNavigateToCategories
+                    )
+                }
 
-                    items(
-                        items = state.recentTransactions,
-                        key = { "tx_${it.id}" }
-                    ) { tx ->
-                        TransactionRow(
-                            tx = tx,
-                            onClick = onNavigateToTransactions
-                        )
-                    }
+                // 8. V4: Multi-Period Trend (Collapsed by default on home screen, full deep-dive in Insights)
+                item(key = "six_period_trend") {
+                    DashboardSixPeriodTrendCard(
+                        trendState = state.sixPeriodTrendState,
+                        initiallyExpanded = false
+                    )
                 }
             }
         }
@@ -664,7 +665,7 @@ private fun DashboardCategoryRow(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                contentDescription = "${summary.allocation.categoryNameSnapshot}: spent ${netSpent / 100} of ${totalBudget / 100} rupees, remaining ${remaining / 100} rupees"
+                contentDescription = "${summary.allocation.categoryNameSnapshot}: spent ${MoneyFormatter.formatPaiseToRupees(netSpent)} of ${MoneyFormatter.formatPaiseToRupees(totalBudget)}, remaining ${MoneyFormatter.formatPaiseToRupees(remaining)}"
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(

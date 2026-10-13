@@ -59,7 +59,8 @@ fun DashboardHeroRingCard(
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
                 if (heroRingState is ChartState.Data) {
-                    contentDescription = heroRingState.data.contentDescription
+                    val nwText = if (netWorthPaise != null) ". Net worth: ${MoneyFormatter.formatPaiseToRupees(netWorthPaise)}" else ""
+                    contentDescription = heroRingState.data.contentDescription + nwText
                 }
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
