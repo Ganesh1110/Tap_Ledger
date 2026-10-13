@@ -11,9 +11,22 @@ import java.util.Locale
 import java.util.regex.Pattern
 import kotlin.math.abs
 
+import java.time.YearMonth
+
 class PdfPasswordRequiredException(
     message: String = "This PDF statement is password-protected. Please enter the statement password."
 ) : Exception(message)
+
+data class StatementMonthData(
+    val yearMonth: YearMonth,
+    val lines: List<StatementLineEntity>,
+    val openingBalancePaise: Long,
+    val closingBalancePaise: Long,
+    val periodStart: Long,
+    val periodEnd: Long,
+    val totalDebitsPaise: Long,
+    val totalCreditsPaise: Long
+)
 
 data class PdfStatementResult(
     val lines: List<StatementLineEntity>,
@@ -21,6 +34,8 @@ data class PdfStatementResult(
     val detectedClosingBalancePaise: Long?,
     val detectedPeriodStart: Long?,
     val detectedPeriodEnd: Long?,
+    val detectedMonths: List<YearMonth> = emptyList(),
+    val monthlyBreakdown: List<StatementMonthData> = emptyList(),
     val rawText: String
 )
 
@@ -89,13 +104,24 @@ object StatementPdfParser {
             stripper.sortByPosition = true
             val rawText = stripper.getText(document)
 
-            val detectedOpening = detectOpeningBalance(rawText)
-            val detectedClosing = detectClosingBalance(rawText)
-
             val lines = parseTextToLines(rawText, importId)
+
+            val detectedOpening = detectOpeningBalance(rawText) ?: lines.firstOrNull()?.let { first ->
+                first.balanceAfterPaise?.let { bal ->
+                    bal + first.debitPaise - first.creditPaise
+                }
+            }
+            val detectedClosing = detectClosingBalance(rawText) ?: lines.lastOrNull()?.balanceAfterPaise
 
             val minDate = lines.minOfOrNull { it.transactionDate }
             val maxDate = lines.maxOfOrNull { it.transactionDate }
+
+            val detectedMonths = lines.map { DateTimeUtils.toYearMonth(it.transactionDate) }.distinct().sorted()
+            val monthlyBreakdown = splitLinesIntoMonthlyBreakdown(
+                lines = lines,
+                overallOpeningPaise = detectedOpening,
+                overallClosingPaise = detectedClosing
+            )
 
             return PdfStatementResult(
                 lines = lines,
@@ -103,6 +129,8 @@ object StatementPdfParser {
                 detectedClosingBalancePaise = detectedClosing,
                 detectedPeriodStart = minDate,
                 detectedPeriodEnd = maxDate,
+                detectedMonths = detectedMonths,
+                monthlyBreakdown = monthlyBreakdown,
                 rawText = rawText
             )
         } finally {
@@ -110,6 +138,74 @@ object StatementPdfParser {
                 document.close()
             } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * Splits statement lines chronologically by calendar month (YearMonth) conforming to Flow.md §10 & §11.
+     * Computes exact monthly opening and closing balances preserving the statement chain invariant:
+     * Opening(Month_n) == Closing(Month_{n-1})
+     */
+    fun splitLinesIntoMonthlyBreakdown(
+        lines: List<StatementLineEntity>,
+        overallOpeningPaise: Long?,
+        overallClosingPaise: Long?
+    ): List<StatementMonthData> {
+        if (lines.isEmpty()) return emptyList()
+
+        val sortedLines = lines.sortedBy { it.transactionDate }
+        val grouped = sortedLines.groupBy { DateTimeUtils.toYearMonth(it.transactionDate) }.toSortedMap()
+
+        val result = mutableListOf<StatementMonthData>()
+        var runningBalance = overallOpeningPaise ?: sortedLines.firstOrNull()?.let { first ->
+            first.balanceAfterPaise?.let { it + first.debitPaise - first.creditPaise }
+        } ?: 0L
+
+        val monthKeys = grouped.keys.toList()
+        for (i in monthKeys.indices) {
+            val ym = monthKeys[i]
+            val monthLines = grouped[ym] ?: emptyList()
+            val totalDebits = monthLines.sumOf { it.debitPaise }
+            val totalCredits = monthLines.sumOf { it.creditPaise }
+
+            val firstLine = monthLines.firstOrNull()
+            val lastLine = monthLines.lastOrNull()
+
+            val monthOpening = if (i == 0 && overallOpeningPaise != null) {
+                overallOpeningPaise
+            } else if (firstLine?.balanceAfterPaise != null) {
+                firstLine.balanceAfterPaise!! + firstLine.debitPaise - firstLine.creditPaise
+            } else {
+                runningBalance
+            }
+
+            val monthClosing = if (i == monthKeys.lastIndex && overallClosingPaise != null) {
+                overallClosingPaise
+            } else if (lastLine?.balanceAfterPaise != null) {
+                lastLine.balanceAfterPaise!!
+            } else {
+                monthOpening + totalCredits - totalDebits
+            }
+
+            runningBalance = monthClosing
+
+            val startMillis = DateTimeUtils.getStartOfMonthEpochMillis(ym.year, ym.monthValue)
+            val endMillis = DateTimeUtils.getEndOfMonthEpochMillis(ym.year, ym.monthValue) - 1L
+
+            result.add(
+                StatementMonthData(
+                    yearMonth = ym,
+                    lines = monthLines,
+                    openingBalancePaise = monthOpening,
+                    closingBalancePaise = monthClosing,
+                    periodStart = startMillis,
+                    periodEnd = endMillis,
+                    totalDebitsPaise = totalDebits,
+                    totalCreditsPaise = totalCredits
+                )
+            )
+        }
+
+        return result
     }
 
     internal fun detectOpeningBalance(text: String): Long? {

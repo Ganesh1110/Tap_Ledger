@@ -204,4 +204,81 @@ class StatementPdfParserTest {
         assertThat(lines[2].debitPaise).isEqualTo(500_00L)
         assertThat(lines[2].balanceAfterPaise).isEqualTo(7500_00L)
     }
+
+    @Test
+    fun testMultiMonthStatementSeparationAndChainInvariant() {
+        val multiMonthStatementText = """
+            Date        Narration                  Withdrawal    Deposit       Balance
+            15/08/2026  SALARY AUGUST 2026                       50,000.00     50,000.00
+            20/08/2026  RENT AUGUST                15,000.00                   35,000.00
+            05/09/2026  GROCERIES SEPTEMBER         2,500.00                   32,500.00
+            18/09/2026  UTILITIES BILL              1,500.00                   31,000.00
+            02/10/2026  SALARY OCTOBER 2026                      55,000.00     86,000.00
+            10/10/2026  FESTIVAL SHOPPING           6,000.00                   80,000.00
+        """.trimIndent()
+
+        val lines = StatementPdfParser.parseTextToLines(multiMonthStatementText, importId = 200L)
+        assertThat(lines).hasSize(6)
+
+        val breakdowns = StatementPdfParser.splitLinesIntoMonthlyBreakdown(
+            lines = lines,
+            overallOpeningPaise = 0L,
+            overallClosingPaise = 80000_00L
+        )
+
+        // 1. Should differentiate into exactly 3 monthly statement breakdowns
+        assertThat(breakdowns).hasSize(3)
+
+        // Month 1: August 2026
+        val aug = breakdowns[0]
+        assertThat(aug.yearMonth).isEqualTo(java.time.YearMonth.of(2026, 8))
+        assertThat(aug.lines).hasSize(2)
+        assertThat(aug.openingBalancePaise).isEqualTo(0L)
+        assertThat(aug.totalCreditsPaise).isEqualTo(50000_00L)
+        assertThat(aug.totalDebitsPaise).isEqualTo(15000_00L)
+        assertThat(aug.closingBalancePaise).isEqualTo(35000_00L)
+        assertThat(aug.openingBalancePaise + aug.totalCreditsPaise - aug.totalDebitsPaise).isEqualTo(aug.closingBalancePaise)
+
+        // Month 2: September 2026
+        val sep = breakdowns[1]
+        assertThat(sep.yearMonth).isEqualTo(java.time.YearMonth.of(2026, 9))
+        assertThat(sep.lines).hasSize(2)
+        // Statement chain invariant: Opening(Sep) == Closing(Aug)
+        assertThat(sep.openingBalancePaise).isEqualTo(aug.closingBalancePaise)
+        assertThat(sep.openingBalancePaise).isEqualTo(35000_00L)
+        assertThat(sep.totalDebitsPaise).isEqualTo(4000_00L)
+        assertThat(sep.closingBalancePaise).isEqualTo(31000_00L)
+        assertThat(sep.openingBalancePaise + sep.totalCreditsPaise - sep.totalDebitsPaise).isEqualTo(sep.closingBalancePaise)
+
+        // Month 3: October 2026
+        val oct = breakdowns[2]
+        assertThat(oct.yearMonth).isEqualTo(java.time.YearMonth.of(2026, 10))
+        assertThat(oct.lines).hasSize(2)
+        // Statement chain invariant: Opening(Oct) == Closing(Sep)
+        assertThat(oct.openingBalancePaise).isEqualTo(sep.closingBalancePaise)
+        assertThat(oct.openingBalancePaise).isEqualTo(31000_00L)
+        assertThat(oct.totalCreditsPaise).isEqualTo(55000_00L)
+        assertThat(oct.totalDebitsPaise).isEqualTo(6000_00L)
+        assertThat(oct.closingBalancePaise).isEqualTo(80000_00L)
+        assertThat(oct.openingBalancePaise + oct.totalCreditsPaise - oct.totalDebitsPaise).isEqualTo(oct.closingBalancePaise)
+    }
+
+    @Test
+    fun testSingleMonthDetection() {
+        val singleMonthText = """
+            01/10/2026  SALARY OCTOBER                           50,000.00     50,000.00
+            05/10/2026  GROCERIES STORE             2,000.00                   48,000.00
+            15/10/2026  INTERNET BILL               1,000.00                   47,000.00
+        """.trimIndent()
+
+        val lines = StatementPdfParser.parseTextToLines(singleMonthText, importId = 300L)
+        val months = lines.map { com.tapledger.core.util.DateTimeUtils.toYearMonth(it.transactionDate) }.distinct()
+        assertThat(months).containsExactly(java.time.YearMonth.of(2026, 10))
+
+        val breakdowns = StatementPdfParser.splitLinesIntoMonthlyBreakdown(lines, 0L, 47000_00L)
+        assertThat(breakdowns).hasSize(1)
+        assertThat(breakdowns[0].yearMonth).isEqualTo(java.time.YearMonth.of(2026, 10))
+        assertThat(breakdowns[0].lines).hasSize(3)
+        assertThat(breakdowns[0].closingBalancePaise).isEqualTo(47000_00L)
+    }
 }

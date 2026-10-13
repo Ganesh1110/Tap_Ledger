@@ -132,7 +132,7 @@ class StatementReconciliationViewModel @Inject constructor(
                     0L
                 }
 
-                val importId = statementRepository.importStatement(
+                val importIds = statementRepository.importStatement(
                     accountId = accountId,
                     csvContent = csvContent,
                     format = "CSV",
@@ -142,14 +142,32 @@ class StatementReconciliationViewModel @Inject constructor(
                     periodEnd = periodEnd
                 )
 
-                val newImport = statementRepository.getImportById(importId)
+                val selectedId = importIds.lastOrNull()
+                val newImport = selectedId?.let { statementRepository.getImportById(it) }
                 if (newImport != null) {
                     selectImport(newImport)
                 }
+
+                val allCreated = importIds.mapNotNull { statementRepository.getImportById(it) }
+                val totalLines = allCreated.sumOf { it.lineCount }
+                val msg = if (allCreated.size > 1) {
+                    val monthsStr = allCreated.map {
+                        val ym = com.tapledger.core.util.DateTimeUtils.toYearMonth(it.periodStart)
+                        com.tapledger.core.util.DateTimeUtils.formatMonthYear(ym.year, ym.monthValue)
+                    }.distinct().joinToString(", ")
+                    "Successfully separated into ${allCreated.size} monthly statements ($monthsStr) with $totalLines total transactions"
+                } else if (newImport != null) {
+                    val ym = com.tapledger.core.util.DateTimeUtils.toYearMonth(newImport.periodStart)
+                    val monthName = com.tapledger.core.util.DateTimeUtils.formatMonthYear(ym.year, ym.monthValue)
+                    "Successfully processed $monthName statement with ${newImport.lineCount} transactions"
+                } else {
+                    "Statement processed successfully"
+                }
+
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        successMessage = "Successfully processed ${newImport?.lineCount ?: 0} statement transactions"
+                        successMessage = msg
                     )
                 }
             } catch (e: Exception) {
@@ -184,7 +202,7 @@ class StatementReconciliationViewModel @Inject constructor(
                     try { MoneyFormatter.toPaise(closingBalanceRupees) } catch (_: Exception) { null }
                 } else null
 
-                val importId = statementRepository.importPdfStatement(
+                val importIds = statementRepository.importPdfStatement(
                     accountId = accountId,
                     inputStream = inputStream,
                     password = password?.ifBlank { null },
@@ -194,14 +212,32 @@ class StatementReconciliationViewModel @Inject constructor(
                     periodEnd = periodEnd
                 )
 
-                val newImport = statementRepository.getImportById(importId)
+                val selectedId = importIds.lastOrNull()
+                val newImport = selectedId?.let { statementRepository.getImportById(it) }
                 if (newImport != null) {
                     selectImport(newImport)
                 }
+
+                val allCreated = importIds.mapNotNull { statementRepository.getImportById(it) }
+                val totalLines = allCreated.sumOf { it.lineCount }
+                val msg = if (allCreated.size > 1) {
+                    val monthsStr = allCreated.map {
+                        val ym = com.tapledger.core.util.DateTimeUtils.toYearMonth(it.periodStart)
+                        com.tapledger.core.util.DateTimeUtils.formatMonthYear(ym.year, ym.monthValue)
+                    }.distinct().joinToString(", ")
+                    "Successfully separated long PDF into ${allCreated.size} monthly statements ($monthsStr) with $totalLines total transactions"
+                } else if (newImport != null) {
+                    val ym = com.tapledger.core.util.DateTimeUtils.toYearMonth(newImport.periodStart)
+                    val monthName = com.tapledger.core.util.DateTimeUtils.formatMonthYear(ym.year, ym.monthValue)
+                    "Successfully processed $monthName statement with ${newImport.lineCount} transactions"
+                } else {
+                    "Statement processed successfully"
+                }
+
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        successMessage = "Successfully processed ${newImport?.lineCount ?: 0} transactions from PDF statement"
+                        successMessage = msg
                     )
                 }
                 onSuccess()
@@ -239,6 +275,21 @@ class StatementReconciliationViewModel @Inject constructor(
                 statementRepository.resolveLine(line)
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Failed to resolve statement line") }
+            }
+        }
+    }
+
+    fun updateImportBalances(importId: Long, openingPaise: Long, closingPaise: Long) {
+        viewModelScope.launch {
+            try {
+                statementRepository.updateImportBalances(importId, openingPaise, closingPaise)
+                val updated = statementRepository.getImportById(importId)
+                if (updated != null) {
+                    selectImport(updated)
+                }
+                _uiState.update { it.copy(successMessage = "Updated statement balances and verified arithmetic.") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to update balances") }
             }
         }
     }

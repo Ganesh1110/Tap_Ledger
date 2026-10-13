@@ -54,20 +54,45 @@ class StatementRepository @Inject constructor(
         closingBalancePaise: Long,
         periodStart: Long,
         periodEnd: Long
-    ): Long {
+    ): List<Long> {
         val now = DateTimeUtils.nowEpochMillis()
         val dummyImportId = 0L
         val rawLines = StatementCsvParser.parseCsv(csvContent, dummyImportId, now)
-        return importParsedLines(
-            accountId = accountId,
-            rawLines = rawLines,
-            format = format,
-            openingBalancePaise = openingBalancePaise,
-            closingBalancePaise = closingBalancePaise,
-            periodStart = periodStart,
-            periodEnd = periodEnd,
-            now = now
+        val breakdowns = com.tapledger.data.statement.StatementPdfParser.splitLinesIntoMonthlyBreakdown(
+            lines = rawLines,
+            overallOpeningPaise = openingBalancePaise,
+            overallClosingPaise = closingBalancePaise
         )
+
+        if (breakdowns.size > 1) {
+            val importIds = mutableListOf<Long>()
+            for (monthData in breakdowns) {
+                val id = importParsedLines(
+                    accountId = accountId,
+                    rawLines = monthData.lines,
+                    format = format,
+                    openingBalancePaise = monthData.openingBalancePaise,
+                    closingBalancePaise = monthData.closingBalancePaise,
+                    periodStart = monthData.periodStart,
+                    periodEnd = monthData.periodEnd,
+                    now = now
+                )
+                importIds.add(id)
+            }
+            return importIds
+        } else {
+            val id = importParsedLines(
+                accountId = accountId,
+                rawLines = rawLines,
+                format = format,
+                openingBalancePaise = openingBalancePaise,
+                closingBalancePaise = closingBalancePaise,
+                periodStart = periodStart,
+                periodEnd = periodEnd,
+                now = now
+            )
+            return listOf(id)
+        }
     }
 
     suspend fun importPdfStatement(
@@ -78,7 +103,7 @@ class StatementRepository @Inject constructor(
         closingBalancePaise: Long? = null,
         periodStart: Long? = null,
         periodEnd: Long? = null
-    ): Long {
+    ): List<Long> {
         val now = DateTimeUtils.nowEpochMillis()
         val dummyImportId = 0L
         val pdfResult = com.tapledger.data.statement.StatementPdfParser.parsePdf(
@@ -93,23 +118,66 @@ class StatementRepository @Inject constructor(
         val finalClosing = closingBalancePaise?.takeIf { it != 0L }
             ?: pdfResult.detectedClosingBalancePaise
             ?: 0L
-        val finalStart = periodStart?.takeIf { it != 0L }
-            ?: pdfResult.detectedPeriodStart
-            ?: DateTimeUtils.getStartOfDayEpochMillis(now)
-        val finalEnd = periodEnd?.takeIf { it != 0L }
-            ?: pdfResult.detectedPeriodEnd
-            ?: DateTimeUtils.getEndOfDayEpochMillis(now)
 
-        return importParsedLines(
-            accountId = accountId,
-            rawLines = pdfResult.lines,
-            format = "PDF",
-            openingBalancePaise = finalOpening,
-            closingBalancePaise = finalClosing,
-            periodStart = finalStart,
-            periodEnd = finalEnd,
-            now = now
-        )
+        val breakdowns = if (pdfResult.monthlyBreakdown.isNotEmpty()) {
+            pdfResult.monthlyBreakdown
+        } else {
+            com.tapledger.data.statement.StatementPdfParser.splitLinesIntoMonthlyBreakdown(
+                lines = pdfResult.lines,
+                overallOpeningPaise = finalOpening,
+                overallClosingPaise = finalClosing
+            )
+        }
+
+        if (breakdowns.size > 1) {
+            val importIds = mutableListOf<Long>()
+            for (monthData in breakdowns) {
+                val id = importParsedLines(
+                    accountId = accountId,
+                    rawLines = monthData.lines,
+                    format = "PDF",
+                    openingBalancePaise = monthData.openingBalancePaise,
+                    closingBalancePaise = monthData.closingBalancePaise,
+                    periodStart = monthData.periodStart,
+                    periodEnd = monthData.periodEnd,
+                    now = now
+                )
+                importIds.add(id)
+            }
+            return importIds
+        } else if (breakdowns.size == 1) {
+            val single = breakdowns[0]
+            val id = importParsedLines(
+                accountId = accountId,
+                rawLines = single.lines,
+                format = "PDF",
+                openingBalancePaise = single.openingBalancePaise,
+                closingBalancePaise = single.closingBalancePaise,
+                periodStart = single.periodStart,
+                periodEnd = single.periodEnd,
+                now = now
+            )
+            return listOf(id)
+        } else {
+            val finalStart = periodStart?.takeIf { it != 0L }
+                ?: pdfResult.detectedPeriodStart
+                ?: DateTimeUtils.getStartOfDayEpochMillis(now)
+            val finalEnd = periodEnd?.takeIf { it != 0L }
+                ?: pdfResult.detectedPeriodEnd
+                ?: DateTimeUtils.getEndOfDayEpochMillis(now)
+
+            val id = importParsedLines(
+                accountId = accountId,
+                rawLines = pdfResult.lines,
+                format = "PDF",
+                openingBalancePaise = finalOpening,
+                closingBalancePaise = finalClosing,
+                periodStart = finalStart,
+                periodEnd = finalEnd,
+                now = now
+            )
+            return listOf(id)
+        }
     }
 
     private suspend fun importParsedLines(
@@ -268,14 +336,57 @@ class StatementRepository @Inject constructor(
                 matchStatus = StatementMatchStatus.MATCHED
             )
             statementLineDao.update(updatedLine)
+            checkAndUpdateImportStatus(line.importId)
 
             txId
         }
     }
 
     suspend fun resolveLine(line: StatementLineEntity) {
-        val updated = line.copy(matchStatus = StatementMatchStatus.RESOLVED)
-        statementLineDao.update(updated)
+        statementLineDao.update(line.copy(matchStatus = StatementMatchStatus.RESOLVED))
+        checkAndUpdateImportStatus(line.importId)
+    }
+
+    suspend fun checkAndUpdateImportStatus(importId: Long) {
+        val importEntity = statementImportDao.getById(importId) ?: return
+        val lines = statementLineDao.getLinesForImportSync(importId)
+        val allHandled = lines.isNotEmpty() && lines.none { it.matchStatus == StatementMatchStatus.MISSING_IN_APP }
+        if (allHandled) {
+            statementImportDao.update(importEntity.copy(status = StatementImportStatus.RECONCILED))
+            val period = (if (importEntity.periodStart > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodStart) else null)
+                ?: (if (importEntity.periodEnd > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodEnd) else null)
+                ?: budgetPeriodDao.getPeriodForTimestamp(importEntity.createdAt)
+            period?.let { p ->
+                if (!p.isReviewed) {
+                    budgetPeriodDao.update(p.copy(isReviewed = true))
+                }
+            }
+        }
+    }
+
+    suspend fun updateImportBalances(importId: Long, openingPaise: Long, closingPaise: Long) {
+        val importEntity = statementImportDao.getById(importId) ?: return
+        val lines = statementLineDao.getLinesForImportSync(importId)
+        val isArithmeticValid = StatementReconciliationEngine.verifyStatementArithmetic(
+            openingBalancePaise = openingPaise,
+            lines = lines,
+            reportedClosingBalancePaise = closingPaise
+        )
+        val allHandled = lines.isNotEmpty() && lines.none { it.matchStatus == StatementMatchStatus.MISSING_IN_APP }
+        val finalStatus = if (allHandled) {
+            StatementImportStatus.RECONCILED
+        } else if (!isArithmeticValid) {
+            StatementImportStatus.ARITHMETIC_ERROR
+        } else {
+            StatementImportStatus.IMPORTED
+        }
+        statementImportDao.update(
+            importEntity.copy(
+                openingBalancePaise = openingPaise,
+                closingBalancePaise = closingPaise,
+                status = finalStatus
+            )
+        )
     }
 
     suspend fun getReconciliationProof(importId: Long): ReconciliationProof? {

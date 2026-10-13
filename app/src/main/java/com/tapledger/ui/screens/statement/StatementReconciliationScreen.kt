@@ -258,6 +258,18 @@ fun StatementReconciliationScreen(
             val totalDebitsPaise = lines.sumOf { it.debitPaise }
             val totalCreditsPaise = lines.sumOf { it.creditPaise }
 
+            val isFullyReviewed = lines.isNotEmpty() && missingCount == 0
+            val isMatchingDone = matchedCount > 0 || isFullyReviewed
+
+            val distinctMonthsInLines = remember(lines) {
+                lines.map { DateTimeUtils.toYearMonth(it.transactionDate) }.distinct().sorted()
+            }
+            var selectedMonthFilter by remember(selected?.id) { mutableStateOf<java.time.YearMonth?>(null) }
+            val displayLines = remember(lines, selectedMonthFilter) {
+                if (selectedMonthFilter == null) lines
+                else lines.filter { DateTimeUtils.toYearMonth(it.transactionDate) == selectedMonthFilter }
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -266,7 +278,109 @@ fun StatementReconciliationScreen(
                 contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
-                // 1. Reconciliation Stepper (Import -> Match -> Review)
+                // 1. Import Selector Chips (by Account & Month)
+                item(key = "import_chips") {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                    ) {
+                        items(state.imports, key = { it.id }) { imp ->
+                            val isSel = imp.id == selected?.id
+                            val account = state.accounts.firstOrNull { it.id == imp.accountId }
+                            val startYm = DateTimeUtils.toYearMonth(imp.periodStart)
+                            val endYm = DateTimeUtils.toYearMonth(imp.periodEnd)
+                            val monthLabel = if (startYm == endYm) {
+                                DateTimeUtils.formatMonthYear(startYm.year, startYm.monthValue)
+                            } else {
+                                "${DateTimeUtils.formatDate(imp.periodStart)} – ${DateTimeUtils.formatDate(imp.periodEnd)}"
+                            }
+                            val accName = account?.name?.take(10) ?: "Account"
+                            FilterChip(
+                                selected = isSel,
+                                onClick = { viewModel.selectImport(imp) },
+                                label = {
+                                    Text("$accName • $monthLabel")
+                                },
+                                leadingIcon = if (isSel) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null
+                            )
+                        }
+                    }
+                }
+
+                // 2. Selected Statement Month Header Card
+                selected?.let { imp ->
+                    item(key = "statement_month_header") {
+                        val account = state.accounts.firstOrNull { it.id == imp.accountId }
+                        val startYm = DateTimeUtils.toYearMonth(imp.periodStart)
+                        val endYm = DateTimeUtils.toYearMonth(imp.periodEnd)
+                        val monthTitle = if (startYm == endYm) {
+                            "${DateTimeUtils.formatMonthYear(startYm.year, startYm.monthValue)} Statement"
+                        } else {
+                            "Statement (${DateTimeUtils.formatDate(imp.periodStart)} – ${DateTimeUtils.formatDate(imp.periodEnd)})"
+                        }
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                            ),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(Spacing.md),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = monthTitle,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${account?.name ?: "Account"}${account?.identifierLast4?.let { " (•••• $it)" } ?: ""} • ${imp.lineCount} transactions",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(
+                                            when (imp.status) {
+                                                com.tapledger.core.model.StatementImportStatus.RECONCILED -> IncomeGreen.copy(alpha = 0.15f)
+                                                com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> ExpenseRed.copy(alpha = 0.2f)
+                                                else -> WarningAmber.copy(alpha = 0.2f)
+                                            }
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = when (imp.status) {
+                                            com.tapledger.core.model.StatementImportStatus.RECONCILED -> "RECONCILED"
+                                            com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> "ARITHMETIC ERROR"
+                                            else -> "IN REVIEW"
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when (imp.status) {
+                                            com.tapledger.core.model.StatementImportStatus.RECONCILED -> IncomeGreen
+                                            com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> ExpenseRed
+                                            else -> WarningAmber
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Reconciliation Stepper (Import -> Match -> Review)
                 item(key = "stepper") {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -280,32 +394,50 @@ fun StatementReconciliationScreen(
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            StepChip(number = 1, label = "Imported", isCompleted = true)
+                            StepChip(number = 1, label = "Imported", isCompleted = selected != null)
                             Text("→", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            StepChip(number = 2, label = "Matched", isCompleted = matchedCount > 0)
+                            StepChip(number = 2, label = "Matched", isCompleted = isMatchingDone)
                             Text("→", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            StepChip(number = 3, label = "Reviewed", isCompleted = state.isArithmeticConsistent)
+                            StepChip(number = 3, label = "Reviewed", isCompleted = isFullyReviewed)
                         }
                     }
                 }
 
-                // 2. Import Selector Chips
-                item(key = "import_chips") {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-                    ) {
-                        items(state.imports, key = { it.id }) { imp ->
-                            val isSel = imp.id == selected?.id
-                            FilterChip(
-                                selected = isSel,
-                                onClick = { viewModel.selectImport(imp) },
-                                label = {
-                                    Text("Stmt #${imp.id} • ${DateTimeUtils.formatDate(imp.createdAt)}")
-                                },
-                                leadingIcon = if (isSel) {
-                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                } else null
-                            )
+                if (isFullyReviewed) {
+                    item(key = "reviewed_success_card") {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = IncomeGreen.copy(alpha = 0.12f)
+                            ),
+                            border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.4f)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(Spacing.md),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = IncomeGreen,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(Spacing.sm))
+                                Column {
+                                    Text(
+                                        text = "Statement Fully Reviewed & Reconciled",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = IncomeGreen
+                                    )
+                                    Text(
+                                        text = "All ${lines.size} transactions are accounted for in your ledger.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -390,6 +522,24 @@ fun StatementReconciliationScreen(
                                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+
+                                if (!isPass) {
+                                    val inferredOpening = lines.firstOrNull()?.let { f -> f.balanceAfterPaise?.let { it + f.debitPaise - f.creditPaise } }
+                                    val inferredClosing = lines.lastOrNull()?.balanceAfterPaise
+                                    if (inferredOpening != null && inferredClosing != null) {
+                                        Spacer(modifier = Modifier.height(Spacing.xs))
+                                        OutlinedButton(
+                                            onClick = {
+                                                viewModel.updateImportBalances(imp.id, inferredOpening, inferredClosing)
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Auto-Align Balances from Statement Lines", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -402,8 +552,40 @@ fun StatementReconciliationScreen(
                     }
                 }
 
-                // 4. Collapsible Group: Missing in App (Actionable)
-                val missingLines = lines.filter { it.matchStatus == StatementMatchStatus.MISSING_IN_APP }
+                // 4. In-Statement Month Filter (if lines span multiple months)
+                if (distinctMonthsInLines.size > 1) {
+                    item(key = "month_filter_tabs") {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text(
+                                text = "Filter Lines by Month:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                                item {
+                                    FilterChip(
+                                        selected = selectedMonthFilter == null,
+                                        onClick = { selectedMonthFilter = null },
+                                        label = { Text("All Months (${lines.size})") }
+                                    )
+                                }
+                                items(distinctMonthsInLines) { ym ->
+                                    val count = lines.count { DateTimeUtils.toYearMonth(it.transactionDate) == ym }
+                                    FilterChip(
+                                        selected = selectedMonthFilter == ym,
+                                        onClick = { selectedMonthFilter = ym },
+                                        label = { Text("${DateTimeUtils.formatMonthYear(ym.year, ym.monthValue)} ($count)") }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 5. Collapsible Group: Missing in App (Actionable)
+                val missingLines = displayLines.filter { it.matchStatus == StatementMatchStatus.MISSING_IN_APP }
                 if (missingLines.isNotEmpty()) {
                     item(key = "header_missing") {
                         Card(
@@ -445,8 +627,8 @@ fun StatementReconciliationScreen(
                     }
                 }
 
-                // 5. Collapsible Group: Matched Lines
-                val matchedLines = lines.filter { it.matchStatus == StatementMatchStatus.MATCHED || it.matchStatus == StatementMatchStatus.RESOLVED }
+                // 6. Collapsible Group: Matched Lines
+                val matchedLines = displayLines.filter { it.matchStatus == StatementMatchStatus.MATCHED || it.matchStatus == StatementMatchStatus.RESOLVED }
                 if (matchedLines.isNotEmpty()) {
                     item(key = "header_matched") {
                         Card(
@@ -508,15 +690,14 @@ fun StatementReconciliationScreen(
                 showImportDialog = false
             },
             onImportPdf = { accountId, pdfBytes, password, openRupees, closeRupees, periodStart, periodEnd ->
-                val now = DateTimeUtils.nowEpochMillis()
                 viewModel.importPdfStatement(
                     accountId = accountId,
                     inputStream = ByteArrayInputStream(pdfBytes),
                     password = password,
                     openingBalanceRupees = openRupees,
                     closingBalanceRupees = closeRupees,
-                    periodStart = periodStart ?: (now - (86400000L * 30)),
-                    periodEnd = periodEnd ?: now,
+                    periodStart = periodStart,
+                    periodEnd = periodEnd,
                     onSuccess = {
                         showImportDialog = false
                     }
@@ -662,6 +843,7 @@ fun ImportStatementDialog(
     var isParsingPdf by remember { mutableStateOf(false) }
     var detectedPeriodStart by remember { mutableStateOf<Long?>(null) }
     var detectedPeriodEnd by remember { mutableStateOf<Long?>(null) }
+    var detectedMonths by remember { mutableStateOf<List<java.time.YearMonth>>(emptyList()) }
 
     fun inspectPdf(bytes: ByteArray, pwd: String?) {
         isParsingPdf = true
@@ -676,6 +858,7 @@ fun ImportStatementDialog(
                 isEncrypted = false
                 parseError = null
                 parsedLineCount = result.lines.size
+                detectedMonths = result.detectedMonths
                 if (result.detectedOpeningBalancePaise != null) {
                     openBalance = String.format(Locale.US, "%.2f", result.detectedOpeningBalancePaise / 100.0)
                 }
@@ -688,9 +871,11 @@ fun ImportStatementDialog(
                 isEncrypted = true
                 parseError = e.message
                 parsedLineCount = null
+                detectedMonths = emptyList()
             } catch (e: Exception) {
                 parseError = e.message ?: "Failed to read or parse PDF"
                 parsedLineCount = null
+                detectedMonths = emptyList()
             } finally {
                 isParsingPdf = false
             }
@@ -888,22 +1073,65 @@ fun ImportStatementDialog(
                                 }
 
                                 if (parsedLineCount != null) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Text(
-                                            text = "Detected $parsedLineCount transactions",
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Medium,
-                                            fontSize = 12.sp
-                                        )
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Text(
+                                                text = "Detected $parsedLineCount transactions",
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Medium,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+
+                                        if (detectedMonths.isNotEmpty()) {
+                                            val monthsLabel = detectedMonths.joinToString(", ") {
+                                                DateTimeUtils.formatMonthYear(it.year, it.monthValue)
+                                            }
+                                            if (detectedMonths.size == 1) {
+                                                Text(
+                                                    text = "Identified Statement Month: $monthsLabel",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            } else {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                                                        .padding(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Multi-Month Statement (${detectedMonths.size} Months Detected)",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text(
+                                                        text = monthsLabel,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        text = "TapLedger will automatically differentiate this statement into ${detectedMonths.size} monthly statements for accurate month-by-month reconciliation.",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 

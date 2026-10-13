@@ -299,4 +299,11 @@ class BudgetRepository @Inject constructor(
         )
         categoryDao.update(updated)
     }
+
+    suspend fun markPeriodReviewed(periodId: Long) {
+        val period = budgetPeriodDao.getById(periodId) ?: return
+        if (!period.isReviewed) {
+            budgetPeriodDao.update(period.copy(isReviewed = true, updatedAt = DateTimeUtils.nowEpochMillis()))
+        }
+    }
 }
