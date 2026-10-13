@@ -125,7 +125,8 @@ fun DashboardScreen(
     onNavigateToStatements: () -> Unit,
     onNavigateToMonthClose: () -> Unit,
     onNavigateToDiagnostics: () -> Unit,
-    onNavigateToInsights: () -> Unit = {}
+    onNavigateToInsights: () -> Unit = {},
+    onNavigateToAppLockSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -288,6 +289,14 @@ fun DashboardScreen(
                                                 onNavigateToDiagnostics()
                                             },
                                             leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("App Lock & Security") },
+                                            onClick = {
+                                                showSettingsMenu = false
+                                                onNavigateToAppLockSettings()
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
                                         )
                                         DropdownMenuItem(
                                             text = { Text("Reliability Setup") },

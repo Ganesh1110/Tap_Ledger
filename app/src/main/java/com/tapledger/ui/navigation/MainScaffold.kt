@@ -16,20 +16,24 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.hilt.navigation.compose.hiltViewModel
-
 import com.tapledger.ui.components.isKeyboardVisible
+import com.tapledger.ui.screens.mpin.MpinLockScreen
+import com.tapledger.ui.screens.mpin.MpinSetupScreen
 
 data class BottomNavItem(
     val route: String,
@@ -51,7 +55,57 @@ fun MainScaffold(
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val isOnboarded by viewModel.isOnboarded.collectAsState()
+    val isLocked by viewModel.isAppLocked.collectAsState()
+    val lockMessage by viewModel.lockMessage.collectAsState()
+    val shouldShowUpgradePrompt by viewModel.shouldShowUpgradePrompt.collectAsState()
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Observe application background/foreground transitions for app lock grace period & re-verification
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> viewModel.onAppBackgrounded()
+                Lifecycle.Event.ON_START -> viewModel.onAppForegrounded()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     if (isOnboarded == null) {
+        return
+    }
+
+    // 1. GATE ENTIRE UI WITH MPIN LOCK SCREEN
+    // Rendered before NavGraph so ZERO financial data is composed or visible behind it.
+    if (isLocked) {
+        MpinLockScreen(
+            mpinManager = viewModel.mpinManager,
+            customMessage = lockMessage,
+            onUnlocked = { viewModel.unlock() },
+            onNavigateToRestoreBackup = {
+                viewModel.unlock()
+            },
+            onEraseAllData = {
+                viewModel.eraseAllData()
+            }
+        )
+        return
+    }
+
+    // 2. EXISTING INSTALL UPGRADE PROMPT
+    // First launch after update prompt to setup MPIN for existing users
+    if (shouldShowUpgradePrompt) {
+        MpinSetupScreen(
+            mpinManager = viewModel.mpinManager,
+            canSkip = true,
+            onSkip = { viewModel.dismissUpgradePrompt() },
+            onSetupSuccess = { viewModel.dismissUpgradePrompt() }
+        )
         return
     }
 
@@ -78,7 +132,6 @@ fun MainScaffold(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        // Zero insets for outer scaffold so top status-bar insets are never double-applied to screen TopAppBars
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (isPrimaryDestination && !isKeyboardOpen) {
@@ -123,6 +176,7 @@ fun MainScaffold(
                 .padding(bottom = padding.calculateBottomPadding())
         ) {
             TapLedgerNavGraph(
+                mpinManager = viewModel.mpinManager,
                 navController = navController,
                 startDestination = effectiveStartDestination,
                 initialDashboardScrollIndex = initialDashboardScrollIndex,

@@ -26,7 +26,8 @@ class BackupManager @Inject constructor(
     private val database: TapLedgerDatabase,
     private val restoreNotificationBuffer: RestoreNotificationBuffer,
     private val financialIngestionPipeline: FinancialIngestionPipeline,
-    private val dataIntegrityChecker: DataIntegrityChecker
+    private val dataIntegrityChecker: DataIntegrityChecker,
+    private val mpinManager: com.tapledger.core.security.MpinManager
 ) {
 
     /**
@@ -410,7 +411,10 @@ class BackupManager @Inject constructor(
             // 1. Create Safety Backup
             createSafetyBackup()
 
-            // 2. Delete database files
+            // 2. Clear MPIN security data, attempt counters, and Keystore key
+            mpinManager.clearAllSecurityData()
+
+            // 3. Delete database files
             val dbFile = context.getDatabasePath(TapLedgerDatabase.DATABASE_NAME)
             val walFile = File(dbFile.parentFile, "${TapLedgerDatabase.DATABASE_NAME}-wal")
             val shmFile = File(dbFile.parentFile, "${TapLedgerDatabase.DATABASE_NAME}-shm")

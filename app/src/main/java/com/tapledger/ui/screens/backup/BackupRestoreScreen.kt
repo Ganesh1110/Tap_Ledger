@@ -46,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,11 +70,20 @@ import com.tapledger.ui.theme.Spacing
 @Composable
 fun BackupRestoreScreen(
     viewModel: BackupRestoreViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToMpinSetup: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var backupToRestore by remember { mutableStateOf<BackupFileInfo?>(null) }
     var showEraseDialog by remember { mutableStateOf(false) }
+    var pendingStepUpAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var stepUpTitle by remember { mutableStateOf("Security Verification") }
+
+    LaunchedEffect(state.restoreCompletedWithoutMpin) {
+        if (state.restoreCompletedWithoutMpin) {
+            onNavigateToMpinSetup()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -154,7 +164,14 @@ fun BackupRestoreScreen(
             item(key = "actions") {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                     Button(
-                        onClick = { viewModel.triggerBackup() },
+                        onClick = {
+                            if (viewModel.mpinManager.isMpinSet.value) {
+                                stepUpTitle = "Authorize Backup Creation"
+                                pendingStepUpAction = { viewModel.triggerBackup() }
+                            } else {
+                                viewModel.triggerBackup()
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
@@ -351,7 +368,12 @@ fun BackupRestoreScreen(
             onConfirm = {
                 val file = backup.file
                 backupToRestore = null
-                viewModel.restoreBackup(file)
+                if (viewModel.mpinManager.isMpinSet.value) {
+                    stepUpTitle = "Authorize Backup Restore"
+                    pendingStepUpAction = { viewModel.restoreBackup(file) }
+                } else {
+                    viewModel.restoreBackup(file)
+                }
             },
             onDismiss = { backupToRestore = null }
         )
@@ -387,7 +409,12 @@ fun BackupRestoreScreen(
                 Button(
                     onClick = {
                         showEraseDialog = false
-                        viewModel.eraseAllData()
+                        if (viewModel.mpinManager.isMpinSet.value) {
+                            stepUpTitle = "Authorize Erase All Data"
+                            pendingStepUpAction = { viewModel.eraseAllData() }
+                        } else {
+                            viewModel.eraseAllData()
+                        }
                     },
                     enabled = eraseConfirmationText.trim() == "ERASE",
                     colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)
@@ -399,6 +426,21 @@ fun BackupRestoreScreen(
                 TextButton(onClick = { showEraseDialog = false }) {
                     Text("Cancel")
                 }
+            }
+        )
+    }
+
+    if (pendingStepUpAction != null) {
+        com.tapledger.ui.screens.mpin.MpinStepUpDialog(
+            mpinManager = viewModel.mpinManager,
+            title = stepUpTitle,
+            onVerified = {
+                val action = pendingStepUpAction
+                pendingStepUpAction = null
+                action?.invoke()
+            },
+            onDismiss = {
+                pendingStepUpAction = null
             }
         )
     }

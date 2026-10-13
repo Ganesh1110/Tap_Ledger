@@ -756,7 +756,7 @@ flowchart TD
 - `AndroidManifest.xml`: `android:allowBackup="false"`.
 - `data_extraction_rules.xml`: Disables cloud and device-to-device transport of SQLite databases, encryption keys, and alert logs.
 - No `android.permission.INTERNET` declared. The application code cannot transmit data over the network.
-- **App Lock & Display Security:** Optional Android BiometricPrompt (Fingerprint/PIN); sets `FLAG_SECURE` on sensitive activities to prevent screenshot and app switcher leaks.
+- **App Lock & Display Security:** MPIN App Lock (bank-style Argon2id + Android Keystore AES-GCM app lock); sets `FLAG_SECURE` on sensitive activities to prevent screenshot and app switcher leaks.
 - **Storage Notice:** The SQLite database is stored unencrypted in Android app-private internal storage; root users on compromised devices can read app storage. Exports to external media via SAF are encrypted by default with the user's Master Secret (AES-256-GCM) with an optional plaintext toggle.
 
 ### 14.2 Notification Listener Health & Rebind Protocol
@@ -798,7 +798,7 @@ flowchart TD
         S_Diag["Data Diagnostics Screen\n• 19-Rule Invariant Scanner\n• Live Audit Trail Timeline"]
         S_Backup["Backup & Restore Screen\n• Persistent SAF Folder Setup\n• Encrypted .tapledger Export\n• PRAGMA Integrity Checks\n• Safe Restore Protocol"]
         S_Setup["Reliability Setup Screen\n• HyperOS / OneUI Permission Cards\n• Restricted Settings Unlock Guide"]
-        S_Settings["Settings & Security Screen\n• Biometric App Lock Toggle\n• Auto-purge Alert Retention\n• Diagnostic Auditor Entry"]
+        S_Settings["Settings & Security Screen\n• MPIN App Lock Controls\n• Auto-purge Alert Retention\n• Diagnostic Auditor Entry"]
         S_Insights["Insights Screen\n• Cash Flow (12-Period Trend)\n• Spending Calendar Heatmap\n• Top Merchants Breakdown\n• Category Donut with Period Selector"]
     end
 

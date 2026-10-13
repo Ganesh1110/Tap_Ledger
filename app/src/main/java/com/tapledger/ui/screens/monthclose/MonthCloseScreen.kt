@@ -85,6 +85,7 @@ fun MonthCloseScreen(
 
     var showCloseConfirmDialog by remember { mutableStateOf(false) }
     var showReopenConfirmDialog by remember { mutableStateOf(false) }
+    var showStepUpDialog by remember { mutableStateOf(false) }
     var overrideReason by remember { mutableStateOf("") }
 
     val monthYearText = if (state.currentYear > 0)
@@ -409,8 +410,13 @@ fun MonthCloseScreen(
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        viewModel.closeMonth(com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED, overrideReason.ifBlank { null })
-                        showCloseConfirmDialog = false
+                        if (viewModel.mpinManager.isMpinSet.value) {
+                            showCloseConfirmDialog = false
+                            showStepUpDialog = true
+                        } else {
+                            viewModel.closeMonth(com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED, overrideReason.ifBlank { null })
+                            showCloseConfirmDialog = false
+                        }
                     }
                 ) {
                     Text("Close Month")
@@ -420,6 +426,21 @@ fun MonthCloseScreen(
                 TextButton(onClick = { showCloseConfirmDialog = false }) {
                     Text("Cancel")
                 }
+            }
+        )
+    }
+
+    if (showStepUpDialog) {
+        com.tapledger.ui.screens.mpin.MpinStepUpDialog(
+            mpinManager = viewModel.mpinManager,
+            title = "Authorize Month Close",
+            description = "Enter your MPIN to finalize period close and locking",
+            onVerified = {
+                showStepUpDialog = false
+                viewModel.closeMonth(com.tapledger.core.model.MonthCloseReconciliationStatus.RECONCILED, overrideReason.ifBlank { null })
+            },
+            onDismiss = {
+                showStepUpDialog = false
             }
         )
     }

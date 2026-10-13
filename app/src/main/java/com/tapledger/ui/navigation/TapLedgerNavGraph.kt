@@ -11,6 +11,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.tapledger.core.security.MpinManager
 import com.tapledger.ui.screens.accounts.AccountsScreen
 import com.tapledger.ui.screens.backup.BackupRestoreScreen
 import com.tapledger.ui.screens.categories.CategoryManagementScreen
@@ -19,6 +20,8 @@ import com.tapledger.ui.screens.diagnostics.DataDiagnosticsScreen
 import com.tapledger.ui.screens.insights.InsightsScreen
 import com.tapledger.ui.screens.manual.ManualEntryScreen
 import com.tapledger.ui.screens.monthclose.MonthCloseScreen
+import com.tapledger.ui.screens.mpin.AppLockSettingsScreen
+import com.tapledger.ui.screens.mpin.MpinSetupScreen
 import com.tapledger.ui.screens.pending.PendingInboxScreen
 import com.tapledger.ui.screens.setup.SetupScreen
 import com.tapledger.ui.screens.statement.StatementReconciliationScreen
@@ -39,10 +42,13 @@ sealed class Screen(val route: String) {
     object DataDiagnostics : Screen("diagnostics")
     object Insights : Screen("insights")
     object Onboarding : Screen("onboarding")
+    object MpinSetup : Screen("mpin_setup")
+    object AppLockSettings : Screen("app_lock_settings")
 }
 
 @Composable
 fun TapLedgerNavGraph(
+    mpinManager: MpinManager,
     navController: NavHostController = rememberNavController(),
     startDestination: String = Screen.Dashboard.route,
     initialDashboardScrollIndex: Int = 0,
@@ -80,7 +86,8 @@ fun TapLedgerNavGraph(
                 onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) },
                 onNavigateToMonthClose = { navController.navigate(Screen.MonthClose.route) },
                 onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) },
-                onNavigateToInsights = { navController.navigate(Screen.Insights.route) }
+                onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
+                onNavigateToAppLockSettings = { navController.navigate(Screen.AppLockSettings.route) }
             )
         }
         composable(Screen.Transactions.route) {
@@ -107,7 +114,8 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.BackupRestore.route) {
             BackupRestoreScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToMpinSetup = { navController.navigate(Screen.MpinSetup.route) }
             )
         }
         composable(Screen.Setup.route) {
@@ -141,13 +149,41 @@ fun TapLedgerNavGraph(
         composable(Screen.Onboarding.route) {
             com.tapledger.ui.screens.onboarding.OnboardingScreen(
                 onOnboardingComplete = {
-                    navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    if (!mpinManager.isMpinSet.value) {
+                        navController.navigate(Screen.MpinSetup.route) {
+                            popUpTo(Screen.Onboarding.route) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Onboarding.route) { inclusive = true }
+                        }
                     }
                 },
                 onNavigateToRestoreBackup = {
                     navController.navigate(Screen.BackupRestore.route)
                 }
+            )
+        }
+        composable(Screen.MpinSetup.route) {
+            MpinSetupScreen(
+                mpinManager = mpinManager,
+                onSetupSuccess = {
+                    if (navController.previousBackStackEntry == null) {
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
+                },
+                canSkip = false
+            )
+        }
+        composable(Screen.AppLockSettings.route) {
+            AppLockSettingsScreen(
+                mpinManager = mpinManager,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSetup = { navController.navigate(Screen.MpinSetup.route) }
             )
         }
     }

@@ -30,13 +30,15 @@ data class BackupUiState(
     val availableBackups: List<BackupFileInfo> = emptyList(),
     val integrityVerified: Boolean? = null, // null = neutral, true = passed, false = failed
     val message: String? = null,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val restoreCompletedWithoutMpin: Boolean = false
 )
 
 @HiltViewModel
 class BackupRestoreViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val backupManager: BackupManager
+    private val backupManager: BackupManager,
+    val mpinManager: com.tapledger.core.security.MpinManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupUiState())
@@ -130,10 +132,12 @@ class BackupRestoreViewModel @Inject constructor(
             val result = backupManager.restoreBackup(file, secret)
             if (result.isSuccess) {
                 refreshBackupList()
+                val needsMpinSetup = !mpinManager.isMpinSet.value
                 _uiState.value = _uiState.value.copy(
                     isRestoring = false,
                     message = "Backup restored successfully! All 19 invariants verified and spooled notifications replayed.",
-                    isError = false
+                    isError = false,
+                    restoreCompletedWithoutMpin = needsMpinSetup
                 )
             } else {
                 refreshBackupList()

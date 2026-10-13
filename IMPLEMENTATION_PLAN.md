@@ -1342,7 +1342,7 @@ Disable cloud backup by default.
 Optional:
 
 ```text
-Biometric app lock
+MPIN app lock
 ```
 
 is Phase 2.
@@ -1988,7 +1988,7 @@ Never silently change financial logic.
 After the core system is stable:
 
 ```text
-Biometric app lock
+MPIN app lock
 Expected/recurring payments
 Advanced charts
 More bank parsers

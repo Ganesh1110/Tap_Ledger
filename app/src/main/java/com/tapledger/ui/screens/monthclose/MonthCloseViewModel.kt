@@ -19,7 +19,8 @@ import javax.inject.Inject
 @HiltViewModel
 class MonthCloseViewModel @Inject constructor(
     private val monthCloseRepository: MonthCloseRepository,
-    private val monthCloseEngine: MonthCloseEngine
+    private val monthCloseEngine: MonthCloseEngine,
+    val mpinManager: com.tapledger.core.security.MpinManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MonthCloseUiState())

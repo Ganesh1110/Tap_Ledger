@@ -138,4 +138,28 @@ class DataEraseTest {
             assertThat(newAccounts.any { it.name == "Bank Old" }).isFalse()
         }
     }
+
+    @Test
+    fun testDataEraseClearsMpinStateAndKeystore() = kotlinx.coroutines.test.runTest {
+        val clock = com.tapledger.core.security.FakeMpinClock()
+        val keystore = com.tapledger.core.security.FakeMpinKeystore()
+        val prefs = com.tapledger.core.security.FakeSharedPreferences()
+        val mpinManager = com.tapledger.core.security.MpinManagerImpl(keystore, clock, prefs)
+        mpinManager.setMpin("4829", "4829")
+        assertThat(mpinManager.isMpinSet.value).isTrue()
+        assertThat(keystore.isKeyCleared).isFalse()
+
+        // Simulate failed attempt
+        mpinManager.verify("0000")
+        assertThat(mpinManager.lockoutState.value.failedAttempts).isEqualTo(1)
+
+        // Perform Data Erase security clearing
+        mpinManager.clearAllSecurityData()
+
+        // Assert MPIN state, attempts, Keystore key, and storage are cleared
+        assertThat(mpinManager.isMpinSet.value).isFalse()
+        assertThat(mpinManager.lockoutState.value.failedAttempts).isEqualTo(0)
+        assertThat(keystore.isKeyCleared).isTrue()
+        assertThat(prefs.storage).isEmpty()
+    }
 }
