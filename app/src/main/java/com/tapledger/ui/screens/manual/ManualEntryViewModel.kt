@@ -78,7 +78,9 @@ class ManualEntryViewModel @Inject constructor(
     }
 
     fun onAmountChanged(amount: String) {
-        _uiState.value = _uiState.value.copy(amountRupeesText = amount)
+        if (amount.isEmpty() || amount.matches(Regex("""^\d+(\.\d{0,2})?$"""))) {
+            _uiState.value = _uiState.value.copy(amountRupeesText = amount)
+        }
     }
 
     fun onMerchantChanged(merchant: String) {

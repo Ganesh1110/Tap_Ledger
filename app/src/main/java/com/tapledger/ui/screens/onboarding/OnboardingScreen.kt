@@ -609,6 +609,16 @@ private fun StepAccounts(
 }
 
 @Composable
+fun Step3EnvelopesContent(
+    state: OnboardingUiState,
+    onAllocationChanged: (Long, Long) -> Unit,
+    onResetDefaults: () -> Unit,
+    onContinue: () -> Unit
+) {
+    StepBudget(state, onAllocationChanged, onResetDefaults, onContinue)
+}
+
+@Composable
 private fun StepBudget(
     state: OnboardingUiState,
     onAllocationChanged: (Long, Long) -> Unit,
@@ -673,7 +683,7 @@ private fun StepBudget(
                         Column {
                             Text(
                                 text = when {
-                                    isBalanced -> "All ₹${MoneyFormatter.formatPaiseToRupees(state.incomePaise)} Assigned!"
+                                    isBalanced -> "All ${MoneyFormatter.formatPaiseToRupees(state.incomePaise)} Assigned!"
                                     remainingToAssign > 0L -> "${MoneyFormatter.formatPaiseToRupees(remainingToAssign)} Left to Assign"
                                     else -> "${MoneyFormatter.formatPaiseToRupees(-remainingToAssign)} Over Planned Income!"
                                 },

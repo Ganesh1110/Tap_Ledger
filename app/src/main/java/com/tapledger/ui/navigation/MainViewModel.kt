@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -43,16 +44,34 @@ class MainViewModel @Inject constructor(
     private val _shouldShowUpgradePrompt = MutableStateFlow(false)
     val shouldShowUpgradePrompt: StateFlow<Boolean> = _shouldShowUpgradePrompt.asStateFlow()
 
+    private var initialOnboardedState: Boolean? = null
+
     init {
         checkUpgradePrompt()
     }
 
     private fun checkUpgradePrompt() {
         viewModelScope.launch {
-            isOnboarded.collect { onboarded ->
+            combine(isOnboarded, mpinManager.isMpinSet) { onboarded, isSet ->
+                Pair(onboarded, isSet)
+            }.collect { (onboarded, isSet) ->
+                if (onboarded == null) return@collect
+                if (initialOnboardedState == null) {
+                    initialOnboardedState = onboarded
+                }
+
+                if (isSet) {
+                    _shouldShowUpgradePrompt.value = false
+                    return@collect
+                }
+
                 val alreadyDismissed = prefs.getBoolean("mpin_upgrade_prompt_dismissed", false)
-                if (onboarded == true && !mpinManager.isMpinSet.value && !alreadyDismissed) {
+                // Only show upgrade prompt for existing installs (already onboarded on startup),
+                // not fresh onboarding flows where user transitions from false -> true and is guided by NavGraph.
+                if (initialOnboardedState == true && onboarded && !alreadyDismissed) {
                     _shouldShowUpgradePrompt.value = true
+                } else {
+                    _shouldShowUpgradePrompt.value = false
                 }
             }
         }

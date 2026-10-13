@@ -66,6 +66,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -311,7 +313,7 @@ fun DashboardScreen(
                             }
                         }
 
-                        // Notification Listener Warning (if not granted)
+                        // Notification Listener Warning (if not granted) - Compact for 5.5" displays
                         if (!isListenerGranted) {
                             Spacer(modifier = Modifier.height(Spacing.xs))
                             Card(
@@ -319,22 +321,53 @@ fun DashboardScreen(
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.errorContainer
                                 ),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ) {
-                                Column(modifier = Modifier.padding(Spacing.sm)) {
-                                    Text(
-                                        text = "Notification Listener Inactive",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Text(
-                                        text = "Allow SMS and UPI notifications for automatic expense tracking.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    Spacer(modifier = Modifier.height(Spacing.xs))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(Spacing.xs))
+                                        Column {
+                                            Text(
+                                                text = "Listener Inactive",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onErrorContainer
+                                            )
+                                            Text(
+                                                text = "Allow alerts for auto-tracking",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(Spacing.xs))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(Spacing.xxs),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        TextButton(
+                                            onClick = onNavigateToSetup,
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("Guide", fontSize = 11.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                        }
                                         Button(
                                             onClick = {
                                                 val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
@@ -343,12 +376,10 @@ fun DashboardScreen(
                                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                                                 containerColor = MaterialTheme.colorScheme.onErrorContainer,
                                                 contentColor = MaterialTheme.colorScheme.errorContainer
-                                            )
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                                         ) {
-                                            Text("Enable", fontSize = 11.sp)
-                                        }
-                                        OutlinedButton(onClick = onNavigateToSetup) {
-                                            Text("Setup Guide", fontSize = 11.sp)
+                                            Text("Enable", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                         }
                                     }
                                 }

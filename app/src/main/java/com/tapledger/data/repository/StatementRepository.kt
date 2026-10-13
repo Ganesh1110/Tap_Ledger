@@ -352,13 +352,25 @@ class StatementRepository @Inject constructor(
         val lines = statementLineDao.getLinesForImportSync(importId)
         val allHandled = lines.isNotEmpty() && lines.none { it.matchStatus == StatementMatchStatus.MISSING_IN_APP }
         if (allHandled) {
-            statementImportDao.update(importEntity.copy(status = StatementImportStatus.RECONCILED))
-            val period = (if (importEntity.periodStart > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodStart) else null)
-                ?: (if (importEntity.periodEnd > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodEnd) else null)
-                ?: budgetPeriodDao.getPeriodForTimestamp(importEntity.createdAt)
-            period?.let { p ->
-                if (!p.isReviewed) {
-                    budgetPeriodDao.update(p.copy(isReviewed = true))
+            val isArithmeticValid = StatementReconciliationEngine.verifyStatementArithmetic(
+                openingBalancePaise = importEntity.openingBalancePaise,
+                lines = lines,
+                reportedClosingBalancePaise = importEntity.closingBalancePaise
+            )
+            val newStatus = if (isArithmeticValid) {
+                StatementImportStatus.RECONCILED
+            } else {
+                StatementImportStatus.ARITHMETIC_ERROR
+            }
+            statementImportDao.update(importEntity.copy(status = newStatus))
+            if (isArithmeticValid) {
+                val period = (if (importEntity.periodStart > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodStart) else null)
+                    ?: (if (importEntity.periodEnd > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodEnd) else null)
+                    ?: budgetPeriodDao.getPeriodForTimestamp(importEntity.createdAt)
+                period?.let { p ->
+                    if (!p.isReviewed) {
+                        budgetPeriodDao.update(p.copy(isReviewed = true))
+                    }
                 }
             }
         }
@@ -373,7 +385,7 @@ class StatementRepository @Inject constructor(
             reportedClosingBalancePaise = closingPaise
         )
         val allHandled = lines.isNotEmpty() && lines.none { it.matchStatus == StatementMatchStatus.MISSING_IN_APP }
-        val finalStatus = if (allHandled) {
+        val finalStatus = if (allHandled && isArithmeticValid) {
             StatementImportStatus.RECONCILED
         } else if (!isArithmeticValid) {
             StatementImportStatus.ARITHMETIC_ERROR
@@ -387,6 +399,16 @@ class StatementRepository @Inject constructor(
                 status = finalStatus
             )
         )
+        if (allHandled && isArithmeticValid) {
+            val period = (if (importEntity.periodStart > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodStart) else null)
+                ?: (if (importEntity.periodEnd > 0L) budgetPeriodDao.getPeriodForTimestamp(importEntity.periodEnd) else null)
+                ?: budgetPeriodDao.getPeriodForTimestamp(importEntity.createdAt)
+            period?.let { p ->
+                if (!p.isReviewed) {
+                    budgetPeriodDao.update(p.copy(isReviewed = true))
+                }
+            }
+        }
     }
 
     suspend fun getReconciliationProof(importId: Long): ReconciliationProof? {

@@ -179,7 +179,11 @@ fun ManualEntryScreen(
             // 2. Large Amount Hero Input with ₹ Prefix
             OutlinedTextField(
                 value = state.amountRupeesText,
-                onValueChange = { viewModel.onAmountChanged(it) },
+                onValueChange = { input ->
+                    if (input.isEmpty() || input.matches(Regex("""^\d+(\.\d{0,2})?$"""))) {
+                        viewModel.onAmountChanged(input)
+                    }
+                },
                 leadingIcon = {
                     Text(
                         text = "₹",

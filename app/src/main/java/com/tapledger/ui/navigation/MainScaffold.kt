@@ -117,7 +117,8 @@ fun MainScaffold(
 
     LaunchedEffect(isOnboarded) {
         if (isOnboarded == true && currentRoute == Screen.Onboarding.route) {
-            navController.navigate(Screen.Dashboard.route) {
+            val destination = if (viewModel.mpinManager.isMpinSet.value) Screen.Dashboard.route else Screen.MpinSetup.route
+            navController.navigate(destination) {
                 popUpTo(Screen.Onboarding.route) { inclusive = true }
             }
         } else if (isOnboarded == false && currentRoute != null && currentRoute != Screen.Onboarding.route) {

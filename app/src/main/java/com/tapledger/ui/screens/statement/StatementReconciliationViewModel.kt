@@ -80,10 +80,11 @@ class StatementReconciliationViewModel @Inject constructor(
         linesJob?.cancel()
         linesJob = viewModelScope.launch {
             statementRepository.observeLinesForImport(importEntity.id).collect { lines ->
+                val currentImport = statementRepository.getImportById(importEntity.id) ?: importEntity
                 val isConsistent = StatementReconciliationEngine.verifyStatementArithmetic(
-                    openingBalancePaise = importEntity.openingBalancePaise,
+                    openingBalancePaise = currentImport.openingBalancePaise,
                     lines = lines,
-                    reportedClosingBalancePaise = importEntity.closingBalancePaise
+                    reportedClosingBalancePaise = currentImport.closingBalancePaise
                 )
                 val bridgeState = try {
                     val proof = statementRepository.getReconciliationProof(importEntity.id)
@@ -98,6 +99,7 @@ class StatementReconciliationViewModel @Inject constructor(
 
                 _uiState.update {
                     it.copy(
+                        selectedImport = currentImport,
                         selectedImportLines = lines,
                         isArithmeticConsistent = isConsistent,
                         reconciliationBridgeState = bridgeState
