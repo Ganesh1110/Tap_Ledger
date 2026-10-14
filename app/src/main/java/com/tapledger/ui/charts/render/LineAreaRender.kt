@@ -1,5 +1,10 @@
 package com.tapledger.ui.charts.render
 
+import android.graphics.Paint
+import android.graphics.Typeface
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -370,17 +375,61 @@ fun BurnUpChartRender(
 }
 
 /**
+ * Compact helper to format Paise values into human-readable Indian rupee notation (e.g., ₹24.6k, ₹1.5L, ₹0).
+ */
+private fun formatCompactRupees(paise: Long): String {
+    val rupees = paise / 100L
+    val absRupees = kotlin.math.abs(rupees)
+    val sign = if (rupees < 0) "-" else ""
+    return when {
+        absRupees >= 1_00_00_000L -> {
+            val cr = absRupees / 1_00_00_000L
+            val frac = (absRupees % 1_00_00_000L) / 10_00_000L
+            if (frac > 0) "${sign}₹$cr.${frac}Cr" else "${sign}₹${cr}Cr"
+        }
+        absRupees >= 100_000L -> {
+            val l = absRupees / 100_000L
+            val frac = (absRupees % 100_000L) / 10_000L
+            if (frac > 0) "${sign}₹$l.${frac}L" else "${sign}₹${l}L"
+        }
+        absRupees >= 1_000L -> {
+            val k = absRupees / 1_000L
+            val frac = (absRupees % 1_000L) / 100L
+            if (frac > 0) "${sign}₹$k.${frac}k" else "${sign}₹${k}k"
+        }
+        else -> "${sign}₹$absRupees"
+    }
+}
+
+/**
+ * Format raw month string (e.g. "9/26", "10/26", "Now") into friendly short label ("Sep", "Oct", "Now").
+ */
+private fun formatMonthOnly(raw: String): String {
+    if (raw.equals("Now", ignoreCase = true)) return "Now"
+    val parts = raw.split("/")
+    if (parts.size == 2) {
+        val monthNum = parts[0].toIntOrNull()
+        if (monthNum != null && monthNum in 1..12) {
+            val names = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+            return names[monthNum - 1]
+        }
+    }
+    return raw
+}
+
+/**
  * Render primitive for V9 Net worth line/area chart per Flow.md §17.2 V9.
  * Supports:
- * - Single Net Worth line with area fill
- * - Stacked Assets & Liabilities view
+ * - Single Net Worth line with smooth cubic bezier curve, area fill, and timeline labels
+ * - Subtle dashed reference gridlines with compact ₹ scale markers
+ * - Stacked Assets & Liabilities view with dual spline curves
  * - Horizontal drag scrub with vertical scroll pass-through via detectHorizontalDragGestures
  */
 @Composable
 fun NetWorthChartRender(
     points: List<com.tapledger.ui.charts.model.NetWorthPoint>,
     modifier: Modifier = Modifier,
-    height: Dp = 190.dp,
+    height: Dp = 200.dp,
     isStacked: Boolean = false,
     netWorthColor: Color = Color(0xFF0072B2),
     assetsColor: Color = Color(0xFF009E73),
@@ -390,6 +439,32 @@ fun NetWorthChartRender(
     if (points.isEmpty()) return
 
     var scrubIndex by remember { mutableStateOf<Int?>(null) }
+
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    val labelColorArgb = labelColor.toArgb()
+    val gridLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val baselineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+    val scrubLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+
+    val textPaint = remember(labelColorArgb) {
+        Paint().apply {
+            color = labelColorArgb
+            textSize = 28f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+    }
+
+    val rightAxisPaint = remember(labelColorArgb) {
+        Paint().apply {
+            color = labelColorArgb
+            textSize = 24f
+            textAlign = Paint.Align.LEFT
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+    }
 
     Canvas(
         modifier = modifier
@@ -427,58 +502,125 @@ fun NetWorthChartRender(
     ) {
         val widthPx = size.width
         val heightPx = size.height
-        val bottomMarginPx = 20.dp.toPx()
-        val chartHeightPx = heightPx - bottomMarginPx
+
+        val leftPaddingPx = 18.dp.toPx()
+        val rightPaddingPx = 52.dp.toPx()
+        val topPaddingPx = 18.dp.toPx()
+        val bottomPaddingPx = 28.dp.toPx()
+
+        val plotWidth = (widthPx - leftPaddingPx - rightPaddingPx).coerceAtLeast(1f)
+        val plotHeight = (heightPx - topPaddingPx - bottomPaddingPx).coerceAtLeast(1f)
+
+        fun toX(i: Int): Float {
+            return if (points.size <= 1) {
+                leftPaddingPx + (plotWidth / 2f)
+            } else {
+                leftPaddingPx + (i.toFloat() / (points.size - 1).toFloat()) * plotWidth
+            }
+        }
 
         if (!isStacked) {
-            // Net Worth Line/Area
             val allValues = points.map { it.netWorthPaise } + listOf(0L)
             val minVal = allValues.minOrNull() ?: 0L
             val maxVal = maxOf(allValues.maxOrNull() ?: 1L, 1L)
-            val valRange = (maxVal - minVal).coerceAtLeast(1L).toFloat()
-
-            fun toX(i: Int): Float {
-                return if (points.size <= 1) widthPx / 2f else (i.toFloat() / (points.size - 1).toFloat()) * widthPx
-            }
+            val valRange = (maxVal - minVal).coerceAtLeast(100_00L).toFloat()
 
             fun toY(value: Long): Float {
                 val fraction = (value - minVal).toFloat() / valRange
-                return chartHeightPx - (fraction * chartHeightPx)
+                return (topPaddingPx + plotHeight) - (fraction * plotHeight)
             }
 
-            // Zero baseline
-            val zeroY = toY(0L)
+            val maxValY = toY(maxVal)
+            val zeroY = toY(0L).coerceIn(topPaddingPx, topPaddingPx + plotHeight)
+            val midVal = (maxVal + minVal) / 2L
+            val midValY = toY(midVal)
+
             drawLine(
-                color = Color.Gray.copy(alpha = 0.3f),
-                start = Offset(0f, zeroY),
-                end = Offset(widthPx, zeroY),
-                strokeWidth = 1.dp.toPx()
+                color = gridLineColor,
+                start = Offset(leftPaddingPx, maxValY),
+                end = Offset(leftPaddingPx + plotWidth, maxValY),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                formatCompactRupees(maxVal),
+                leftPaddingPx + plotWidth + 6.dp.toPx(),
+                maxValY + 8f,
+                rightAxisPaint
             )
 
-            // Area Gradient
+            if (kotlin.math.abs(maxValY - midValY) > 24.dp.toPx() && kotlin.math.abs(midValY - zeroY) > 24.dp.toPx()) {
+                drawLine(
+                    color = gridLineColor.copy(alpha = 0.2f),
+                    start = Offset(leftPaddingPx, midValY),
+                    end = Offset(leftPaddingPx + plotWidth, midValY),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                )
+                drawContext.canvas.nativeCanvas.drawText(
+                    formatCompactRupees(midVal),
+                    leftPaddingPx + plotWidth + 6.dp.toPx(),
+                    midValY + 8f,
+                    rightAxisPaint
+                )
+            }
+
+            drawLine(
+                color = baselineColor,
+                start = Offset(leftPaddingPx, zeroY),
+                end = Offset(leftPaddingPx + plotWidth, zeroY),
+                strokeWidth = 1.dp.toPx()
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                "₹0",
+                leftPaddingPx + plotWidth + 6.dp.toPx(),
+                zeroY + 8f,
+                rightAxisPaint
+            )
+
             if (points.size > 1) {
                 val areaPath = Path().apply {
-                    moveTo(toX(0), chartHeightPx)
-                    points.forEachIndexed { i, pt ->
-                        lineTo(toX(i), toY(pt.netWorthPaise))
+                    moveTo(toX(0), zeroY)
+                    lineTo(toX(0), toY(points[0].netWorthPaise))
+                    for (i in 1 until points.size) {
+                        val prevX = toX(i - 1)
+                        val prevY = toY(points[i - 1].netWorthPaise)
+                        val curX = toX(i)
+                        val curY = toY(points[i].netWorthPaise)
+                        val cp1X = prevX + (curX - prevX) * 0.45f
+                        val cp1Y = prevY
+                        val cp2X = prevX + (curX - prevX) * 0.55f
+                        val cp2Y = curY
+                        cubicTo(cp1X, cp1Y, cp2X, cp2Y, curX, curY)
                     }
-                    lineTo(toX(points.size - 1), chartHeightPx)
+                    lineTo(toX(points.size - 1), zeroY)
                     close()
                 }
                 drawPath(
                     path = areaPath,
                     brush = Brush.verticalGradient(
-                        colors = listOf(netWorthColor.copy(alpha = 0.25f), Color.Transparent),
-                        startY = 0f,
-                        endY = chartHeightPx
+                        colors = listOf(
+                            netWorthColor.copy(alpha = 0.28f),
+                            netWorthColor.copy(alpha = 0.06f),
+                            Color.Transparent
+                        ),
+                        startY = topPaddingPx,
+                        endY = topPaddingPx + plotHeight
                     )
                 )
 
-                // Line
                 val linePath = Path().apply {
                     moveTo(toX(0), toY(points[0].netWorthPaise))
                     for (i in 1 until points.size) {
-                        lineTo(toX(i), toY(points[i].netWorthPaise))
+                        val prevX = toX(i - 1)
+                        val prevY = toY(points[i - 1].netWorthPaise)
+                        val curX = toX(i)
+                        val curY = toY(points[i].netWorthPaise)
+                        val cp1X = prevX + (curX - prevX) * 0.45f
+                        val cp1Y = prevY
+                        val cp2X = prevX + (curX - prevX) * 0.55f
+                        val cp2Y = curY
+                        cubicTo(cp1X, cp1Y, cp2X, cp2Y, curX, curY)
                     }
                 }
                 drawPath(
@@ -488,16 +630,28 @@ fun NetWorthChartRender(
                 )
             }
 
-            // Data dots
             points.forEachIndexed { i, pt ->
-                drawCircle(
-                    color = netWorthColor,
-                    radius = 3.5.dp.toPx(),
-                    center = Offset(toX(i), toY(pt.netWorthPaise))
-                )
+                val x = toX(i)
+                val y = toY(pt.netWorthPaise)
+                if (i == points.size - 1) {
+                    drawCircle(color = netWorthColor.copy(alpha = 0.25f), radius = 7.5.dp.toPx(), center = Offset(x, y))
+                    drawCircle(color = netWorthColor, radius = 4.5.dp.toPx(), center = Offset(x, y))
+                    drawCircle(color = Color.White, radius = 2.dp.toPx(), center = Offset(x, y))
+                } else {
+                    drawCircle(color = netWorthColor, radius = 3.5.dp.toPx(), center = Offset(x, y))
+                }
             }
 
-            // Scrub indicator
+            val step = if (points.size > 8) 2 else 1
+            points.forEachIndexed { i, pt ->
+                if (i == points.size - 1 || i % step == 0) {
+                    val labelText = formatMonthOnly(pt.label)
+                    val x = toX(i)
+                    val y = heightPx - 6.dp.toPx()
+                    drawContext.canvas.nativeCanvas.drawText(labelText, x, y, textPaint)
+                }
+            }
+
             scrubIndex?.let { idx ->
                 if (idx in points.indices) {
                     val pt = points[idx]
@@ -505,54 +659,88 @@ fun NetWorthChartRender(
                     val scrubY = toY(pt.netWorthPaise)
 
                     drawLine(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        start = Offset(scrubX, 0f),
-                        end = Offset(scrubX, chartHeightPx),
-                        strokeWidth = 1.dp.toPx()
+                        color = scrubLineColor,
+                        start = Offset(scrubX, topPaddingPx),
+                        end = Offset(scrubX, topPaddingPx + plotHeight),
+                        strokeWidth = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                    )
+                    drawCircle(
+                        color = netWorthColor.copy(alpha = 0.35f),
+                        radius = 8.5.dp.toPx(),
+                        center = Offset(scrubX, scrubY)
                     )
                     drawCircle(
                         color = netWorthColor,
-                        radius = 6.dp.toPx(),
+                        radius = 5.dp.toPx(),
+                        center = Offset(scrubX, scrubY)
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = 2.dp.toPx(),
                         center = Offset(scrubX, scrubY)
                     )
                 }
             }
         } else {
-            // Stacked Assets & Liabilities
             val maxAsset = points.maxOfOrNull { it.assetsPaise } ?: 1L
             val maxLiab = points.maxOfOrNull { it.liabilitiesPaise } ?: 1L
-            val maxVal = maxOf(maxAsset, maxLiab, 1L).coerceAtLeast(1L).toFloat()
+            val maxVal = maxOf(maxAsset, maxLiab, 1L).coerceAtLeast(100_00L).toFloat()
 
-            fun toX(i: Int): Float {
-                return if (points.size <= 1) widthPx / 2f else (i.toFloat() / (points.size - 1).toFloat()) * widthPx
-            }
-
-            val zeroY = chartHeightPx * 0.55f
+            val zeroY = topPaddingPx + (plotHeight * 0.52f)
 
             fun toYAsset(value: Long): Float {
                 val fraction = value.toFloat() / maxVal
-                return zeroY - (fraction * (zeroY - 10.dp.toPx()))
+                return zeroY - (fraction * (zeroY - topPaddingPx - 6.dp.toPx()))
             }
 
             fun toYLiab(value: Long): Float {
                 val fraction = value.toFloat() / maxVal
-                return zeroY + (fraction * (chartHeightPx - zeroY - 10.dp.toPx()))
+                return zeroY + (fraction * (topPaddingPx + plotHeight - zeroY - 6.dp.toPx()))
             }
 
-            // Zero baseline
             drawLine(
-                color = Color.Gray.copy(alpha = 0.5f),
-                start = Offset(0f, zeroY),
-                end = Offset(widthPx, zeroY),
+                color = baselineColor,
+                start = Offset(leftPaddingPx, zeroY),
+                end = Offset(leftPaddingPx + plotWidth, zeroY),
                 strokeWidth = 1.dp.toPx()
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                "₹0",
+                leftPaddingPx + plotWidth + 6.dp.toPx(),
+                zeroY + 8f,
+                rightAxisPaint
+            )
+
+            val maxAssetY = toYAsset(maxAsset)
+            drawLine(
+                color = assetsColor.copy(alpha = 0.25f),
+                start = Offset(leftPaddingPx, maxAssetY),
+                end = Offset(leftPaddingPx + plotWidth, maxAssetY),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                formatCompactRupees(maxAsset),
+                leftPaddingPx + plotWidth + 6.dp.toPx(),
+                maxAssetY + 8f,
+                rightAxisPaint
             )
 
             if (points.size > 1) {
-                // Assets Area & Line
                 val assetArea = Path().apply {
                     moveTo(toX(0), zeroY)
-                    points.forEachIndexed { i, pt ->
-                        lineTo(toX(i), toYAsset(pt.assetsPaise))
+                    lineTo(toX(0), toYAsset(points[0].assetsPaise))
+                    for (i in 1 until points.size) {
+                        val prevX = toX(i - 1)
+                        val prevY = toYAsset(points[i - 1].assetsPaise)
+                        val curX = toX(i)
+                        val curY = toYAsset(points[i].assetsPaise)
+                        val cp1X = prevX + (curX - prevX) * 0.45f
+                        val cp1Y = prevY
+                        val cp2X = prevX + (curX - prevX) * 0.55f
+                        val cp2Y = curY
+                        cubicTo(cp1X, cp1Y, cp2X, cp2Y, curX, curY)
                     }
                     lineTo(toX(points.size - 1), zeroY)
                     close()
@@ -560,8 +748,8 @@ fun NetWorthChartRender(
                 drawPath(
                     path = assetArea,
                     brush = Brush.verticalGradient(
-                        colors = listOf(assetsColor.copy(alpha = 0.3f), Color.Transparent),
-                        startY = 0f,
+                        colors = listOf(assetsColor.copy(alpha = 0.25f), Color.Transparent),
+                        startY = topPaddingPx,
                         endY = zeroY
                     )
                 )
@@ -569,16 +757,32 @@ fun NetWorthChartRender(
                 val assetLine = Path().apply {
                     moveTo(toX(0), toYAsset(points[0].assetsPaise))
                     for (i in 1 until points.size) {
-                        lineTo(toX(i), toYAsset(points[i].assetsPaise))
+                        val prevX = toX(i - 1)
+                        val prevY = toYAsset(points[i - 1].assetsPaise)
+                        val curX = toX(i)
+                        val curY = toYAsset(points[i].assetsPaise)
+                        val cp1X = prevX + (curX - prevX) * 0.45f
+                        val cp1Y = prevY
+                        val cp2X = prevX + (curX - prevX) * 0.55f
+                        val cp2Y = curY
+                        cubicTo(cp1X, cp1Y, cp2X, cp2Y, curX, curY)
                     }
                 }
                 drawPath(path = assetLine, color = assetsColor, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
 
-                // Liabilities Area & Line
                 val liabArea = Path().apply {
                     moveTo(toX(0), zeroY)
-                    points.forEachIndexed { i, pt ->
-                        lineTo(toX(i), toYLiab(pt.liabilitiesPaise))
+                    lineTo(toX(0), toYLiab(points[0].liabilitiesPaise))
+                    for (i in 1 until points.size) {
+                        val prevX = toX(i - 1)
+                        val prevY = toYLiab(points[i - 1].liabilitiesPaise)
+                        val curX = toX(i)
+                        val curY = toYLiab(points[i].liabilitiesPaise)
+                        val cp1X = prevX + (curX - prevX) * 0.45f
+                        val cp1Y = prevY
+                        val cp2X = prevX + (curX - prevX) * 0.55f
+                        val cp2Y = curY
+                        cubicTo(cp1X, cp1Y, cp2X, cp2Y, curX, curY)
                     }
                     lineTo(toX(points.size - 1), zeroY)
                     close()
@@ -586,22 +790,44 @@ fun NetWorthChartRender(
                 drawPath(
                     path = liabArea,
                     brush = Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, liabilitiesColor.copy(alpha = 0.3f)),
+                        colors = listOf(Color.Transparent, liabilitiesColor.copy(alpha = 0.25f)),
                         startY = zeroY,
-                        endY = chartHeightPx
+                        endY = topPaddingPx + plotHeight
                     )
                 )
 
                 val liabLine = Path().apply {
                     moveTo(toX(0), toYLiab(points[0].liabilitiesPaise))
                     for (i in 1 until points.size) {
-                        lineTo(toX(i), toYLiab(points[i].liabilitiesPaise))
+                        val prevX = toX(i - 1)
+                        val prevY = toYLiab(points[i - 1].liabilitiesPaise)
+                        val curX = toX(i)
+                        val curY = toYLiab(points[i].liabilitiesPaise)
+                        val cp1X = prevX + (curX - prevX) * 0.45f
+                        val cp1Y = prevY
+                        val cp2X = prevX + (curX - prevX) * 0.55f
+                        val cp2Y = curY
+                        cubicTo(cp1X, cp1Y, cp2X, cp2Y, curX, curY)
                     }
                 }
                 drawPath(path = liabLine, color = liabilitiesColor, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
             }
 
-            // Scrub indicator
+            points.forEachIndexed { i, pt ->
+                drawCircle(color = assetsColor, radius = 3.dp.toPx(), center = Offset(toX(i), toYAsset(pt.assetsPaise)))
+                drawCircle(color = liabilitiesColor, radius = 3.dp.toPx(), center = Offset(toX(i), toYLiab(pt.liabilitiesPaise)))
+            }
+
+            val step = if (points.size > 8) 2 else 1
+            points.forEachIndexed { i, pt ->
+                if (i == points.size - 1 || i % step == 0) {
+                    val labelText = formatMonthOnly(pt.label)
+                    val x = toX(i)
+                    val y = heightPx - 6.dp.toPx()
+                    drawContext.canvas.nativeCanvas.drawText(labelText, x, y, textPaint)
+                }
+            }
+
             scrubIndex?.let { idx ->
                 if (idx in points.indices) {
                     val pt = points[idx]
@@ -610,13 +836,14 @@ fun NetWorthChartRender(
                     val liabY = toYLiab(pt.liabilitiesPaise)
 
                     drawLine(
-                        color = Color.Black.copy(alpha = 0.4f),
-                        start = Offset(scrubX, 0f),
-                        end = Offset(scrubX, chartHeightPx),
-                        strokeWidth = 1.dp.toPx()
+                        color = scrubLineColor,
+                        start = Offset(scrubX, topPaddingPx),
+                        end = Offset(scrubX, topPaddingPx + plotHeight),
+                        strokeWidth = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
                     )
-                    drawCircle(color = assetsColor, radius = 5.dp.toPx(), center = Offset(scrubX, assetY))
-                    drawCircle(color = liabilitiesColor, radius = 5.dp.toPx(), center = Offset(scrubX, liabY))
+                    drawCircle(color = assetsColor, radius = 5.5.dp.toPx(), center = Offset(scrubX, assetY))
+                    drawCircle(color = liabilitiesColor, radius = 5.5.dp.toPx(), center = Offset(scrubX, liabY))
                 }
             }
         }

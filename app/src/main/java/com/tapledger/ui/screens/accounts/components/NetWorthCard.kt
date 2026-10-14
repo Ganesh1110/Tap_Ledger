@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -79,6 +80,19 @@ fun NetWorthCard(
     val animatedNetWorth by rememberAnimatedMoney(targetPaise = currentNetWorthPaise)
     var scrubbedPoint by remember { mutableStateOf<NetWorthPoint?>(null) }
 
+    // Dynamic values: live scrubbed point takes precedence smoothly without shifting layout
+    val activeNetWorth = scrubbedPoint?.netWorthPaise ?: animatedNetWorth
+    val activeAssets = scrubbedPoint?.assetsPaise ?: totalAssetsPaise
+    val activeLiabilities = scrubbedPoint?.liabilitiesPaise ?: totalLiabilitiesPaise
+
+    // Compute period trend (difference between earliest point in selected range and current Net Worth)
+    val trendInfo = remember(chartState, currentNetWorthPaise) {
+        if (chartState is ChartState.Data && chartState.data.points.size >= 2) {
+            val firstPt = chartState.data.points.first()
+            currentNetWorthPaise - firstPt.netWorthPaise
+        } else null
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -96,23 +110,60 @@ fun NetWorthCard(
                 .fillMaxWidth()
                 .padding(Spacing.md)
         ) {
-            // 1. Header: Total Net Worth & Breakdown
+            // 1. Header: Title, Active Amount, Trend/Scrub Badge, and View Toggles
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
                 Column {
-                    Text(
-                        text = "Total Net Worth",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "TOTAL NET WORTH",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        if (scrubbedPoint != null) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = scrubbedPoint?.label ?: "",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else if (trendInfo != null) {
+                            val isPos = trendInfo > 0L
+                            val isNeg = trendInfo < 0L
+                            val badgeColor = if (isPos) IncomeGreen else if (isNeg) ExpenseRed else MaterialTheme.colorScheme.onSurfaceVariant
+                            val badgeBg = if (isPos) IncomeGreen.copy(alpha = 0.12f) else if (isNeg) ExpenseRed.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = badgeBg
+                            ) {
+                                val text = if (isPos) "▲ +${MoneyFormatter.formatPaiseToRupees(trendInfo)}"
+                                else if (isNeg) "▼ -${MoneyFormatter.formatPaiseToRupees(kotlin.math.abs(trendInfo))}"
+                                else "— Stable"
+                                Text(
+                                    text = text,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = badgeColor,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     MoneyText(
-                        amountPaise = animatedNetWorth,
+                        amountPaise = activeNetWorth,
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                        semantic = if (animatedNetWorth >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                        semantic = if (activeNetWorth >= 0) MoneySemantic.Income else MoneySemantic.Expense
                     )
                 }
 
@@ -121,7 +172,7 @@ fun NetWorthCard(
                         Icon(
                             imageVector = if (isStacked) Icons.AutoMirrored.Filled.ShowChart else Icons.Default.Layers,
                             contentDescription = if (isStacked) "Show Net Worth Line" else "Show Stacked Assets/Liabilities",
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = if (isStacked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = onToggleShowTable) {
@@ -136,41 +187,74 @@ fun NetWorthCard(
 
             Spacer(modifier = Modifier.height(Spacing.xs))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+            // 2. Structured Breakdown: Assets & Liabilities in a Clean Balanced Capsule
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column {
-                    Text(
-                        text = "Total Assets",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    MoneyText(
-                        amountPaise = totalAssetsPaise,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        semantic = MoneySemantic.Income
-                    )
-                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(IncomeGreen, RoundedCornerShape(4.dp))
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Text(
+                                text = "Total Assets",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            MoneyText(
+                                amountPaise = activeAssets,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                semantic = MoneySemantic.Income
+                            )
+                        }
+                    }
 
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "Total Liabilities",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(24.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     )
-                    MoneyText(
-                        amountPaise = totalLiabilitiesPaise,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                        semantic = MoneySemantic.Debt,
-                        indicator = MoneyIndicator.Owed
-                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "Total Liabilities",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            MoneyText(
+                                amountPaise = activeLiabilities,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                semantic = MoneySemantic.Debt,
+                                indicator = MoneyIndicator.Owed
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(ExpenseRed, RoundedCornerShape(4.dp))
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(Spacing.sm))
 
-            // 2. Range Selector Chips (3M / 6M / 1Y / All)
+            // 3. Range Selector Chips (3M / 6M / 1Y / All)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -190,51 +274,26 @@ fun NetWorthCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.sm))
-
-            // 3. Scrubbed Value Banner
-            scrubbedPoint?.let { pt ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                    shape = RoundedCornerShape(8.dp)
+            // Optional Stacked Legend Banner
+            if (isStacked && !showTable) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Spacing.xs),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Spacing.sm, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = pt.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (isStacked) {
-                                Text(
-                                    text = "A: ${MoneyFormatter.formatPaiseToRupees(pt.assetsPaise)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = IncomeGreen
-                                )
-                                Text(
-                                    text = "L: ${MoneyFormatter.formatPaiseToRupees(pt.liabilitiesPaise)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = ExpenseRed
-                                )
-                            }
-                            Text(
-                                text = "NW: ${MoneyFormatter.formatPaiseToRupees(pt.netWorthPaise)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
+                    Box(modifier = Modifier.size(8.dp).background(IncomeGreen, RoundedCornerShape(4.dp)))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Assets", style = MaterialTheme.typography.labelSmall, color = IncomeGreen, fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Box(modifier = Modifier.size(8.dp).background(ExpenseRed, RoundedCornerShape(4.dp)))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Liabilities", style = MaterialTheme.typography.labelSmall, color = ExpenseRed, fontWeight = FontWeight.SemiBold)
                 }
-                Spacer(modifier = Modifier.height(Spacing.xs))
             }
+
+            Spacer(modifier = Modifier.height(Spacing.xs))
 
             // 4. Content Area: Table vs Chart
             when (chartState) {
@@ -319,7 +378,7 @@ fun NetWorthCard(
                             netWorthColor = ChartPalette.NeedsBase,
                             assetsColor = IncomeGreen,
                             liabilitiesColor = ExpenseRed,
-                            height = 180.dp,
+                            height = 205.dp,
                             onScrub = { scrubbedPoint = it }
                         )
                     }

@@ -6,8 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -126,6 +128,7 @@ fun OnboardingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .consumeWindowInsets(paddingValues)
                 .keyboardAware()
         ) {
             when (state.step) {
@@ -375,6 +378,7 @@ private fun StepAccounts(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = Spacing.listBottomPadding),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             item {
@@ -418,6 +422,10 @@ private fun StepAccounts(
                             isError = acc.error != null,
                             supportingText = acc.error?.let { { Text(it, color = ExpenseRed) } },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Next
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -445,7 +453,10 @@ private fun StepAccounts(
                                 label = { Text("Current Balance") },
                                 prefix = { Text("₹ ") },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
                                 modifier = Modifier.weight(1.4f)
                             )
                             OutlinedTextField(
@@ -453,7 +464,10 @@ private fun StepAccounts(
                                 onValueChange = { if (it.length <= 4) onUpdateBank(idx, acc.copy(identifierLast4 = it)) },
                                 label = { Text("Last 4 (Opt)") },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -498,7 +512,10 @@ private fun StepAccounts(
                             label = { Text("Cash Balance") },
                             prefix = { Text("₹ ") },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Next
+                            ),
                             isError = state.cashError != null,
                             supportingText = state.cashError?.let { { Text(it, color = ExpenseRed) } },
                             modifier = Modifier.fillMaxWidth()
@@ -546,6 +563,10 @@ private fun StepAccounts(
                             isError = card.error != null,
                             supportingText = card.error?.let { { Text(it, color = ExpenseRed) } },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Text,
+                                imeAction = ImeAction.Next
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -558,7 +579,10 @@ private fun StepAccounts(
                                 label = { Text("Current Dues Owed") },
                                 prefix = { Text("₹ ") },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
                                 modifier = Modifier.weight(1.4f)
                             )
                             OutlinedTextField(
@@ -566,7 +590,10 @@ private fun StepAccounts(
                                 onValueChange = { if (it.length <= 4) onUpdateCard(idx, card.copy(identifierLast4 = it)) },
                                 label = { Text("Last 4") },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -579,7 +606,10 @@ private fun StepAccounts(
                             label = { Text("Credit Limit (Optional)") },
                             prefix = { Text("₹ ") },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Done
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -638,6 +668,7 @@ private fun StepBudget(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = Spacing.listBottomPadding),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             item {
@@ -758,7 +789,10 @@ private fun StepBudget(
                                 },
                                 prefix = { Text("₹ ") },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
                                 modifier = Modifier.width(140.dp)
                             )
                         }

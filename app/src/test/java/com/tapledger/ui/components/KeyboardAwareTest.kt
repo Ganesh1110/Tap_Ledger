@@ -24,11 +24,14 @@ class KeyboardAwareTest {
         assertThat(file.exists()).isTrue()
         val content = file.readText()
 
-        // 1. Box container has keyboardAware()
+        // 1. Box container has consumeWindowInsets and keyboardAware()
+        assertThat(content).contains(".consumeWindowInsets(paddingValues)")
         assertThat(content).contains(".keyboardAware()")
         // 2. StepIncome has verticalScroll and ImeAction.Done
         assertThat(content).contains("verticalScroll(rememberScrollState())")
         assertThat(content).contains("ImeAction.Done")
+        // 3. StepAccounts and StepBudget have contentPadding for bottom scroll safety
+        assertThat(content).contains("contentPadding = PaddingValues(bottom = Spacing.listBottomPadding)")
     }
 
     @Test

@@ -13,6 +13,7 @@ object Spacing {
     val md: Dp = 16.dp
     val lg: Dp = 24.dp
     val xl: Dp = 32.dp
+    val xxl: Dp = 48.dp
 
     // Touch target minimum for accessibility (WCAG AA: 48dp)
     val minTouchTarget: Dp = 48.dp
