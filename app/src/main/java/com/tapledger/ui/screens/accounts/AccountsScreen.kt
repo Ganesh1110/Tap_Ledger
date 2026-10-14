@@ -53,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.model.AccountType
 import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.domain.model.AccountBalanceSummary
 import com.tapledger.ui.components.AccountCard
 import com.tapledger.ui.components.EmptyState
@@ -446,6 +447,11 @@ fun AccountsScreen(
                             text = "Warning: This rewrites history and your net worth trend; to fix today's mismatch use Correct Balance.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Starting balance date: ${DateTimeUtils.formatDate(acc.openingBalanceDate)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         OutlinedTextField(
                             value = openingRupees,

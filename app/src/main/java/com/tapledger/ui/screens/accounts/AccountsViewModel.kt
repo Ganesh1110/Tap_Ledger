@@ -8,6 +8,7 @@ import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.AccountEntity
 import com.tapledger.core.model.AccountType
 import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.core.model.TransactionStatus
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.TransactionRepository
@@ -60,8 +61,19 @@ class AccountsViewModel @Inject constructor(
                 val nowIST = DateTimeUtils.nowEpochMillis()
 
                 val accountSummaries = accounts.map { account ->
-                    val txs = transactionDao.getBalanceTransactionsForAccount(account.id, account.openingBalanceDate)
-                    AccountBalanceCalculator.calculateAccountBalance(account, txs, asOfEpochMillis = nowIST)
+                    val txs = transactionDao.getBalanceTransactionsForAccount(account.id, 0L)
+                    val earliestTx = txs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
+                    val effectiveOpeningDate = if (earliestTx != null && earliestTx < account.openingBalanceDate) {
+                        DateTimeUtils.getStartOfDayEpochMillis(earliestTx)
+                    } else {
+                        account.openingBalanceDate
+                    }
+                    val effectiveAccount = if (effectiveOpeningDate != account.openingBalanceDate) {
+                        account.copy(openingBalanceDate = effectiveOpeningDate)
+                    } else {
+                        account
+                    }
+                    AccountBalanceCalculator.calculateAccountBalance(effectiveAccount, txs, asOfEpochMillis = nowIST)
                 }
 
                 val assets = accountSummaries.filter { it.account.type != AccountType.CREDIT_CARD && it.account.type != AccountType.LOAN }
@@ -142,9 +154,20 @@ class AccountsViewModel @Inject constructor(
     fun correctAccountBalance(account: AccountEntity, targetBalancePaise: Long, notes: String = "Balance correction") {
         viewModelScope.launch {
             try {
-                val txs = transactionDao.getBalanceTransactionsForAccount(account.id, account.openingBalanceDate)
+                val txs = transactionDao.getBalanceTransactionsForAccount(account.id, 0L)
+                val earliestTx = txs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
+                val effectiveOpeningDate = if (earliestTx != null && earliestTx < account.openingBalanceDate) {
+                    DateTimeUtils.getStartOfDayEpochMillis(earliestTx)
+                } else {
+                    account.openingBalanceDate
+                }
+                val effectiveAccount = if (effectiveOpeningDate != account.openingBalanceDate) {
+                    account.copy(openingBalanceDate = effectiveOpeningDate)
+                } else {
+                    account
+                }
                 val current = AccountBalanceCalculator.calculateAccountBalance(
-                    account = account,
+                    account = effectiveAccount,
                     transactions = txs,
                     asOfEpochMillis = DateTimeUtils.nowEpochMillis()
                 )
@@ -169,8 +192,16 @@ class AccountsViewModel @Inject constructor(
                     return@launch
                 }
                 val newPaise = MoneyFormatter.toPaise(newOpeningBalanceRupees)
+                val txs = transactionDao.getBalanceTransactionsForAccount(account.id, 0L)
+                val earliestTx = txs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
+                val effectiveOpeningDate = if (earliestTx != null && earliestTx < account.openingBalanceDate) {
+                    DateTimeUtils.getStartOfDayEpochMillis(earliestTx)
+                } else {
+                    account.openingBalanceDate
+                }
                 val updated = account.copy(
                     openingBalancePaise = newPaise,
+                    openingBalanceDate = effectiveOpeningDate,
                     updatedAt = DateTimeUtils.nowEpochMillis()
                 )
                 accountRepository.updateAccount(updated)

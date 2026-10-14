@@ -227,6 +227,75 @@ class AccountsVisualsTest {
         assertThat(data.unassignedExcludedMessage).isEqualTo("1 unassigned transactions excluded")
     }
 
+    @Test
+    fun testV9_NetWorthChart_RangesGenerateDistinctPointCounts() {
+        val accounts = listOf(bankAccount)
+        val nowIST = startAt + 15 * dayMs
+
+        val r3m = AccountsChartBuilder.buildNetWorthChart(NetWorthRange.M3, accounts, emptyList(), emptyList(), emptyList(), nowIST)
+        val r6m = AccountsChartBuilder.buildNetWorthChart(NetWorthRange.M6, accounts, emptyList(), emptyList(), emptyList(), nowIST)
+        val r1y = AccountsChartBuilder.buildNetWorthChart(NetWorthRange.Y1, accounts, emptyList(), emptyList(), emptyList(), nowIST)
+
+        val d3m = (r3m as ChartState.Data).data
+        val d6m = (r6m as ChartState.Data).data
+        val d1y = (r1y as ChartState.Data).data
+
+        // 3M = 2 past + Now = 3 points
+        assertThat(d3m.points).hasSize(3)
+        assertThat(d3m.points.last().label).isEqualTo("Now")
+
+        // 6M = 5 past + Now = 6 points
+        assertThat(d6m.points).hasSize(6)
+        assertThat(d6m.points.last().label).isEqualTo("Now")
+
+        // 1Y = 11 past + Now = 12 points
+        assertThat(d1y.points).hasSize(12)
+        assertThat(d1y.points.last().label).isEqualTo("Now")
+
+        // Strictly monotonic timestamps in all ranges
+        for (points in listOf(d3m.points, d6m.points, d1y.points)) {
+            for (i in 0 until points.size - 1) {
+                assertThat(points[i].timestamp).isLessThan(points[i + 1].timestamp)
+            }
+        }
+    }
+
+    @Test
+    fun testV9_NetWorthChart_IncorporatesBackdatedTransactionsWithEffectiveAccount() {
+        // Account opening balance date is startAt (e.g. today)
+        val acc = bankAccount.copy(openingBalancePaise = 2_432_72L, openingBalanceDate = startAt)
+        // Backdated transaction 20 days before startAt
+        val backdatedTx = TransactionEntity(
+            id = 10L,
+            accountId = acc.id,
+            kind = TransactionKind.INCOME,
+            direction = TransactionDirection.IN,
+            amountPaise = 10_000_00L,
+            status = TransactionStatus.CONFIRMED,
+            source = TransactionSource.MANUAL,
+            occurredAt = startAt - 20 * dayMs,
+            createdAt = startAt,
+            updatedAt = startAt
+        )
+
+        val result = AccountsChartBuilder.buildNetWorthChart(
+            range = NetWorthRange.M3,
+            accounts = listOf(acc),
+            allTransactions = listOf(backdatedTx),
+            monthCloses = emptyList(),
+            periods = emptyList(),
+            asOfNow = startAt + 2 * dayMs
+        )
+
+        assertThat(result).isInstanceOf(ChartState.Data::class.java)
+        val data = (result as ChartState.Data).data
+        val nowPoint = data.points.last()
+
+        // 2,432.72 + 10,000.00 = 12,432.72
+        assertThat(nowPoint.netWorthPaise).isEqualTo(12_432_72L)
+        assertThat(nowPoint.assetsPaise).isEqualTo(12_432_72L)
+    }
+
     // =========================================================================
     // V10: Account Composition & Credit Card Utilization (S_Acct)
     // =========================================================================

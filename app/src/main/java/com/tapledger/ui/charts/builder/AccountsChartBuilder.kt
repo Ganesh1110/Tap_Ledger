@@ -5,8 +5,10 @@ import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.AccountType
+import com.tapledger.core.model.BudgetPeriodStatus
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.model.TransactionStatus
+import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.domain.calculator.AccountBalanceCalculator
 import com.tapledger.ui.charts.model.AccountCompositionBarItem
 import com.tapledger.ui.charts.model.AccountCompositionModel
@@ -17,6 +19,7 @@ import com.tapledger.ui.charts.model.NetWorthPoint
 import com.tapledger.ui.charts.model.NetWorthTableRow
 import com.tapledger.ui.charts.model.UtilizationZone
 import com.tapledger.ui.charts.util.ChartMath
+import java.time.YearMonth
 import kotlin.math.abs
 
 enum class NetWorthRange(val monthsCount: Int?) {
@@ -59,7 +62,14 @@ object AccountsChartBuilder {
 
             for (acc in activeAccounts) {
                 val accTxs = allTransactions.filter { it.accountId == acc.id }
-                val bal = AccountBalanceCalculator.calculateAccountBalance(acc, accTxs, asOfEpochMillis = asOfNow).currentBalancePaise
+                val earliestTx = accTxs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
+                val effectiveOpeningDate = if (earliestTx != null && earliestTx < acc.openingBalanceDate) {
+                    DateTimeUtils.getStartOfDayEpochMillis(earliestTx)
+                } else {
+                    acc.openingBalanceDate
+                }
+                val effectiveAcc = acc.copy(openingBalanceDate = effectiveOpeningDate)
+                val bal = AccountBalanceCalculator.calculateAccountBalance(effectiveAcc, accTxs, asOfEpochMillis = asOfNow).currentBalancePaise
                 liveMap[acc.id] = bal
                 if (acc.type == AccountType.CREDIT_CARD || acc.type == AccountType.LOAN) {
                     currentLiabilities = Math.addExact(currentLiabilities, abs(bal))
@@ -71,23 +81,43 @@ object AccountsChartBuilder {
 
             // Map closed period points from month_closes closing_balances_json totals
             val closeMap = monthCloses.associateBy { it.budgetPeriodId }
-            val sortedPeriods = periods.sortedBy { it.startAt }
+            val currentYm = DateTimeUtils.toYearMonth(asOfNow)
+            val closedPeriods = periods.filter { (it.status == BudgetPeriodStatus.CLOSED || it.endAt <= asOfNow) && it.endAt > 0L }
+            val periodYms = closedPeriods.map { YearMonth.of(it.year, it.month) }
 
-            val filteredPeriods = when (range) {
-                NetWorthRange.M3 -> sortedPeriods.takeLast(3)
-                NetWorthRange.M6 -> sortedPeriods.takeLast(6)
-                NetWorthRange.Y1 -> sortedPeriods.takeLast(12)
-                NetWorthRange.ALL -> sortedPeriods
+            val pastYms: List<YearMonth> = when (range) {
+                NetWorthRange.M3 -> listOf(currentYm.minusMonths(2), currentYm.minusMonths(1))
+                NetWorthRange.M6 -> (5 downTo 1).map { currentYm.minusMonths(it.toLong()) }
+                NetWorthRange.Y1 -> (11 downTo 1).map { currentYm.minusMonths(it.toLong()) }
+                NetWorthRange.ALL -> {
+                    val earliestTx = allTransactions
+                        .filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }
+                        .minOfOrNull { it.occurredAt }
+                    val earliestAcc = activeAccounts.minOfOrNull { it.openingBalanceDate }
+                    val earliestPeriod = periods.minOfOrNull { it.startAt }
+                    val earliestEpoch = listOfNotNull(earliestTx, earliestAcc, earliestPeriod).minOrNull() ?: asOfNow
+                    val earliestYm = DateTimeUtils.toYearMonth(earliestEpoch)
+
+                    val startYm = if (earliestYm.isBefore(currentYm)) earliestYm else currentYm.minusMonths(1)
+                    val yms = mutableListOf<YearMonth>()
+                    var curr = startYm
+                    while (!curr.isAfter(currentYm.minusMonths(1))) {
+                        yms.add(curr)
+                        curr = curr.plusMonths(1)
+                    }
+                    (yms + periodYms).distinct().sorted()
+                }
             }
 
             val points = mutableListOf<NetWorthPoint>()
             val tableRows = mutableListOf<NetWorthTableRow>()
 
-            for (p in filteredPeriods) {
-                val close = closeMap[p.id]
-                val pointTime = p.endAt
-                val label = "${p.month}/${p.year % 100}"
+            for (ym in pastYms) {
+                val periodForYm = periods.find { it.year == ym.year && it.month == ym.monthValue }
+                val pointTime = periodForYm?.endAt ?: (DateTimeUtils.getEndOfMonthEpochMillis(ym.year, ym.monthValue) - 1L)
+                val label = "${ym.monthValue}/${ym.year % 100}"
 
+                val close = periodForYm?.let { closeMap[it.id] }
                 val (assets, liabilities, nw) = if (close != null && close.closingBalancesJson.isNotBlank()) {
                     val balanceMap = parseClosingBalancesJson(close.closingBalancesJson)
                     var a = 0L
@@ -107,7 +137,19 @@ object AccountsChartBuilder {
                     var l = 0L
                     for (acc in activeAccounts) {
                         val accTxs = allTransactions.filter { it.accountId == acc.id }
-                        val bal = AccountBalanceCalculator.calculateAccountBalance(acc, accTxs, asOfEpochMillis = pointTime).currentBalancePaise
+                        val earliestTx = accTxs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
+                        val effectiveOpeningDate = if (earliestTx != null && earliestTx < acc.openingBalanceDate) {
+                            DateTimeUtils.getStartOfDayEpochMillis(earliestTx)
+                        } else {
+                            acc.openingBalanceDate
+                        }
+                        val effectiveAcc = acc.copy(openingBalanceDate = effectiveOpeningDate)
+                        val openStartOfDay = DateTimeUtils.getStartOfDayEpochMillis(effectiveAcc.openingBalanceDate)
+                        val bal = if (pointTime < openStartOfDay) {
+                            0L
+                        } else {
+                            AccountBalanceCalculator.calculateAccountBalance(effectiveAcc, accTxs, asOfEpochMillis = pointTime).currentBalancePaise
+                        }
                         if (acc.type == AccountType.CREDIT_CARD || acc.type == AccountType.LOAN) {
                             l = Math.addExact(l, abs(bal))
                         } else {
@@ -205,7 +247,14 @@ object AccountsChartBuilder {
 
             for (acc in activeAccounts) {
                 val accTxs = allTransactions.filter { it.accountId == acc.id }
-                val bal = AccountBalanceCalculator.calculateAccountBalance(acc, accTxs, asOfEpochMillis = asOfNow).currentBalancePaise
+                val earliestTx = accTxs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
+                val effectiveOpeningDate = if (earliestTx != null && earliestTx < acc.openingBalanceDate) {
+                    DateTimeUtils.getStartOfDayEpochMillis(earliestTx)
+                } else {
+                    acc.openingBalanceDate
+                }
+                val effectiveAcc = acc.copy(openingBalanceDate = effectiveOpeningDate)
+                val bal = AccountBalanceCalculator.calculateAccountBalance(effectiveAcc, accTxs, asOfEpochMillis = asOfNow).currentBalancePaise
                 val isLiability = acc.type == AccountType.CREDIT_CARD || acc.type == AccountType.LOAN
                 val isAsset = !isLiability
 

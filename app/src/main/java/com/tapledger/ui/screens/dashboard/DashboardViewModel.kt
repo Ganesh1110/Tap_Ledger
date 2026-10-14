@@ -10,6 +10,7 @@ import com.tapledger.core.database.entity.AccountEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.BudgetPeriodStatus
 import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.core.model.TransactionStatus
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.BudgetRepository
@@ -98,8 +99,19 @@ class DashboardViewModel @Inject constructor(
 
             val accounts = accountRepository.getAllAccountsSync()
             val accountSummaries = accounts.map { account ->
-                val txs = transactionDao.getBalanceTransactionsForAccount(account.id, account.openingBalanceDate)
-                AccountBalanceCalculator.calculateAccountBalance(account, txs)
+                val txs = transactionDao.getBalanceTransactionsForAccount(account.id, 0L)
+                val earliestTx = txs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
+                val effectiveOpeningDate = if (earliestTx != null && earliestTx < account.openingBalanceDate) {
+                    DateTimeUtils.getStartOfDayEpochMillis(earliestTx)
+                } else {
+                    account.openingBalanceDate
+                }
+                val effectiveAccount = if (effectiveOpeningDate != account.openingBalanceDate) {
+                    account.copy(openingBalanceDate = effectiveOpeningDate)
+                } else {
+                    account
+                }
+                AccountBalanceCalculator.calculateAccountBalance(effectiveAccount, txs)
             }
             val netWorth = AccountBalanceCalculator.calculateNetWorth(accountSummaries)
             val pendingCount = transactionDao.getPendingCountSync()
