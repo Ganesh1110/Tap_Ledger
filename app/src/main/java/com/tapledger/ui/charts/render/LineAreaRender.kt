@@ -204,12 +204,49 @@ fun BurnUpChartRender(
     paceColor: Color = Color(0xFF7F7F7F),
     budgetCapColor: Color = Color(0xFFD55E00),
     modifier: Modifier = Modifier,
-    height: Dp = 180.dp,
+    height: Dp = 200.dp,
     onScrub: ((com.tapledger.ui.charts.model.BurnUpPoint?) -> Unit)? = null
 ) {
     if (model.cumulativePoints.isEmpty() && model.pacePoints.isEmpty()) return
 
     var scrubIndex by remember { mutableStateOf<Int?>(null) }
+
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+    val labelColorArgb = labelColor.toArgb()
+    val gridLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val baselineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+    val scrubLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val capColorArgb = budgetCapColor.toArgb()
+
+    val textPaint = remember(labelColorArgb) {
+        Paint().apply {
+            color = labelColorArgb
+            textSize = 26f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+    }
+
+    val rightAxisPaint = remember(labelColorArgb) {
+        Paint().apply {
+            color = labelColorArgb
+            textSize = 24f
+            textAlign = Paint.Align.LEFT
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+    }
+
+    val capTextPaint = remember(capColorArgb) {
+        Paint().apply {
+            color = capColorArgb
+            textSize = 24f
+            textAlign = Paint.Align.LEFT
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+    }
 
     Canvas(
         modifier = modifier
@@ -217,9 +254,13 @@ fun BurnUpChartRender(
             .height(height)
             .pointerInput(model.cumulativePoints) {
                 if (onScrub != null && model.cumulativePoints.isNotEmpty()) {
-                    detectDragGestures(
+                    val leftPadPx = 14.dp.toPx()
+                    val rightPadPx = 56.dp.toPx()
+                    detectHorizontalDragGestures(
                         onDragStart = { offset ->
-                            val idx = ((offset.x / size.width.toFloat()) * (model.cumulativePoints.size - 1))
+                            val pWidth = (size.width - leftPadPx - rightPadPx).coerceAtLeast(1f)
+                            val xPos = (offset.x - leftPadPx).coerceIn(0f, pWidth)
+                            val idx = ((xPos / pWidth) * (model.cumulativePoints.size - 1))
                                 .toInt()
                                 .coerceIn(0, model.cumulativePoints.size - 1)
                             scrubIndex = idx
@@ -233,8 +274,11 @@ fun BurnUpChartRender(
                             scrubIndex = null
                             onScrub(null)
                         },
-                        onDrag = { change, _ ->
-                            val idx = ((change.position.x / size.width.toFloat()) * (model.cumulativePoints.size - 1))
+                        onHorizontalDrag = { change, _ ->
+                            change.consume()
+                            val pWidth = (size.width - leftPadPx - rightPadPx).coerceAtLeast(1f)
+                            val xPos = (change.position.x - leftPadPx).coerceIn(0f, pWidth)
+                            val idx = ((xPos / pWidth) * (model.cumulativePoints.size - 1))
                                 .toInt()
                                 .coerceIn(0, model.cumulativePoints.size - 1)
                             scrubIndex = idx
@@ -247,47 +291,104 @@ fun BurnUpChartRender(
         val widthPx = size.width
         val heightPx = size.height
 
+        val leftPaddingPx = 14.dp.toPx()
+        val rightPaddingPx = 56.dp.toPx()
+        val topPaddingPx = 20.dp.toPx()
+        val bottomPaddingPx = 26.dp.toPx()
+
+        val plotWidth = (widthPx - leftPaddingPx - rightPaddingPx).coerceAtLeast(1f)
+        val plotHeight = (heightPx - topPaddingPx - bottomPaddingPx).coerceAtLeast(1f)
+
+        val totalDays = maxOf(model.cumulativePoints.size, model.pacePoints.size, 1)
+
         val allValues = model.cumulativePoints.map { it.netSpentPaise } +
                 model.pacePoints.map { it.netSpentPaise } +
                 listOfNotNull(model.budgetCapPaise, model.projectionPaise, 0L)
         val minVal = 0L
-        val maxVal = maxOf(allValues.maxOrNull() ?: 1L, 1L)
-        val valRange = (maxVal - minVal).coerceAtLeast(1L).toFloat()
-
-        val totalDays = maxOf(model.cumulativePoints.size, model.pacePoints.size, 1)
+        val rawMax = maxOf(allValues.maxOrNull() ?: 1L, 1L)
+        // Add 8% headroom so cap line or peak line doesn't collide with top margin
+        val maxVal = (rawMax * 108L) / 100L
+        val valRange = (maxVal - minVal).coerceAtLeast(10000L).toFloat()
 
         fun toX(dayIdx: Int, total: Int): Float {
-            return if (total <= 1) widthPx / 2f else (dayIdx.toFloat() / (total - 1).toFloat()) * widthPx
+            return if (total <= 1) {
+                leftPaddingPx + (plotWidth / 2f)
+            } else {
+                leftPaddingPx + (dayIdx.toFloat() / (total - 1).toFloat()) * plotWidth
+            }
         }
 
         fun toY(value: Long): Float {
             val fraction = (value - minVal).toFloat() / valRange
-            return heightPx - (fraction * heightPx)
+            return (topPaddingPx + plotHeight) - (fraction * plotHeight)
         }
 
-        // 1. Budget Cap Horizontal Line
-        if (model.budgetCapPaise > 0L) {
-            val capY = toY(model.budgetCapPaise)
+        val zeroY = toY(0L)
+
+        // 1. Baseline ₹0 Horizontal Line & Label
+        drawLine(
+            color = baselineColor,
+            start = Offset(leftPaddingPx, zeroY),
+            end = Offset(leftPaddingPx + plotWidth, zeroY),
+            strokeWidth = 1.dp.toPx()
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            "₹0",
+            leftPaddingPx + plotWidth + 6.dp.toPx(),
+            zeroY + 8f,
+            rightAxisPaint
+        )
+
+        // 2. Midpoint Guideline
+        val midVal = maxVal / 2L
+        val midY = toY(midVal)
+        val capY = if (model.budgetCapPaise > 0L) toY(model.budgetCapPaise) else -1f
+        if (kotlin.math.abs(midY - zeroY) > 28.dp.toPx() &&
+            (capY < 0f || kotlin.math.abs(midY - capY) > 20.dp.toPx())
+        ) {
             drawLine(
-                color = budgetCapColor.copy(alpha = 0.7f),
-                start = Offset(0f, capY),
-                end = Offset(widthPx, capY),
-                strokeWidth = 1.5.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+                color = gridLineColor,
+                start = Offset(leftPaddingPx, midY),
+                end = Offset(leftPaddingPx + plotWidth, midY),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                formatCompactRupees(midVal),
+                leftPaddingPx + plotWidth + 6.dp.toPx(),
+                midY + 8f,
+                rightAxisPaint
             )
         }
 
-        // 2. Linear Pace Guideline Line
+        // 3. Budget Cap Horizontal Line & Label
+        if (model.budgetCapPaise > 0L) {
+            drawLine(
+                color = budgetCapColor.copy(alpha = 0.85f),
+                start = Offset(leftPaddingPx, capY),
+                end = Offset(leftPaddingPx + plotWidth, capY),
+                strokeWidth = 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f)
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                formatCompactRupees(model.budgetCapPaise) + " Cap",
+                leftPaddingPx + plotWidth + 6.dp.toPx(),
+                capY + 8f,
+                capTextPaint
+            )
+        }
+
+        // 4. Linear Pace Guideline Line
         if (model.pacePoints.size > 1) {
             val pacePath = Path().apply {
-                moveTo(toX(0, model.pacePoints.size), toY(model.pacePoints[0].netSpentPaise))
+                moveTo(toX(0, totalDays), toY(model.pacePoints[0].netSpentPaise))
                 for (i in 1 until model.pacePoints.size) {
-                    lineTo(toX(i, model.pacePoints.size), toY(model.pacePoints[i].netSpentPaise))
+                    lineTo(toX(i, totalDays), toY(model.pacePoints[i].netSpentPaise))
                 }
             }
             drawPath(
                 path = pacePath,
-                color = paceColor.copy(alpha = 0.6f),
+                color = paceColor.copy(alpha = 0.65f),
                 style = Stroke(
                     width = 1.5.dp.toPx(),
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f),
@@ -296,39 +397,64 @@ fun BurnUpChartRender(
             )
         }
 
-        // 3. Cumulative Spend Fill Area & Line
-        if (model.cumulativePoints.size > 1) {
-            val areaPath = Path().apply {
-                moveTo(toX(0, totalDays), heightPx)
-                model.cumulativePoints.forEachIndexed { i, pt ->
-                    lineTo(toX(i, totalDays), toY(pt.netSpentPaise))
-                }
-                lineTo(toX(model.cumulativePoints.size - 1, totalDays), heightPx)
-                close()
-            }
-            drawPath(
-                path = areaPath,
-                brush = Brush.verticalGradient(
-                    colors = listOf(lineColor.copy(alpha = 0.25f), Color.Transparent),
-                    startY = 0f,
-                    endY = heightPx
-                )
-            )
+        // 5. Cumulative Spend Fill Area & Line
+        if (model.cumulativePoints.isNotEmpty()) {
+            val lastIdx = model.cumulativePoints.size - 1
 
-            val linePath = Path().apply {
-                moveTo(toX(0, totalDays), toY(model.cumulativePoints[0].netSpentPaise))
-                for (i in 1 until model.cumulativePoints.size) {
-                    lineTo(toX(i, totalDays), toY(model.cumulativePoints[i].netSpentPaise))
+            if (model.cumulativePoints.size > 1) {
+                val areaPath = Path().apply {
+                    moveTo(toX(0, totalDays), zeroY)
+                    model.cumulativePoints.forEachIndexed { i, pt ->
+                        lineTo(toX(i, totalDays), toY(pt.netSpentPaise))
+                    }
+                    lineTo(toX(lastIdx, totalDays), zeroY)
+                    close()
                 }
+                drawPath(
+                    path = areaPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(lineColor.copy(alpha = 0.28f), lineColor.copy(alpha = 0.02f)),
+                        startY = toY(rawMax),
+                        endY = zeroY
+                    )
+                )
+
+                val linePath = Path().apply {
+                    moveTo(toX(0, totalDays), toY(model.cumulativePoints[0].netSpentPaise))
+                    for (i in 1 until model.cumulativePoints.size) {
+                        lineTo(toX(i, totalDays), toY(model.cumulativePoints[i].netSpentPaise))
+                    }
+                }
+                drawPath(
+                    path = linePath,
+                    color = lineColor,
+                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                )
             }
-            drawPath(
-                path = linePath,
+
+            // Anchor highlight dot for Today (last actual point)
+            val todayPoint = model.cumulativePoints.last()
+            val todayX = toX(lastIdx, totalDays)
+            val todayY = toY(todayPoint.netSpentPaise)
+
+            drawCircle(
+                color = lineColor.copy(alpha = 0.22f),
+                radius = 7.dp.toPx(),
+                center = Offset(todayX, todayY)
+            )
+            drawCircle(
                 color = lineColor,
-                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                radius = 4.dp.toPx(),
+                center = Offset(todayX, todayY)
+            )
+            drawCircle(
+                color = Color.White,
+                radius = 2.dp.toPx(),
+                center = Offset(todayX, todayY)
             )
         }
 
-        // 4. D4 Projection Dashed Line
+        // 6. D4 Projection Dashed Line
         if (model.projectionPoint != null && model.cumulativePoints.isNotEmpty()) {
             val lastPoint = model.cumulativePoints.last()
             val startX = toX(model.cumulativePoints.size - 1, totalDays)
@@ -345,13 +471,36 @@ fun BurnUpChartRender(
                 color = lineColor.copy(alpha = 0.75f),
                 style = Stroke(
                     width = 2.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f), 0f),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f), 0f),
                     cap = StrokeCap.Round
                 )
             )
+
+            // Hollow circle at projected end point
+            drawCircle(
+                color = lineColor.copy(alpha = 0.8f),
+                radius = 3.5.dp.toPx(),
+                center = Offset(endX, endY),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
         }
 
-        // 5. Scrub Indicator
+        // 7. X-Axis Day Markers
+        if (totalDays > 1) {
+            val xMarks = when {
+                totalDays <= 7 -> (0 until totalDays).toList()
+                totalDays <= 14 -> listOf(0, totalDays / 2, totalDays - 1).distinct()
+                else -> listOf(0, totalDays / 3, (2 * totalDays) / 3, totalDays - 1).distinct()
+            }
+            val labelY = topPaddingPx + plotHeight + 18.dp.toPx()
+            for (dIdx in xMarks) {
+                val x = toX(dIdx, totalDays)
+                val label = "D${dIdx + 1}"
+                drawContext.canvas.nativeCanvas.drawText(label, x, labelY, textPaint)
+            }
+        }
+
+        // 8. Scrub Indicator
         scrubIndex?.let { idx ->
             if (idx in model.cumulativePoints.indices) {
                 val pt = model.cumulativePoints[idx]
@@ -359,14 +508,25 @@ fun BurnUpChartRender(
                 val scrubY = toY(pt.netSpentPaise)
 
                 drawLine(
-                    color = Color.Black.copy(alpha = 0.5f),
-                    start = Offset(scrubX, 0f),
-                    end = Offset(scrubX, heightPx),
-                    strokeWidth = 1.dp.toPx()
+                    color = scrubLineColor,
+                    start = Offset(scrubX, topPaddingPx),
+                    end = Offset(scrubX, topPaddingPx + plotHeight),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                )
+                drawCircle(
+                    color = lineColor.copy(alpha = 0.25f),
+                    radius = 7.dp.toPx(),
+                    center = Offset(scrubX, scrubY)
                 )
                 drawCircle(
                     color = lineColor,
-                    radius = 5.dp.toPx(),
+                    radius = 4.5.dp.toPx(),
+                    center = Offset(scrubX, scrubY)
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 2.dp.toPx(),
                     center = Offset(scrubX, scrubY)
                 )
             }
