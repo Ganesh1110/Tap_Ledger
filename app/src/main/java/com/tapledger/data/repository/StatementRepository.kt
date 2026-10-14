@@ -378,7 +378,31 @@ class StatementRepository @Inject constructor(
 
     suspend fun updateImportBalances(importId: Long, openingPaise: Long, closingPaise: Long) {
         val importEntity = statementImportDao.getById(importId) ?: return
-        val lines = statementLineDao.getLinesForImportSync(importId)
+        val lines = statementLineDao.getLinesForImportSync(importId).toMutableList()
+
+        // Reconcile line directions using running balances if present
+        var prevBal = openingPaise
+        for (i in lines.indices) {
+            val line = lines[i]
+            val bal = line.balanceAfterPaise
+            if (bal != null) {
+                val delta = bal - prevBal
+                if (delta > 0L && line.debitPaise > 0L && line.creditPaise == 0L) {
+                    val corrected = line.copy(debitPaise = 0L, creditPaise = delta)
+                    statementLineDao.update(corrected)
+                    lines[i] = corrected
+                } else if (delta < 0L && line.creditPaise > 0L && line.debitPaise == 0L) {
+                    val corrected = line.copy(debitPaise = -delta, creditPaise = 0L)
+                    statementLineDao.update(corrected)
+                    lines[i] = corrected
+                }
+                prevBal = bal
+            }
+        }
+
+        val totalDebits = lines.sumOf { it.debitPaise }
+        val totalCredits = lines.sumOf { it.creditPaise }
+
         val isArithmeticValid = StatementReconciliationEngine.verifyStatementArithmetic(
             openingBalancePaise = openingPaise,
             lines = lines,
@@ -396,6 +420,8 @@ class StatementRepository @Inject constructor(
             importEntity.copy(
                 openingBalancePaise = openingPaise,
                 closingBalancePaise = closingPaise,
+                totalDebitsPaise = totalDebits,
+                totalCreditsPaise = totalCredits,
                 status = finalStatus
             )
         )
@@ -423,5 +449,10 @@ class StatementRepository @Inject constructor(
             statementLines = lines,
             transactions = transactions
         )
+    }
+
+    suspend fun deleteImport(importId: Long) = database.withTransaction {
+        statementLineDao.deleteLinesForImport(importId)
+        statementImportDao.deleteImport(importId)
     }
 }

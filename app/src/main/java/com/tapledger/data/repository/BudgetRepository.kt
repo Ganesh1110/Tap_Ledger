@@ -45,7 +45,10 @@ class BudgetRepository @Inject constructor(
         }
 
         val existing = budgetPeriodDao.getByYearMonth(year, month)
-        if (existing != null) return existing
+        if (existing != null) {
+            syncCategorySnapshotsForOpenPeriod(existing.id)
+            return existing
+        }
 
         return transactionRunner.run {
             val inTx = budgetPeriodDao.getByYearMonth(year, month)
@@ -319,17 +322,51 @@ class BudgetRepository @Inject constructor(
 
     suspend fun deactivateCategory(categoryId: Long) {
         val category = categoryDao.getById(categoryId) ?: return
+        require(category.systemKey == null) { "System categories cannot be deleted" }
         val updated = category.copy(
             isActive = false,
             updatedAt = DateTimeUtils.nowEpochMillis()
         )
         categoryDao.update(updated)
+
+        // Clean up allocations in open periods
+        val openPeriods = budgetPeriodDao.getAllPeriodsSync().filter { it.status == com.tapledger.core.model.BudgetPeriodStatus.OPEN }
+        for (openPeriod in openPeriods) {
+            budgetAllocationDao.deleteAllocation(openPeriod.id, categoryId)
+        }
     }
 
     suspend fun markPeriodReviewed(periodId: Long) {
         val period = budgetPeriodDao.getById(periodId) ?: return
         if (!period.isReviewed) {
             budgetPeriodDao.update(period.copy(isReviewed = true, updatedAt = DateTimeUtils.nowEpochMillis()))
+        }
+    }
+
+    /**
+     * Self-heals any budget_allocations in open periods whose snapshots (bucket, name, policy)
+     * are desynchronized from the authoritative CategoryEntity definitions.
+     */
+    suspend fun syncCategorySnapshotsForOpenPeriod(periodId: Long) {
+        val period = budgetPeriodDao.getById(periodId) ?: return
+        if (period.status != com.tapledger.core.model.BudgetPeriodStatus.OPEN) return
+        val categories = categoryDao.getAllCategoriesSync().associateBy { it.id }
+        val allocations = budgetAllocationDao.getAllocationsForPeriodSync(periodId)
+        val now = DateTimeUtils.nowEpochMillis()
+        for (alloc in allocations) {
+            val cat = categories[alloc.categoryId] ?: continue
+            if (alloc.bucketSnapshot != cat.defaultBucket ||
+                alloc.categoryNameSnapshot != cat.name.trim() ||
+                alloc.advancePolicySnapshot != cat.defaultAdvancePolicy) {
+                budgetAllocationDao.update(
+                    alloc.copy(
+                        bucketSnapshot = cat.defaultBucket,
+                        categoryNameSnapshot = cat.name.trim(),
+                        advancePolicySnapshot = cat.defaultAdvancePolicy,
+                        updatedAt = now
+                    )
+                )
+            }
         }
     }
 }

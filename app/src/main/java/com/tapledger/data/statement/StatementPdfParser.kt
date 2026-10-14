@@ -262,6 +262,20 @@ object StatementPdfParser {
             result.add(currentEntity)
         }
 
+        // Mathematical direction reconciliation from sequential running balances
+        for (i in 1 until result.size) {
+            val prev = result[i - 1]
+            val curr = result[i]
+            if (prev.balanceAfterPaise != null && curr.balanceAfterPaise != null) {
+                val delta = curr.balanceAfterPaise!! - prev.balanceAfterPaise!!
+                if (delta > 0L && curr.debitPaise > 0L && curr.creditPaise == 0L) {
+                    result[i] = curr.copy(debitPaise = 0L, creditPaise = delta)
+                } else if (delta < 0L && curr.creditPaise > 0L && curr.debitPaise == 0L) {
+                    result[i] = curr.copy(debitPaise = -delta, creditPaise = 0L)
+                }
+            }
+        }
+
         return result
     }
 
@@ -336,7 +350,7 @@ object StatementPdfParser {
                 val isCredit = otherTokens.any { it.contains("CR", ignoreCase = true) } ||
                         desc.contains(Regex("(?i)\\b(credit|cr|salary|refund|interest|cashback|reversal|dep|deposit)\\b"))
                 val isDebit = otherTokens.any { it.contains("DR", ignoreCase = true) } ||
-                        desc.contains(Regex("(?i)\\b(debit|dr|upi|pos|atm|wdl|withdrawal|paid|transfer to|bill|tax|fee|purchase)\\b"))
+                        desc.contains(Regex("(?i)\\b(debit|dr|pos|atm|wdl|withdrawal|paid|transfer to|bill|tax|fee|purchase)\\b"))
 
                 if (isCredit && !isDebit) {
                     credit = amounts[0]
@@ -434,7 +448,7 @@ object StatementPdfParser {
                 val hasCr = remainder.contains("CR", ignoreCase = true) ||
                         desc.contains(Regex("(?i)\\b(credit|cr|salary|refund|interest|cashback|reversal|dep|deposit)\\b"))
                 val hasDr = remainder.contains("DR", ignoreCase = true) ||
-                        desc.contains(Regex("(?i)\\b(debit|dr|upi|pos|atm|wdl|withdrawal|paid|transfer to|bill|tax|fee|purchase)\\b"))
+                        desc.contains(Regex("(?i)\\b(debit|dr|pos|atm|wdl|withdrawal|paid|transfer to|bill|tax|fee|purchase)\\b"))
 
                 if (hasCr && !hasDr) {
                     credit = parsedAmounts[0]

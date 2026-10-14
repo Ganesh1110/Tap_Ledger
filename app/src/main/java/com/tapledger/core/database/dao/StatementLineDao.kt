@@ -34,4 +34,7 @@ interface StatementLineDao {
 
     @Query("SELECT * FROM statement_lines")
     suspend fun getAllLinesSync(): List<StatementLineEntity>
+
+    @Query("DELETE FROM statement_lines WHERE import_id = :importId")
+    suspend fun deleteLinesForImport(importId: Long)
 }

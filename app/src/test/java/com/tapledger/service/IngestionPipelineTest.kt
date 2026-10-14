@@ -239,6 +239,10 @@ class IngestionPipelineTest {
         override suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity> = allocations
         override suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity? =
             allocations.find { it.budgetPeriodId == periodId && it.categoryId == categoryId }
+
+        override suspend fun deleteAllocation(periodId: Long, categoryId: Long) {
+            allocations.removeAll { it.budgetPeriodId == periodId && it.categoryId == categoryId }
+        }
     }
 
     private class FakeCategoryDao : CategoryDao {

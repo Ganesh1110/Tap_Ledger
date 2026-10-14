@@ -52,6 +52,7 @@ class BudgetAllocationDaoGuardTest {
         override suspend fun getAllocationsForPeriodSync(periodId: Long): List<BudgetAllocationEntity> = emptyList()
         override suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity> = emptyList()
         override suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity? = null
+        override suspend fun deleteAllocation(periodId: Long, categoryId: Long) {}
     }
 
     private fun createAllocation(

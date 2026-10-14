@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -100,6 +101,7 @@ import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.model.StatementMatchStatus
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.ui.components.ConfirmDialog
 import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.components.MoneySemantic
 import com.tapledger.ui.components.MoneyText
@@ -122,6 +124,7 @@ fun StatementReconciliationScreen(
     var lineToAddToApp by remember { mutableStateOf<StatementLineEntity?>(null) }
     var showMatchedGroup by remember { mutableStateOf(false) }
     var showMissingGroup by remember { mutableStateOf(true) }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
@@ -348,32 +351,48 @@ fun StatementReconciliationScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(
-                                            when (imp.status) {
-                                                com.tapledger.core.model.StatementImportStatus.RECONCILED -> IncomeGreen.copy(alpha = 0.15f)
-                                                com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> ExpenseRed.copy(alpha = 0.2f)
-                                                else -> WarningAmber.copy(alpha = 0.2f)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(
+                                                when (imp.status) {
+                                                    com.tapledger.core.model.StatementImportStatus.RECONCILED -> IncomeGreen.copy(alpha = 0.15f)
+                                                    com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> ExpenseRed.copy(alpha = 0.2f)
+                                                    else -> WarningAmber.copy(alpha = 0.2f)
+                                                }
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = when (imp.status) {
+                                                com.tapledger.core.model.StatementImportStatus.RECONCILED -> "RECONCILED"
+                                                com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> "ARITHMETIC ERROR"
+                                                else -> "IN REVIEW"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = when (imp.status) {
+                                                com.tapledger.core.model.StatementImportStatus.RECONCILED -> IncomeGreen
+                                                com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> ExpenseRed
+                                                else -> WarningAmber
                                             }
                                         )
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = when (imp.status) {
-                                            com.tapledger.core.model.StatementImportStatus.RECONCILED -> "RECONCILED"
-                                            com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> "ARITHMETIC ERROR"
-                                            else -> "IN REVIEW"
-                                        },
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = when (imp.status) {
-                                            com.tapledger.core.model.StatementImportStatus.RECONCILED -> IncomeGreen
-                                            com.tapledger.core.model.StatementImportStatus.ARITHMETIC_ERROR -> ExpenseRed
-                                            else -> WarningAmber
-                                        }
-                                    )
+                                    }
+                                    IconButton(
+                                        onClick = { showClearConfirmDialog = true },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Clear Statement",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -413,29 +432,45 @@ fun StatementReconciliationScreen(
                             border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.4f)),
                             shape = RoundedCornerShape(14.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(Spacing.md),
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.padding(Spacing.md)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = IncomeGreen,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(modifier = Modifier.width(Spacing.sm))
-                                Column {
-                                    Text(
-                                        text = "Statement Fully Reviewed & Reconciled",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = IncomeGreen
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = IncomeGreen,
+                                        modifier = Modifier.size(28.dp)
                                     )
-                                    Text(
-                                        text = "All ${lines.size} transactions are accounted for in your ledger.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    Spacer(modifier = Modifier.width(Spacing.sm))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Statement Fully Reviewed & Reconciled",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = IncomeGreen
+                                        )
+                                        Text(
+                                            text = "All ${lines.size} transactions are accounted for in your ledger.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(Spacing.sm))
+                                OutlinedButton(
+                                    onClick = { showClearConfirmDialog = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteOutline,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
                                     )
+                                    Spacer(modifier = Modifier.width(Spacing.xs))
+                                    Text("Clear Statement from List", fontSize = 13.sp)
                                 }
                             }
                         }
@@ -702,6 +737,32 @@ fun StatementReconciliationScreen(
                         showImportDialog = false
                     }
                 )
+            }
+        )
+    }
+
+    if (showClearConfirmDialog && state.selectedImport != null) {
+        val imp = state.selectedImport!!
+        val startYm = DateTimeUtils.toYearMonth(imp.periodStart)
+        val endYm = DateTimeUtils.toYearMonth(imp.periodEnd)
+        val monthLabel = if (startYm == endYm) {
+            DateTimeUtils.formatMonthYear(startYm.year, startYm.monthValue)
+        } else {
+            "${DateTimeUtils.formatDate(imp.periodStart)} – ${DateTimeUtils.formatDate(imp.periodEnd)}"
+        }
+
+        ConfirmDialog(
+            title = "Clear Statement Tab?",
+            text = "Are you sure you want to clear the $monthLabel statement (${imp.lineCount} transactions) from this list?\n\nAll transactions recorded in your ledger and budget will remain completely safe and untouched.",
+            confirmText = "Clear Statement",
+            dismissText = "Keep",
+            isDestructive = true,
+            onConfirm = {
+                showClearConfirmDialog = false
+                viewModel.deleteImport(imp.id)
+            },
+            onDismiss = {
+                showClearConfirmDialog = false
             }
         )
     }
@@ -1290,38 +1351,54 @@ fun AddToAppCategoryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Classify Transaction") },
+        title = { Text(if (isDebit) "Classify Expense" else "Record Income") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Narration: ${line.description}", fontSize = 13.sp)
                 Text(
                     text = "Amount: ${MoneyFormatter.formatRupees(amount)} (${if (isDebit) "Debit" else "Credit"})",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    color = if (isDebit) ExpenseRed else IncomeGreen
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Assign to Category:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Box {
-                    OutlinedButton(
-                        onClick = { showCategoryMenu = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(selectedCategory?.name ?: "Select Category")
-                    }
-                    DropdownMenu(
-                        expanded = showCategoryMenu,
-                        onDismissRequest = { showCategoryMenu = false }
-                    ) {
-                        categories.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(cat.name) },
-                                onClick = {
-                                    selectedCategory = cat
-                                    showCategoryMenu = false
-                                }
-                            )
+                if (isDebit) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Assign to Envelope / Category:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Box {
+                        OutlinedButton(
+                            onClick = { showCategoryMenu = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(selectedCategory?.name ?: "Select Category")
                         }
+                        DropdownMenu(
+                            expanded = showCategoryMenu,
+                            onDismissRequest = { showCategoryMenu = false }
+                        ) {
+                            categories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat.name) },
+                                    onClick = {
+                                        selectedCategory = cat
+                                        showCategoryMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = IncomeGreen.copy(alpha = 0.1f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "This is an incoming deposit. It will be recorded directly as Income in your Bank Account ledger without consuming an expense envelope.",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(10.dp),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }
@@ -1329,10 +1406,11 @@ fun AddToAppCategoryDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    selectedCategory?.id?.let { onConfirm(it) }
+                    val catId = if (isDebit) (selectedCategory?.id ?: 0L) else 0L
+                    onConfirm(catId)
                 }
             ) {
-                Text("Record Entry")
+                Text(if (isDebit) "Record Expense" else "Record Income")
             }
         },
         dismissButton = {

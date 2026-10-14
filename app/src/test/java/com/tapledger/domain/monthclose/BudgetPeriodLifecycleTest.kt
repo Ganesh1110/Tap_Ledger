@@ -107,6 +107,12 @@ class BudgetPeriodLifecycleTest {
         override suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity> = storage.values.toList()
         override suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity? =
             storage.values.firstOrNull { it.budgetPeriodId == periodId && it.categoryId == categoryId }
+        override suspend fun deleteAllocation(periodId: Long, categoryId: Long) {
+            val toRemove = storage.values.firstOrNull { it.budgetPeriodId == periodId && it.categoryId == categoryId }
+            if (toRemove != null) {
+                storage.remove(toRemove.id)
+            }
+        }
     }
 
     private lateinit var categoryDao: FakeCategoryDao
@@ -252,5 +258,35 @@ class BudgetPeriodLifecycleTest {
         val updatedAlloc = budgetAllocationDao.getAllocation(period.id, catId)
         assertThat(updatedAlloc).isNotNull()
         assertThat(updatedAlloc!!.bucketSnapshot).isEqualTo(BudgetBucket.WANTS)
+    }
+
+    @Test
+    fun testDeactivateCategoryRemovesAllocationFromOpenPeriods() = runBlocking {
+        val nowYm = DateTimeUtils.toYearMonth(DateTimeUtils.nowEpochMillis())
+        val period = budgetRepository.getOrCreateBudgetPeriod(nowYm.year, nowYm.monthValue)
+
+        val catId = budgetRepository.createCategory(
+            name = "Accidental Category",
+            defaultBucket = BudgetBucket.NEEDS,
+            defaultAdvancePolicy = AdvancePolicy.CARRY_TO_ADVANCE,
+            initialAllocationPaise = 2_000_00L,
+            periodId = period.id
+        )
+
+        // Verify allocation exists in open period
+        val alloc = budgetAllocationDao.getAllocation(period.id, catId)
+        assertThat(alloc).isNotNull()
+
+        // Deactivate category (delete)
+        budgetRepository.deactivateCategory(catId)
+
+        // Verify category is deactivated
+        val deactivatedCat = categoryDao.getById(catId)
+        assertThat(deactivatedCat).isNotNull()
+        assertThat(deactivatedCat!!.isActive).isFalse()
+
+        // Verify allocation is removed from open period
+        val allocAfter = budgetAllocationDao.getAllocation(period.id, catId)
+        assertThat(allocAfter).isNull()
     }
 }

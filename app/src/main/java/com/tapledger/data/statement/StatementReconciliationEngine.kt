@@ -215,14 +215,23 @@ object StatementReconciliationEngine {
         val windowEndOfDay = DateTimeUtils.getEndOfDayEpochMillis(statementImport.periodEnd)
         val startOfDayMinus = windowStartOfDay - 1L
 
+        val effectiveAccount = if (account.openingBalanceDate > windowStartOfDay) {
+            account.copy(
+                openingBalanceDate = windowStartOfDay,
+                openingBalancePaise = statementImport.openingBalancePaise
+            )
+        } else {
+            account
+        }
+
         val appBalanceEnd = AccountBalanceCalculator.calculateAsOfBalance(
-            account = account,
+            account = effectiveAccount,
             transactions = transactions,
             asOfEpochMillis = windowEndOfDay
         )
 
         val appBalanceStartMinus = AccountBalanceCalculator.calculateAsOfBalance(
-            account = account,
+            account = effectiveAccount,
             transactions = transactions,
             asOfEpochMillis = startOfDayMinus
         )

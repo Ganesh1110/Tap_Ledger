@@ -28,4 +28,7 @@ interface StatementImportDao {
 
     @Query("SELECT * FROM statement_imports ORDER BY period_end DESC")
     fun observeAll(): Flow<List<StatementImportEntity>>
+
+    @Query("DELETE FROM statement_imports WHERE id = :id")
+    suspend fun deleteImport(id: Long)
 }

@@ -25,10 +25,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -77,6 +79,7 @@ import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.model.AdvancePolicy
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.ui.components.ConfirmDialog
 import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.components.MoneySemantic
 import com.tapledger.ui.components.MoneyText
@@ -109,6 +112,7 @@ fun CategoryManagementScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
     var editingCategoryItem by remember { mutableStateOf<CategoryItemState?>(null) }
+    var categoryToDelete by remember { mutableStateOf<CategoryEntity?>(null) }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
@@ -294,6 +298,12 @@ fun CategoryManagementScreen(
             initialAdvancePolicy = itemState.category.defaultAdvancePolicy,
             initialBudgetRupees = (itemState.currentAllocationPaise / 100).toString(),
             onDismiss = { editingCategoryItem = null },
+            onDelete = if (itemState.category.systemKey == null) {
+                {
+                    categoryToDelete = itemState.category
+                    editingCategoryItem = null
+                }
+            } else null,
             onSave = { name, bucket, advancePolicy, budgetRupees ->
                 viewModel.updateCategory(
                     categoryId = itemState.category.id,
@@ -304,6 +314,20 @@ fun CategoryManagementScreen(
                 )
                 editingCategoryItem = null
             }
+        )
+    }
+
+    categoryToDelete?.let { cat ->
+        ConfirmDialog(
+            title = "Delete ${cat.name}?",
+            text = "Are you sure you want to remove '${cat.name}' from your active budget envelopes? Historical transaction logs will be preserved.",
+            confirmText = "Delete Category",
+            isDestructive = true,
+            onConfirm = {
+                viewModel.deactivateCategory(cat.id)
+                categoryToDelete = null
+            },
+            onDismiss = { categoryToDelete = null }
         )
     }
 
@@ -521,6 +545,7 @@ fun AddEditCategoryDialog(
     initialAdvancePolicy: AdvancePolicy,
     initialBudgetRupees: String,
     onDismiss: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     onSave: (String, BudgetBucket, AdvancePolicy, String) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
@@ -638,8 +663,28 @@ fun AddEditCategoryDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                if (onDelete != null) {
+                    TextButton(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.textButtonColors(contentColor = ExpenseRed)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Category",
+                            tint = ExpenseRed,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Delete", color = ExpenseRed)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
             }
         }
     )

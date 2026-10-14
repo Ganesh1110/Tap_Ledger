@@ -84,4 +84,7 @@ abstract class BudgetAllocationDao {
 
     @Query("SELECT * FROM budget_allocations WHERE budget_period_id = :periodId AND category_id = :categoryId LIMIT 1")
     abstract suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity?
+
+    @Query("DELETE FROM budget_allocations WHERE budget_period_id = :periodId AND category_id = :categoryId")
+    abstract suspend fun deleteAllocation(periodId: Long, categoryId: Long)
 }

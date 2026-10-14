@@ -339,6 +339,9 @@ class ChartInvariantsTest {
             override suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity> = allocStore.values.toList()
             override suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity? =
                 allocStore.values.firstOrNull { it.budgetPeriodId == periodId && it.categoryId == categoryId }
+            override suspend fun deleteAllocation(periodId: Long, categoryId: Long) {
+                allocStore.entries.removeIf { it.value.budgetPeriodId == periodId && it.value.categoryId == categoryId }
+            }
         }
 
         allocStore[1L] = allocNeeds

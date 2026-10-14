@@ -143,6 +143,9 @@ class MonthCloseEngineTest {
         override suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity> = storage.values.toList()
         override suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity? =
             storage.values.firstOrNull { it.budgetPeriodId == periodId && it.categoryId == categoryId }
+        override suspend fun deleteAllocation(periodId: Long, categoryId: Long) {
+            storage.entries.removeIf { it.value.budgetPeriodId == periodId && it.value.categoryId == categoryId }
+        }
     }
 
     private class FakeBudgetAdjustmentDao : BudgetAdjustmentDao {

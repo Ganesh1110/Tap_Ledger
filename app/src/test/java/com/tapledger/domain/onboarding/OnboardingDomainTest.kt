@@ -173,6 +173,10 @@ class OnboardingDomainTest {
         override suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity? =
             storage[Pair(periodId, categoryId)]
 
+        override suspend fun deleteAllocation(periodId: Long, categoryId: Long) {
+            storage.remove(Pair(periodId, categoryId))
+        }
+
         override suspend fun getAdjustmentsForPeriod(periodId: Long): List<BudgetAdjustmentEntity> = emptyList()
         override suspend fun getAdvancesForPeriod(periodId: Long): List<AdvanceLedgerEntity> = emptyList()
     }

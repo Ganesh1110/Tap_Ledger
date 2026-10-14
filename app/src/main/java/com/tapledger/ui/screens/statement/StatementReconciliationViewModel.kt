@@ -296,6 +296,36 @@ class StatementReconciliationViewModel @Inject constructor(
         }
     }
 
+    fun deleteImport(importId: Long) {
+        viewModelScope.launch {
+            try {
+                statementRepository.deleteImport(importId)
+                val remaining = _uiState.value.imports.filter { it.id != importId }
+                val nextSelected = remaining.firstOrNull()
+                _uiState.update { current ->
+                    current.copy(
+                        imports = remaining,
+                        selectedImport = nextSelected,
+                        successMessage = "Statement removed from reconciliation list."
+                    )
+                }
+                if (nextSelected != null) {
+                    selectImport(nextSelected)
+                } else {
+                    _uiState.update { current ->
+                        current.copy(
+                            selectedImportLines = emptyList(),
+                            isArithmeticConsistent = true,
+                            reconciliationBridgeState = ChartState.Empty("No statements imported")
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to remove statement") }
+            }
+        }
+    }
+
     fun clearErrorMessage() {
         _uiState.update { it.copy(errorMessage = null) }
     }
