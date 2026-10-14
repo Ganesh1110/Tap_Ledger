@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
@@ -186,16 +187,37 @@ fun TransactionsScreen(
                     )
                 }
 
-                // Filter Chips Row (All, Pending, Categorized, Voided)
+                // Filter Chips Row (Month, All, Pending, Categorized, Voided)
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     contentPadding = PaddingValues(vertical = Spacing.xxs)
                 ) {
                     item {
                         FilterChip(
+                            selected = state.isMonthFilterActive,
+                            onClick = { viewModel.toggleMonthFilter() },
+                            label = {
+                                Text(
+                                    if (state.isMonthFilterActive)
+                                        DateTimeUtils.formatMonthYear(state.selectedYear, state.selectedMonth)
+                                    else
+                                        "All Months"
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        )
+                    }
+                    item {
+                        FilterChip(
                             selected = state.selectedStatus == null,
                             onClick = { viewModel.onStatusSelected(null) },
-                            label = { Text("All (${state.transactions.size})") }
+                            label = { Text("All (${state.filteredTransactions.size})") }
                         )
                     }
                     item {
@@ -256,6 +278,11 @@ fun TransactionsScreen(
                         SpendingHeatmapCard(
                             heatmapState = state.heatmapState,
                             selectedDateEpoch = state.selectedDateFilterEpoch,
+                            selectedYear = state.selectedYear,
+                            selectedMonth = state.selectedMonth,
+                            onPreviousMonth = viewModel::prevMonth,
+                            onNextMonth = viewModel::nextMonth,
+                            onJumpToCurrentMonth = viewModel::jumpToCurrentMonth,
                             onSelectDay = viewModel::onSelectHeatmapDay,
                             onClearDateFilter = viewModel::clearDateFilter,
                             modifier = Modifier.padding(bottom = Spacing.xs)
@@ -265,15 +292,17 @@ fun TransactionsScreen(
                     if (state.filteredTransactions.isEmpty()) {
                         item(key = "empty_state") {
                             EmptyState(
-                                title = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "No matching transactions" else "No transactions yet",
-                                subtitle = if (state.searchQuery.isNotEmpty() || state.selectedDateFilterEpoch != null) "Try adjusting your search or date filter." else "Add your first transaction or wait for SMS notifications.",
+                                title = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "No matching transactions" else "No transactions in ${DateTimeUtils.formatMonthYear(state.selectedYear, state.selectedMonth)}",
+                                subtitle = if (state.searchQuery.isNotEmpty() || state.selectedDateFilterEpoch != null) "Try adjusting your search or date filter." else "Switch months or add a transaction for this period.",
                                 icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                                actionLabel = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "Clear Filters" else "Add Transaction",
+                                actionLabel = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "Clear Filters" else if (state.isMonthFilterActive) "Show All Months" else "Add Transaction",
                                 onActionClick = {
                                     if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) {
                                         viewModel.onSearchQueryChanged("")
                                         viewModel.onStatusSelected(null)
                                         viewModel.clearDateFilter()
+                                    } else if (state.isMonthFilterActive) {
+                                        viewModel.toggleMonthFilter()
                                     } else {
                                         onNavigateToManualEntry()
                                     }

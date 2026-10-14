@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +34,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.ui.charts.model.ChartState
@@ -40,6 +44,7 @@ import com.tapledger.ui.charts.render.HeatmapRender
 import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.Spacing
 import java.time.Instant
+import java.time.YearMonth
 
 /**
  * V7 Spending Calendar Heatmap Card per Flow.md §17.2 V7.
@@ -52,7 +57,12 @@ fun SpendingHeatmapCard(
     selectedDateEpoch: Long?,
     onSelectDay: (Long) -> Unit,
     onClearDateFilter: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedYear: Int? = null,
+    selectedMonth: Int? = null,
+    onPreviousMonth: (() -> Unit)? = null,
+    onNextMonth: (() -> Unit)? = null,
+    onJumpToCurrentMonth: (() -> Unit)? = null
 ) {
     Card(
         modifier = modifier
@@ -76,25 +86,80 @@ fun SpendingHeatmapCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Spending Calendar",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        text = "Needs + Wants daily intensity",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (selectedYear != null && selectedMonth != null && onPreviousMonth != null && onNextMonth != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            IconButton(
+                                onClick = onPreviousMonth,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Previous Month",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            Text(
+                                text = DateTimeUtils.formatMonthYear(selectedYear, selectedMonth),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            IconButton(
+                                onClick = onNextMonth,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "Next Month",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            val currentYm = remember { YearMonth.now(DateTimeUtils.IST_ZONE) }
+                            val isCurrentMonth = selectedYear == currentYm.year && selectedMonth == currentYm.monthValue
+                            if (!isCurrentMonth && onJumpToCurrentMonth != null) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                AssistChip(
+                                    onClick = onJumpToCurrentMonth,
+                                    label = { Text("This Month", fontSize = 11.sp) },
+                                    modifier = Modifier.height(26.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Needs + Wants daily intensity",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
-                if (heatmapState is ChartState.Data) {
+                Column(horizontalAlignment = Alignment.End) {
+                    if (heatmapState is ChartState.Data) {
+                        Text(
+                            text = MoneyFormatter.formatPaiseToRupees(heatmapState.data.totalSpentPaise),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Text(
-                        text = MoneyFormatter.formatPaiseToRupees(heatmapState.data.totalSpentPaise),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = "Needs + Wants",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

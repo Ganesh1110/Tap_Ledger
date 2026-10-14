@@ -26,7 +26,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.update
+import java.time.LocalDate
+import java.time.YearMonth
 import javax.inject.Inject
+
+data class MonthFilterState(
+    val year: Int,
+    val month: Int,
+    val isFilterActive: Boolean = true
+)
 
 data class TransactionsUiState(
     val transactions: List<TransactionEntity> = emptyList(),
@@ -36,6 +45,9 @@ data class TransactionsUiState(
     val searchQuery: String = "",
     val selectedStatus: TransactionStatus? = null,
     val selectedDateFilterEpoch: Long? = null,
+    val selectedYear: Int = 2026,
+    val selectedMonth: Int = 10,
+    val isMonthFilterActive: Boolean = true,
     val heatmapState: ChartState<SpendingHeatmapModel> = ChartState.Loading,
     val isLoading: Boolean = true
 )
@@ -49,6 +61,8 @@ class TransactionsViewModel @Inject constructor(
     private val budgetPeriodDao: BudgetPeriodDao
 ) : ViewModel() {
 
+    private val today = LocalDate.now(DateTimeUtils.IST_ZONE)
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -58,21 +72,32 @@ class TransactionsViewModel @Inject constructor(
     private val _selectedDateFilterEpoch = MutableStateFlow<Long?>(null)
     val selectedDateFilterEpoch: StateFlow<Long?> = _selectedDateFilterEpoch.asStateFlow()
 
+    private val _monthFilterState = MutableStateFlow(
+        MonthFilterState(
+            year = today.year,
+            month = today.monthValue,
+            isFilterActive = true
+        )
+    )
+    val monthFilterState: StateFlow<MonthFilterState> = _monthFilterState.asStateFlow()
+
     private val _categoriesMap = MutableStateFlow<Map<Long, CategoryEntity>>(emptyMap())
     private val _accountsMap = MutableStateFlow<Map<Long, AccountEntity>>(emptyMap())
 
     private data class FilterCriteria(
         val query: String,
         val status: TransactionStatus?,
-        val dateEpoch: Long?
+        val dateEpoch: Long?,
+        val monthFilter: MonthFilterState
     )
 
     private val _filterCriteria = combine(
         _searchQuery,
         _selectedStatus,
-        _selectedDateFilterEpoch
-    ) { query, status, dateEpoch ->
-        FilterCriteria(query, status, dateEpoch)
+        _selectedDateFilterEpoch,
+        _monthFilterState
+    ) { query, status, dateEpoch, monthFilter ->
+        FilterCriteria(query, status, dateEpoch, monthFilter)
     }
 
     val uiState: StateFlow<TransactionsUiState> = combine(
@@ -81,7 +106,13 @@ class TransactionsViewModel @Inject constructor(
         _categoriesMap,
         _accountsMap
     ) { txList, filter, catMap, accMap ->
+        val monthStart = DateTimeUtils.getStartOfMonthEpochMillis(filter.monthFilter.year, filter.monthFilter.month)
+        val monthEnd = DateTimeUtils.getEndOfMonthEpochMillis(filter.monthFilter.year, filter.monthFilter.month)
+
         val filtered = txList.filter { tx ->
+            val matchesMonth = if (!filter.monthFilter.isFilterActive) true else {
+                tx.occurredAt >= monthStart && tx.occurredAt < monthEnd
+            }
             val matchesStatus = (filter.status == null || tx.status == filter.status)
             val matchesDate = if (filter.dateEpoch == null) true else {
                 tx.occurredAt >= filter.dateEpoch && tx.occurredAt < (filter.dateEpoch + ChartMath.MILLIS_PER_IST_DAY)
@@ -92,19 +123,17 @@ class TransactionsViewModel @Inject constructor(
                         (tx.notes?.lowercase()?.contains(q) == true) ||
                         tx.amountPaise.toString().contains(q)
             }
-            matchesStatus && matchesDate && matchesQuery
+            matchesMonth && matchesStatus && matchesDate && matchesQuery
         }
 
         val heatmap = run {
-            val now = DateTimeUtils.nowEpochMillis()
-            val period = budgetPeriodDao.getPeriodForTimestamp(now)
-                ?: budgetPeriodDao.getLatestPeriod()
-            if (period != null) {
+            try {
+                val period = budgetRepository.getOrCreateBudgetPeriod(filter.monthFilter.year, filter.monthFilter.month)
                 val allocs = transactionAllocationDao.getAllocationsInPeriod(period.startAt, period.endAt)
                 val buckets = catMap.mapValues { it.value.defaultBucket }
                 InsightsChartBuilder.buildSpendingHeatmap(period, txList, allocs, buckets)
-            } else {
-                ChartState.Empty("No budget period active")
+            } catch (e: Exception) {
+                ChartState.Empty("Unable to load budget period")
             }
         }
 
@@ -116,13 +145,20 @@ class TransactionsViewModel @Inject constructor(
             searchQuery = filter.query,
             selectedStatus = filter.status,
             selectedDateFilterEpoch = filter.dateEpoch,
+            selectedYear = filter.monthFilter.year,
+            selectedMonth = filter.monthFilter.month,
+            isMonthFilterActive = filter.monthFilter.isFilterActive,
             heatmapState = heatmap,
             isLoading = false
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = TransactionsUiState()
+        initialValue = TransactionsUiState(
+            selectedYear = today.year,
+            selectedMonth = today.monthValue,
+            isMonthFilterActive = true
+        )
     )
 
     init {
@@ -152,6 +188,43 @@ class TransactionsViewModel @Inject constructor(
 
     fun clearDateFilter() {
         _selectedDateFilterEpoch.value = null
+    }
+
+    fun prevMonth() {
+        clearDateFilter()
+        _monthFilterState.update { current ->
+            val ym = YearMonth.of(current.year, current.month).minusMonths(1)
+            current.copy(year = ym.year, month = ym.monthValue, isFilterActive = true)
+        }
+    }
+
+    fun nextMonth() {
+        clearDateFilter()
+        _monthFilterState.update { current ->
+            val ym = YearMonth.of(current.year, current.month).plusMonths(1)
+            current.copy(year = ym.year, month = ym.monthValue, isFilterActive = true)
+        }
+    }
+
+    fun jumpToCurrentMonth() {
+        clearDateFilter()
+        val now = LocalDate.now(DateTimeUtils.IST_ZONE)
+        _monthFilterState.update { current ->
+            current.copy(year = now.year, month = now.monthValue, isFilterActive = true)
+        }
+    }
+
+    fun toggleMonthFilter() {
+        _monthFilterState.update { current ->
+            current.copy(isFilterActive = !current.isFilterActive)
+        }
+    }
+
+    fun selectMonth(year: Int, month: Int) {
+        clearDateFilter()
+        _monthFilterState.update { current ->
+            current.copy(year = year, month = month, isFilterActive = true)
+        }
     }
 
     fun voidTransaction(transactionId: Long, reason: String = "User voided") {
