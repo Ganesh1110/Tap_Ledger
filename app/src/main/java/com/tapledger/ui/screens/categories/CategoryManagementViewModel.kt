@@ -178,8 +178,6 @@ class CategoryManagementViewModel @Inject constructor(
                     defaultBucket = bucket,
                     defaultAdvancePolicy = advancePolicy
                 )
-                budgetRepository.updateCategory(updated)
-
                 val amountPaise = try {
                     if (newBudgetRupees.isBlank()) 0L else MoneyFormatter.toPaise(newBudgetRupees)
                 } catch (e: Exception) {
@@ -187,9 +185,11 @@ class CategoryManagementViewModel @Inject constructor(
                 }
 
                 val periodId = _uiState.value.currentPeriodId
-                if (periodId > 0L) {
-                    budgetRepository.updateBudgetAllocationAmount(periodId, categoryId, amountPaise)
-                }
+                budgetRepository.updateCategory(
+                    category = updated,
+                    periodId = if (periodId > 0L) periodId else null,
+                    newAmountPaise = amountPaise
+                )
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Failed to update category") }
             }

@@ -220,4 +220,37 @@ class BudgetPeriodLifecycleTest {
         }
         assertThat(ex.message).contains("more than 3 months in the future")
     }
+
+    @Test
+    fun testUpdateCategoryUpdatesBucketSnapshotInOpenPeriods() = runBlocking {
+        val nowYm = DateTimeUtils.toYearMonth(DateTimeUtils.nowEpochMillis())
+        val period = budgetRepository.getOrCreateBudgetPeriod(nowYm.year, nowYm.monthValue)
+
+        val catId = budgetRepository.createCategory(
+            name = "Post Office",
+            defaultBucket = BudgetBucket.NEEDS,
+            defaultAdvancePolicy = AdvancePolicy.CARRY_TO_ADVANCE,
+            initialAllocationPaise = 5_000_00L,
+            periodId = period.id
+        )
+
+        // Verify initial snapshot is NEEDS
+        val initialAlloc = budgetAllocationDao.getAllocation(period.id, catId)
+        assertThat(initialAlloc).isNotNull()
+        assertThat(initialAlloc!!.bucketSnapshot).isEqualTo(BudgetBucket.NEEDS)
+
+        // User updates category to WANTS
+        val category = categoryDao.getById(catId)!!
+        val updatedCategory = category.copy(defaultBucket = BudgetBucket.WANTS)
+        budgetRepository.updateCategory(
+            category = updatedCategory,
+            periodId = period.id,
+            newAmountPaise = 5_000_00L
+        )
+
+        // Verify snapshot in open period is updated to WANTS
+        val updatedAlloc = budgetAllocationDao.getAllocation(period.id, catId)
+        assertThat(updatedAlloc).isNotNull()
+        assertThat(updatedAlloc!!.bucketSnapshot).isEqualTo(BudgetBucket.WANTS)
+    }
 }

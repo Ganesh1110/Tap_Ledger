@@ -38,11 +38,11 @@ class BackupManager @Inject constructor(
             if (snapshotFile.exists()) {
                 snapshotFile.delete()
             }
+            snapshotFile.parentFile?.mkdirs()
             val snapshotPath = snapshotFile.absolutePath
 
             // 1. VACUUM INTO atomic snapshot
-            val vacuumQuery = SimpleSQLiteQuery("VACUUM INTO '$snapshotPath'")
-            database.openHelper.writableDatabase.query(vacuumQuery).close()
+            database.openHelper.writableDatabase.execSQL("VACUUM INTO '$snapshotPath'")
 
             // 2. PRAGMA integrity_check on the snapshot
             val snapshotHelper = android.database.sqlite.SQLiteDatabase.openDatabase(
@@ -167,9 +167,9 @@ class BackupManager @Inject constructor(
         try {
             val safetyFile = File(context.filesDir, "safety_backup_${System.currentTimeMillis()}.db")
             if (safetyFile.exists()) safetyFile.delete()
+            safetyFile.parentFile?.mkdirs()
 
-            val query = SimpleSQLiteQuery("VACUUM INTO '${safetyFile.absolutePath}'")
-            database.openHelper.writableDatabase.query(query).close()
+            database.openHelper.writableDatabase.execSQL("VACUUM INTO '${safetyFile.absolutePath}'")
             Result.success(safetyFile)
         } catch (e: Exception) {
             Result.failure(e)

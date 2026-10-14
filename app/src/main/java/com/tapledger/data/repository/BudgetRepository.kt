@@ -239,8 +239,12 @@ class BudgetRepository @Inject constructor(
     suspend fun updateBudgetAllocationAmount(periodId: Long, categoryId: Long, newAmountPaise: Long) {
         val existing = budgetAllocationDao.getAllocation(periodId, categoryId)
         if (existing != null) {
+            val category = categoryDao.getById(categoryId)
             val updated = existing.copy(
                 amountPaise = newAmountPaise,
+                bucketSnapshot = category?.defaultBucket ?: existing.bucketSnapshot,
+                categoryNameSnapshot = category?.name ?: existing.categoryNameSnapshot,
+                advancePolicySnapshot = category?.defaultAdvancePolicy ?: existing.advancePolicySnapshot,
                 updatedAt = DateTimeUtils.nowEpochMillis()
             )
             budgetAllocationDao.update(updated)
@@ -282,13 +286,35 @@ class BudgetRepository @Inject constructor(
                 )
                 budgetAllocationDao.insert(allocation)
             }
+
             categoryId
         }
     }
 
-    suspend fun updateCategory(category: CategoryEntity) {
-        val updated = category.copy(updatedAt = DateTimeUtils.nowEpochMillis())
+    suspend fun updateCategory(
+        category: CategoryEntity,
+        periodId: Long? = null,
+        newAmountPaise: Long? = null
+    ) {
+        val now = DateTimeUtils.nowEpochMillis()
+        val updated = category.copy(updatedAt = now)
         categoryDao.update(updated)
+
+        val openPeriods = budgetPeriodDao.getAllPeriodsSync().filter { it.status == com.tapledger.core.model.BudgetPeriodStatus.OPEN }
+        for (openPeriod in openPeriods) {
+            val alloc = budgetAllocationDao.getAllocation(openPeriod.id, category.id)
+            if (alloc != null) {
+                val amount = if (openPeriod.id == periodId && newAmountPaise != null) newAmountPaise else alloc.amountPaise
+                val updatedAlloc = alloc.copy(
+                    categoryNameSnapshot = updated.name.trim(),
+                    bucketSnapshot = updated.defaultBucket,
+                    advancePolicySnapshot = updated.defaultAdvancePolicy,
+                    amountPaise = amount,
+                    updatedAt = now
+                )
+                budgetAllocationDao.update(updatedAlloc)
+            }
+        }
     }
 
     suspend fun deactivateCategory(categoryId: Long) {
