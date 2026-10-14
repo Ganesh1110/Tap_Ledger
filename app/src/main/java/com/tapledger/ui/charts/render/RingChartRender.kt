@@ -35,6 +35,7 @@ fun RingChartRender(
     size: Dp = 160.dp,
     strokeWidth: Dp = 16.dp,
     paceBp: Int? = null, // basis points for linear pace tick marker
+    showOverflowHatch: Boolean = true,
     centerContent: @Composable () -> Unit = {}
 ) {
     Box(
@@ -73,8 +74,8 @@ fun RingChartRender(
                 )
             }
 
-            // 3. D8 Hatched Overflow Arc for over 100% (Needs / Wants only)
-            if (percentageUsedBp > 10_000) {
+            // 3. D8 Hatched Overflow Arc for over 100% (Needs / Wants only, never Savings)
+            if (showOverflowHatch && percentageUsedBp > 10_000) {
                 val overflowBp = (percentageUsedBp - 10_000).coerceAtMost(5_000) // cap overflow visual
                 val overflowSweep = (overflowBp.toFloat() / 10_000f) * 360f
                 drawArc(

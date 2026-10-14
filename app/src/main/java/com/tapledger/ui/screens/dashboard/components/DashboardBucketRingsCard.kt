@@ -165,6 +165,7 @@ private fun BucketRingColumn(
             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             size = 84.dp,
             strokeWidth = 9.dp,
+            showOverflowHatch = item.bucket != BudgetBucket.SAVINGS,
             centerContent = {
                 if (item.bucket == BudgetBucket.SAVINGS && item.isGoalAchieved) {
                     Icon(

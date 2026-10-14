@@ -29,7 +29,7 @@ fun isKeyboardVisible(): Boolean {
 @OptIn(ExperimentalLayoutApi::class)
 fun Modifier.keyboardAware(
     imePadding: Boolean = true,
-    imeNestedScroll: Boolean = true
+    imeNestedScroll: Boolean = false
 ): Modifier = this
     .then(if (imePadding) Modifier.imePadding() else Modifier)
     .then(if (imeNestedScroll) Modifier.imeNestedScroll() else Modifier)
@@ -43,7 +43,7 @@ fun Modifier.keyboardAware(
 fun KeyboardAware(
     modifier: Modifier = Modifier,
     imePadding: Boolean = true,
-    imeNestedScroll: Boolean = true,
+    imeNestedScroll: Boolean = false,
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(
