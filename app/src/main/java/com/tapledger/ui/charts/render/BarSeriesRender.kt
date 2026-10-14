@@ -1,9 +1,14 @@
 package com.tapledger.ui.charts.render
 
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -14,6 +19,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tapledger.ui.theme.ChartPalette
@@ -149,6 +157,33 @@ fun BulletBarRender(
 }
 
 /**
+ * Compact helper to format Paise values into human-readable Indian rupee notation (e.g., ₹24.6k, ₹1.5L, ₹0).
+ */
+private fun formatCompactRupees(paise: Long): String {
+    val rupees = paise / 100L
+    val absRupees = kotlin.math.abs(rupees)
+    val sign = if (rupees < 0) "-" else ""
+    return when {
+        absRupees >= 10000000L -> {
+            val cr = absRupees / 10000000L
+            val frac = (absRupees % 10000000L) / 1000000L
+            if (frac > 0) "${sign}₹$cr.${frac}Cr" else "${sign}₹${cr}Cr"
+        }
+        absRupees >= 100_000L -> {
+            val l = absRupees / 100_000L
+            val frac = (absRupees % 100_000L) / 10_000L
+            if (frac > 0) "${sign}₹$l.${frac}L" else "${sign}₹${l}L"
+        }
+        absRupees >= 1_000L -> {
+            val k = absRupees / 1_000L
+            val frac = (absRupees % 1_000L) / 100L
+            if (frac > 0) "${sign}₹$k.${frac}k" else "${sign}₹${k}k"
+        }
+        else -> "${sign}₹$absRupees"
+    }
+}
+
+/**
  * Render primitive for V4 Six-Period Trend clustered bars per Flow.md §17.2 V4.
  * Clustered bars for actual income, spent, and saved, plus a savings rate line.
  * The current OPEN period is rendered with hatching / dashed styling and labeled "In progress".
@@ -157,58 +192,170 @@ fun BulletBarRender(
 fun ClusteredBarChartRender(
     periods: List<com.tapledger.ui.charts.model.PeriodTrendBar>,
     modifier: Modifier = Modifier,
-    height: Dp = 180.dp,
+    height: Dp = 190.dp,
     incomeColor: Color = Color(0xFF009E73),
     spentColor: Color = Color(0xFFD55E00),
     savedColor: Color = Color(0xFF0072B2),
-    savingsLineColor: Color = Color(0xFFE69F00)
+    savingsLineColor: Color = Color(0xFFE69F00),
+    selectedIndex: Int? = null,
+    onSelectIndex: ((Int) -> Unit)? = null
 ) {
     if (periods.isEmpty()) return
 
-    Canvas(modifier = modifier.fillMaxWidth().height(height)) {
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    val labelColorArgb = labelColor.toArgb()
+    val gridLineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    val baselineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+    val rateColorArgb = savingsLineColor.toArgb()
+
+    val rightAxisPaint = remember(labelColorArgb) {
+        Paint().apply {
+            color = labelColorArgb
+            textSize = 24f
+            textAlign = Paint.Align.LEFT
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        }
+    }
+
+    val savingsRateTextPaint = remember(rateColorArgb) {
+        Paint().apply {
+            color = rateColorArgb
+            textSize = 26f
+            textAlign = Paint.Align.CENTER
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+    }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .pointerInput(periods) {
+                detectTapGestures { offset ->
+                    if (onSelectIndex != null && periods.isNotEmpty()) {
+                        val leftPaddingPx = 16.dp.toPx()
+                        val rightPaddingPx = 52.dp.toPx()
+                        val plotWidth = (size.width - leftPaddingPx - rightPaddingPx).coerceAtLeast(1f)
+                        val clusterWidth = plotWidth / periods.size.toFloat()
+                        val relX = (offset.x - leftPaddingPx).coerceIn(0f, plotWidth)
+                        val idx = (relX / clusterWidth).toInt().coerceIn(0, periods.size - 1)
+                        onSelectIndex(idx)
+                    }
+                }
+            }
+    ) {
         val widthPx = size.width
         val heightPx = size.height
-        val labelMarginPx = 24.dp.toPx()
-        val chartHeightPx = heightPx - labelMarginPx
+
+        val leftPaddingPx = 16.dp.toPx()
+        val rightPaddingPx = 52.dp.toPx()
+        val topPaddingPx = 24.dp.toPx()
+        val bottomMarginPx = 16.dp.toPx()
+
+        val plotWidth = (widthPx - leftPaddingPx - rightPaddingPx).coerceAtLeast(1f)
+        val chartHeightPx = (heightPx - topPaddingPx - bottomMarginPx).coerceAtLeast(1f)
+        val baselineY = topPaddingPx + chartHeightPx
 
         val maxPaise = periods.maxOfOrNull {
             maxOf(it.incomePaise, it.spentPaise, it.savedPaise)
-        }?.coerceAtLeast(1L) ?: 1L
+        }?.coerceAtLeast(100_00L) ?: 100_00L
 
-        val n = periods.size
-        val clusterWidth = widthPx / n.toFloat()
-        val barWidth = (clusterWidth * 0.22f).coerceAtMost(16.dp.toPx()).coerceAtLeast(4.dp.toPx())
-        val cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+        val midPaise = maxPaise / 2L
 
-        // Draw horizontal zero baseline
+        // Reference Grid Lines & Y-Axis Scale
         drawLine(
-            color = Color.Gray.copy(alpha = 0.3f),
-            start = Offset(0f, chartHeightPx),
-            end = Offset(widthPx, chartHeightPx),
+            color = gridLineColor,
+            start = Offset(leftPaddingPx, topPaddingPx),
+            end = Offset(leftPaddingPx + plotWidth, topPaddingPx),
+            strokeWidth = 1.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            formatCompactRupees(maxPaise),
+            leftPaddingPx + plotWidth + 6.dp.toPx(),
+            topPaddingPx + 8f,
+            rightAxisPaint
+        )
+
+        val midY = topPaddingPx + chartHeightPx / 2f
+        drawLine(
+            color = gridLineColor.copy(alpha = 0.25f),
+            start = Offset(leftPaddingPx, midY),
+            end = Offset(leftPaddingPx + plotWidth, midY),
+            strokeWidth = 1.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+        )
+        drawContext.canvas.nativeCanvas.drawText(
+            formatCompactRupees(midPaise),
+            leftPaddingPx + plotWidth + 6.dp.toPx(),
+            midY + 8f,
+            rightAxisPaint
+        )
+
+        // Baseline (₹0)
+        drawLine(
+            color = baselineColor,
+            start = Offset(leftPaddingPx, baselineY),
+            end = Offset(leftPaddingPx + plotWidth, baselineY),
             strokeWidth = 1.dp.toPx()
         )
+        drawContext.canvas.nativeCanvas.drawText(
+            "₹0",
+            leftPaddingPx + plotWidth + 6.dp.toPx(),
+            baselineY + 8f,
+            rightAxisPaint
+        )
+
+        val n = periods.size
+        val clusterWidth = plotWidth / n.toFloat()
+
+        // Adaptive bar sizing
+        val barWidth = when {
+            n == 1 -> 24.dp.toPx()
+            n == 2 -> 20.dp.toPx()
+            n <= 4 -> 16.dp.toPx()
+            else -> (clusterWidth * 0.22f).coerceIn(4.dp.toPx(), 14.dp.toPx())
+        }
+        val barSpacing = when {
+            n <= 2 -> 4.dp.toPx()
+            else -> 2.dp.toPx()
+        }
+        val cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
 
         val savingsPoints = mutableListOf<Offset>()
 
         periods.forEachIndexed { i, p ->
-            val clusterCenterX = (i + 0.5f) * clusterWidth
+            val clusterCenterX = leftPaddingPx + (i + 0.5f) * clusterWidth
+
+            // Selected period soft highlight pill
+            if (selectedIndex == i) {
+                val highlightPadding = 6.dp.toPx()
+                val hlLeft = (clusterCenterX - (barWidth * 1.5f + barSpacing + highlightPadding)).coerceAtLeast(leftPaddingPx)
+                val hlWidth = (barWidth * 3f + barSpacing * 2f + highlightPadding * 2f).coerceAtMost(clusterWidth)
+                drawRoundRect(
+                    color = Color.Gray.copy(alpha = 0.08f),
+                    topLeft = Offset(hlLeft, topPaddingPx),
+                    size = Size(hlWidth, chartHeightPx),
+                    cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
+                )
+            }
 
             val incomeH = (p.incomePaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
             val spentH = (p.spentPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
             val savedH = (p.savedPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
 
-            val xIncome = clusterCenterX - barWidth * 1.5f - 2.dp.toPx()
+            val xIncome = clusterCenterX - barWidth * 1.5f - barSpacing
             val xSpent = clusterCenterX - barWidth * 0.5f
-            val xSaved = clusterCenterX + barWidth * 0.5f + 2.dp.toPx()
+            val xSaved = clusterCenterX + barWidth * 0.5f + barSpacing
 
-            // Bar drawing helper
             fun drawBar(x: Float, h: Float, color: Color) {
                 if (h <= 0f) return
-                val topY = chartHeightPx - h
+                val topY = baselineY - h
                 if (p.isInProgress) {
-                    // Hatched / dashed stroke for open period in progress (§17.2 V4)
                     drawRoundRect(
-                        color = color.copy(alpha = 0.4f),
+                        color = color.copy(alpha = 0.38f),
                         topLeft = Offset(x, topY),
                         size = Size(barWidth, h),
                         cornerRadius = cornerRadius
@@ -240,8 +387,18 @@ fun ClusteredBarChartRender(
             // Savings rate point (0..10,000 bp = 0..100%)
             p.savingsRateBp?.let { bp ->
                 val rateFraction = (bp.toFloat() / 10_000f).coerceIn(0f, 1f)
-                val ptY = chartHeightPx - (rateFraction * (chartHeightPx * 0.9f))
+                val ptY = baselineY - (rateFraction * chartHeightPx)
                 savingsPoints.add(Offset(clusterCenterX, ptY))
+
+                if (n <= 4) {
+                    val pct = bp / 100
+                    drawContext.canvas.nativeCanvas.drawText(
+                        "$pct%",
+                        clusterCenterX,
+                        (ptY - 7.dp.toPx()).coerceAtLeast(14.dp.toPx()),
+                        savingsRateTextPaint
+                    )
+                }
             }
         }
 
@@ -256,13 +413,25 @@ fun ClusteredBarChartRender(
             drawPath(
                 path = linePath,
                 color = savingsLineColor,
-                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
             )
         }
+
+        // Draw Savings Rate dots with clear glowing rings
         savingsPoints.forEach { pt ->
+            drawCircle(
+                color = savingsLineColor.copy(alpha = 0.25f),
+                radius = 6.dp.toPx(),
+                center = pt
+            )
             drawCircle(
                 color = savingsLineColor,
                 radius = 3.5.dp.toPx(),
+                center = pt
+            )
+            drawCircle(
+                color = Color.White,
+                radius = 1.5.dp.toPx(),
                 center = pt
             )
         }
