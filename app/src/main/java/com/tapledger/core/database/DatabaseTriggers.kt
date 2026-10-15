@@ -30,11 +30,18 @@ object DatabaseTriggers {
             "trg_tx_alloc_update_closed",
             "trg_tx_alloc_delete_closed",
             "trg_month_close_update",
-            "trg_month_close_delete_closed"
+            "trg_month_close_delete_closed",
+            "trg_savings_contrib_prevent_overdraw_insert",
+            "trg_savings_contrib_prevent_overdraw_update",
+            "trg_savings_contrib_prevent_overdraw_delete",
+            "trg_savings_plan_insert_closed",
+            "trg_savings_plan_update_closed",
+            "trg_savings_plan_delete_closed"
         )
         for (trg in triggers) {
             db.execSQL("DROP TRIGGER IF EXISTS $trg")
         }
+
 
         // 1. Transactions Triggers (Flow.md §2.2)
         // BEFORE INSERT: Abort if occurred_at falls in a CLOSED period
@@ -287,7 +294,91 @@ object DatabaseTriggers {
                 SELECT RAISE(ABORT, 'Cannot delete month close while period is closed');
             END;
         """.trimIndent())
+
+        // 7. Savings Triggers (Flow.md §18.1, §18.2)
+        val hasSavingsTables = try {
+            val cursor = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'savings_contributions'")
+            cursor.use { it.moveToFirst() }
+        } catch (_: Exception) {
+            false
+        }
+
+        if (hasSavingsTables) {
+            // Prevent goal overdrawing on contribution insert
+            db.execSQL("""
+                CREATE TRIGGER trg_savings_contrib_prevent_overdraw_insert
+                BEFORE INSERT ON savings_contributions
+                WHEN NEW.amount_paise < 0 AND (
+                    (SELECT COALESCE(SUM(amount_paise), 0) FROM savings_contributions WHERE goal_id = NEW.goal_id) + NEW.amount_paise < 0
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'Savings goal balance cannot be negative');
+                END;
+            """.trimIndent())
+
+            // Prevent goal overdrawing on contribution update
+            db.execSQL("""
+                CREATE TRIGGER trg_savings_contrib_prevent_overdraw_update
+                BEFORE UPDATE ON savings_contributions
+                WHEN (
+                    (SELECT COALESCE(SUM(amount_paise), 0) FROM savings_contributions WHERE goal_id = NEW.goal_id AND id != OLD.id) + NEW.amount_paise < 0
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'Savings goal balance cannot be negative');
+                END;
+            """.trimIndent())
+
+            // Prevent goal overdrawing on contribution delete
+            db.execSQL("""
+                CREATE TRIGGER trg_savings_contrib_prevent_overdraw_delete
+                BEFORE DELETE ON savings_contributions
+                WHEN (
+                    (SELECT COALESCE(SUM(amount_paise), 0) FROM savings_contributions WHERE goal_id = OLD.goal_id AND id != OLD.id) < 0
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'Savings goal balance cannot be negative');
+                END;
+            """.trimIndent())
+
+            // Prevent mutating savings plan entries in closed budget periods
+            db.execSQL("""
+                CREATE TRIGGER trg_savings_plan_insert_closed
+                BEFORE INSERT ON savings_plan_entries
+                WHEN EXISTS (
+                    SELECT 1 FROM budget_periods 
+                    WHERE id = NEW.period_id AND status = 'CLOSED'
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot insert savings plan entry into closed period');
+                END;
+            """.trimIndent())
+
+            db.execSQL("""
+                CREATE TRIGGER trg_savings_plan_update_closed
+                BEFORE UPDATE ON savings_plan_entries
+                WHEN EXISTS (
+                    SELECT 1 FROM budget_periods 
+                    WHERE (id = OLD.period_id OR id = NEW.period_id) AND status = 'CLOSED'
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot modify savings plan entry in closed period');
+                END;
+            """.trimIndent())
+
+            db.execSQL("""
+                CREATE TRIGGER trg_savings_plan_delete_closed
+                BEFORE DELETE ON savings_plan_entries
+                WHEN EXISTS (
+                    SELECT 1 FROM budget_periods 
+                    WHERE id = OLD.period_id AND status = 'CLOSED'
+                )
+                BEGIN
+                    SELECT RAISE(ABORT, 'Cannot delete savings plan entry from closed period');
+                END;
+            """.trimIndent())
+        }
     }
+
 
     val Callback = object : RoomDatabase.Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {

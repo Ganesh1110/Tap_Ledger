@@ -49,7 +49,41 @@ open class DataIntegrityChecker @Inject constructor() {
         statementImports: List<StatementImportEntity> = emptyList(),
         statementLines: List<StatementLineEntity> = emptyList()
     ): List<IntegrityIssue> {
+        return verifyIntegrity(
+            accounts = accounts,
+            categories = categories,
+            periods = periods,
+            allocations = allocations,
+            transactions = transactions,
+            transactionAllocations = transactionAllocations,
+            monthCloses = monthCloses,
+            adjustments = adjustments,
+            advances = advances,
+            statementImports = statementImports,
+            statementLines = statementLines,
+            savingsGoals = emptyList(),
+            savingsContributions = emptyList()
+        )
+    }
+
+    open fun verifyIntegrity(
+        accounts: List<AccountEntity>,
+        categories: List<CategoryEntity>,
+        periods: List<BudgetPeriodEntity>,
+        allocations: List<BudgetAllocationEntity>,
+        transactions: List<TransactionEntity>,
+        transactionAllocations: List<TransactionAllocationEntity>,
+        monthCloses: List<MonthCloseEntity>,
+        adjustments: List<BudgetAdjustmentEntity>,
+        advances: List<AdvanceLedgerEntity>,
+        statementImports: List<StatementImportEntity>,
+        statementLines: List<StatementLineEntity>,
+        savingsGoals: List<com.tapledger.core.database.entity.SavingsGoalEntity>,
+        savingsContributions: List<com.tapledger.core.database.entity.SavingsContributionEntity>
+    ): List<IntegrityIssue> {
         val issues = mutableListOf<IntegrityIssue>()
+
+
 
         val accountIds = accounts.map { it.id }.toSet()
         val categoryIds = categories.map { it.id }.toSet()
@@ -583,6 +617,58 @@ open class DataIntegrityChecker @Inject constructor() {
             }
         }
 
+        // =============================================================
+        // 11. Savings Goals & Contributions Rules (Flow.md §18, D011)
+        // =============================================================
+        val goalIds = savingsGoals.map { it.id }.toSet()
+        val contribsByGoal = savingsContributions.groupBy { it.goalId }
+
+        for (goal in savingsGoals) {
+            if (goal.targetPaise <= 0L) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "SG1_INVALID_GOAL_TARGET",
+                        message = "Goal #${goal.id} '${goal.name}' has non-positive target: ${goal.targetPaise} paise",
+                        entityType = "SavingsGoal",
+                        entityId = goal.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+
+            val goalContribs = contribsByGoal[goal.id].orEmpty()
+            var balance = 0L
+            for (c in goalContribs) {
+                balance = Math.addExact(balance, c.amountPaise)
+            }
+            if (balance < 0L) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "SG2_GOAL_NEGATIVE_BALANCE",
+                        message = "Goal #${goal.id} '${goal.name}' has negative balance: $balance paise",
+                        entityType = "SavingsGoal",
+                        entityId = goal.id.toString(),
+                        severity = IntegritySeverity.CRITICAL
+                    )
+                )
+            }
+        }
+
+        for (contrib in savingsContributions) {
+            if (!goalIds.contains(contrib.goalId)) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "SG3_ORPHANED_SAVINGS_CONTRIBUTION",
+                        message = "Savings contribution #${contrib.id} references non-existent goal #${contrib.goalId}",
+                        entityType = "SavingsContribution",
+                        entityId = contrib.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+        }
+
         return issues
     }
 }
+

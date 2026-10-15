@@ -904,6 +904,9 @@ The Visual Analytics Layer is a strictly READ-ONLY presentation layer operating 
 - **V11 Advance rollover bars (S_Close):** per-category diverging bars for carry (POSITIVE), sweep, applied deficit (NEGATIVE), and uncovered pool (hatched). "ⓘ" pattern info button explains rollover hatches. Interactive rows with detail strip and $\ge 48\,\text{dp}$ touch target.
 - **V12 Reconciliation bridge (S_Stmt):** waterfall $\text{AppBalance}(\text{end}) \to \text{opening diff} \to \text{MISSING\_IN\_APP} \to \text{MISSING\_IN\_STMT} \to \text{DISCREPANCY} \to \text{TIMING\_DIFFERENCE} \to \text{StmtClosing}$. Compact mode displays a vertical list-style bridge with step labels under each bar. "ⓘ" pattern button explains residual step. Interactive steps with detail strip and $\ge 48\,\text{dp}$ touch targets.
 - **V13 Diagnostics severity bar (S_Diag):** count of violations by CRITICAL / ERROR / WARNING from `DataIntegrityChecker`. Interactive severity badges with $\ge 48\,\text{dp}$ touch targets, summary line, and detail strip.
+- **V14 Goal progress ring (S_Saving & S_GoalDetail):** progress ring rendering `progress_bp`, target, earmarked balance, and pace indicator. Uses ring renderer with non-overdrawn safeguards.
+- **V15 Savings plan bullet bars (S_SavingPlan):** planned vs contributed per goal in monthly plan. Reuses V5 envelope bullet bar renderer.
+- **V16 Emergency fund & savings-rate trend (S_SavingInsights):** months covered gauge and savings rate trend line over historical closed periods.
 - **Insights screen (S_Insights):** reached from a Dashboard "Insights" action: tabs = Cash flow (V4 over 12 periods), Calendar (V7), Merchants (V8), Categories (V6 with a period selector).
 
 ### 17.3 UI Requirements for Every Chart
@@ -944,10 +947,49 @@ The Visual Analytics Layer is a strictly READ-ONLY presentation layer operating 
 - **I12:** ₹100 Cr values do not overflow 64-bit paise arithmetic; overflow triggers `ChartState.Error`.
 - **I13:** Savings envelopes never render in red or with "Exceeded" status (§8.4).
 - **I14:** `Float` appears strictly inside `com.tapledger.ui.charts.render/**` and is rejected everywhere else.
+- **I15:** Earmarked goal balances do not mutate account balance or net worth calculation ($\text{GoalBalance} \equiv \sum \text{contributions}$; $\text{NetWorth} \equiv \sum \text{AccountBalances}$).
 
 ### 17.7 Zero-Float Static Analysis Allowlist & Enforcement
 
 1. **Storage & Financial Logic Invariant:** All financial numbers remain strictly signed 64-bit integer paise (`Long`), basis points (`Int`, 10,000 = 100%), and permille (`Int`, 0..1000). Primitives `Double` and `BigDecimal` remain 100% prohibited across the entire project repository.
 2. **Narrow UI Render Allowlist:** Primitive `Float` is permitted strictly within `com.tapledger.ui.charts.render/**` where Jetpack Compose canvas geometry (`DrawScope`, `Canvas`, `Path`, angles, coordinates) fundamentally requires it. All values entering this package must arrive as integer paise or basis points and be converted to float at the final drawing step.
 3. **Static Scanner Verification:** `ZeroFloatScannerTest` scans all Kotlin files in `app/src/main`. Any appearance of `Double` or `BigDecimal` anywhere, or `Float` outside `com.tapledger.ui.charts.render/**`, immediately fails the build.
+
+---
+
+## 18. Saving Module
+
+### 18.1 Guiding Principles & Invariants
+1. **Earmark, Don't Move (D011):** Goals are virtual labels on existing money, never financial transactions. Earmarking does not alter account balances or Net Worth.
+2. **Paise and Basis Points Only:** Strict 64-bit signed `Long` paise and integer basis points (`Int`, 10,000 = 100%). No `Double` or `BigDecimal` allowed (§17.7). Calculations use integer ceiling division and half-up integer rounding.
+3. **Single Database Integration:** All savings entities reside within the encrypted Room database (`tapledger.db`), ensuring SQLite `VACUUM INTO` backups cover all goals and plans automatically.
+4. **Non-Negative Balance Trigger:** Goal balances cannot be overdrawn; SQLite trigger prevents negative net contribution sums.
+5. **Earmark Soft Warning:** Total earmarked to active goals linked to an account may not exceed that account's live balance. This surfaces as a soft UI warning and diagnostics check, never a hard transaction block.
+
+### 18.2 Data Model & Schema (Database Version 3)
+- `savings_goals`: id, name, target_paise, deadline_epoch_ms, priority, status (`ACTIVE`, `PAUSED`, `DONE`, `ARCHIVED`), linked_account_id, created_at, updated_at.
+- `savings_contributions`: id, goal_id, amount_paise (signed: positive deposit, negative withdrawal), source (`MANUAL`, `TRANSACTION`, `MONTH_CLOSE`, `RULE`), transaction_id, period_id, note, created_at.
+- `savings_plan_entries`: id, period_id, goal_id, planned_paise, created_at.
+- `recurring_commitments`: id, type (`SIP`, `RD`, `CHIT`, `GOLD`), name, amount_paise, due_day, account_id, goal_id, active, created_at.
+- `commitment_payments`: id, commitment_id, period_id, paid_transaction_id, status (`PENDING`, `PAID`, `SKIPPED`), created_at.
+- `fixed_deposits`: id, name, principal_paise, rate_bp, start_ms, maturity_ms, compounding (`SIMPLE`, `QUARTERLY`, `MONTHLY`, `ANNUAL`), goal_id, created_at.
+
+### 18.3 Phase Roadmap
+- **Phase 1 (M13): Goals and Contributions:**
+  - `SavingsCalculator`: balance, progress in bp, remaining, required monthly allocation (ceiling division over remaining months), on-track status (`ON_TRACK`, `BEHIND`, `DONE`, `OVERDUE`).
+  - `SavingsRepository`: atomic operations for goal creation, editing, deposit, withdrawal, status transitions, and account earmark evaluation.
+  - UI screens: `SavingHomeScreen` (summary hero, goal list with progress rings, earmark warning banner), `GoalDetailScreen` (ring, contribution timeline, deposit/withdrawal sheets), and `GoalEditSheet`.
+- **Phase 2 (M14): Monthly Plan, Month Close & Emergency Fund:**
+  - `SavingsPlanner` monthly target allocations snapshotted in `savings_plan_entries`.
+  - Month close surplus allocation proposal hook in `MonthCloseEngine`.
+  - Emergency fund ratio: savings balance divided by average monthly spend over last 3–6 closed periods (stored as tenths of a month in a `Long`).
+- **Phase 3 (M15): Recurring Commitments & Fixed Deposits:**
+  - `CommitmentScheduler` local reminder worker.
+  - Notification parsing auto-matching for SIP/auto-debits with confirm-first flow.
+  - `FdCalculator` integer math maturity accrued interest calculator.
+- **Phase 4 (M16): Habits & Micro-rules (Optional):**
+  - Virtual round-ups and income allocation rules generating `savings_contributions` with `source = RULE`.
+- **Phase 5 (M17): Manager/Saving Mode & Security Separation (D012):**
+  - Lock screen mode selection, `AppMode` session state, dedicated `SavingNavGraph`, and biometric/PIN isolation.
+
 

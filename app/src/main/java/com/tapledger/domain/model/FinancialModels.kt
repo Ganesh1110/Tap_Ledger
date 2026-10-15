@@ -69,3 +69,32 @@ data class IntegrityIssue(
     val entityId: String,
     val severity: IntegritySeverity
 )
+
+data class SavingsGoalSummary(
+    val goal: com.tapledger.core.database.entity.SavingsGoalEntity,
+    val balancePaise: Long,
+    val progressBp: Int,
+    val remainingPaise: Long,
+    val monthsLeft: Int,
+    val requiredMonthlyPaise: Long,
+    val trackStatus: com.tapledger.core.model.GoalTrackStatus,
+    val paceSummary: String,
+    val isOverEarmarked: Boolean = false
+)
+
+data class AccountEarmarkWarning(
+    val accountId: Long,
+    val accountName: String,
+    val accountBalancePaise: Long,
+    val totalEarmarkedPaise: Long,
+    val deficitPaise: Long
+)
+
+data class SavingsOverviewSummary(
+    val totalSavedPaise: Long,
+    val activeGoalsCount: Int,
+    val completedGoalsCount: Int,
+    val goals: List<SavingsGoalSummary>,
+    val accountEarmarkWarnings: List<AccountEarmarkWarning>
+)
+

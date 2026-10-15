@@ -44,7 +44,12 @@ sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
     object MpinSetup : Screen("mpin_setup")
     object AppLockSettings : Screen("app_lock_settings")
+    object SavingHome : Screen("saving_home")
+    object GoalDetail : Screen("goal_detail/{goalId}") {
+        fun createRoute(goalId: Long) = "goal_detail/$goalId"
+    }
 }
+
 
 @Composable
 fun TapLedgerNavGraph(
@@ -89,9 +94,11 @@ fun TapLedgerNavGraph(
                 onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToAppLockSettings = { navController.navigate(Screen.AppLockSettings.route) },
+                onNavigateToSavings = { navController.navigate(Screen.SavingHome.route) },
                 onShowWhatsNew = onShowWhatsNew
             )
         }
+
         composable(Screen.Transactions.route) {
             TransactionsScreen(
                 onNavigateToManualEntry = { navController.navigate(Screen.ManualEntry.route) }
@@ -188,5 +195,28 @@ fun TapLedgerNavGraph(
                 onNavigateToSetup = { navController.navigate(Screen.MpinSetup.route) }
             )
         }
+        composable(Screen.SavingHome.route) {
+            com.tapledger.ui.screens.saving.SavingHomeScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToGoalDetail = { goalId ->
+                    navController.navigate(Screen.GoalDetail.createRoute(goalId))
+                }
+            )
+        }
+        composable(
+            route = Screen.GoalDetail.route,
+            arguments = listOf(
+                androidx.navigation.navArgument("goalId") {
+                    type = androidx.navigation.NavType.LongType
+                }
+            )
+        ) { backStackEntry ->
+            val goalId = backStackEntry.arguments?.getLong("goalId") ?: 0L
+            com.tapledger.ui.screens.saving.GoalDetailScreen(
+                goalId = goalId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
     }
 }
+

@@ -406,3 +406,140 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         }
     }
 }
+
+/**
+ * Migration from Database Version 2 to Version 3.
+ * Establishes Savings module data schema (Flow.md §18.2):
+ * - savings_goals: id, name, target_paise, deadline_epoch_ms, priority, status, linked_account_id, created_at, updated_at
+ * - savings_contributions: id, goal_id, amount_paise, source, transaction_id, period_id, note, created_at
+ * - savings_plan_entries: id, period_id, goal_id, planned_paise, created_at
+ * - recurring_commitments: id, type, name, amount_paise, due_day, account_id, goal_id, active, created_at
+ * - commitment_payments: id, commitment_id, period_id, paid_transaction_id, status, created_at
+ * - fixed_deposits: id, name, principal_paise, rate_bp, start_ms, maturity_ms, compounding, goal_id, created_at
+ * - Adds indexes on goal_id, period_id, and transaction_id
+ * - Establishes savings integrity triggers (§18.1, §18.2)
+ * - Executes PRAGMA integrity_check
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // 1. savings_goals
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `savings_goals` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `target_paise` INTEGER NOT NULL,
+                `deadline_epoch_ms` INTEGER,
+                `priority` INTEGER NOT NULL,
+                `status` TEXT NOT NULL,
+                `linked_account_id` INTEGER,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                FOREIGN KEY(`linked_account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_goals_linked_account_id` ON `savings_goals` (`linked_account_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_goals_status` ON `savings_goals` (`status`)")
+
+        // 2. savings_contributions
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `savings_contributions` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `goal_id` INTEGER NOT NULL,
+                `amount_paise` INTEGER NOT NULL,
+                `source` TEXT NOT NULL,
+                `transaction_id` INTEGER,
+                `period_id` INTEGER,
+                `note` TEXT,
+                `created_at` INTEGER NOT NULL,
+                FOREIGN KEY(`goal_id`) REFERENCES `savings_goals`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(`transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL,
+                FOREIGN KEY(`period_id`) REFERENCES `budget_periods`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_contributions_goal_id` ON `savings_contributions` (`goal_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_contributions_transaction_id` ON `savings_contributions` (`transaction_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_contributions_period_id` ON `savings_contributions` (`period_id`)")
+
+        // 3. savings_plan_entries
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `savings_plan_entries` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `period_id` INTEGER NOT NULL,
+                `goal_id` INTEGER NOT NULL,
+                `planned_paise` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                FOREIGN KEY(`period_id`) REFERENCES `budget_periods`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`goal_id`) REFERENCES `savings_goals`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT
+            )
+        """.trimIndent())
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_savings_plan_entries_period_id_goal_id` ON `savings_plan_entries` (`period_id`, `goal_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_plan_entries_goal_id` ON `savings_plan_entries` (`goal_id`)")
+
+        // 4. recurring_commitments
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `recurring_commitments` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `type` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `amount_paise` INTEGER NOT NULL,
+                `due_day` INTEGER NOT NULL,
+                `account_id` INTEGER,
+                `goal_id` INTEGER,
+                `active` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                FOREIGN KEY(`account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL,
+                FOREIGN KEY(`goal_id`) REFERENCES `savings_goals`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_commitments_account_id` ON `recurring_commitments` (`account_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_recurring_commitments_goal_id` ON `recurring_commitments` (`goal_id`)")
+
+        // 5. commitment_payments
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `commitment_payments` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `commitment_id` INTEGER NOT NULL,
+                `period_id` INTEGER NOT NULL,
+                `paid_transaction_id` INTEGER,
+                `status` TEXT NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                FOREIGN KEY(`commitment_id`) REFERENCES `recurring_commitments`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`period_id`) REFERENCES `budget_periods`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(`paid_transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_commitment_payments_commitment_id` ON `commitment_payments` (`commitment_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_commitment_payments_period_id` ON `commitment_payments` (`period_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_commitment_payments_paid_transaction_id` ON `commitment_payments` (`paid_transaction_id`)")
+
+        // 6. fixed_deposits
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `fixed_deposits` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `principal_paise` INTEGER NOT NULL,
+                `rate_bp` INTEGER NOT NULL,
+                `start_ms` INTEGER NOT NULL,
+                `maturity_ms` INTEGER NOT NULL,
+                `compounding` TEXT NOT NULL,
+                `goal_id` INTEGER,
+                `created_at` INTEGER NOT NULL,
+                FOREIGN KEY(`goal_id`) REFERENCES `savings_goals`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_fixed_deposits_goal_id` ON `fixed_deposits` (`goal_id`)")
+
+        // 7. Establish triggers
+        DatabaseTriggers.createTriggers(db)
+
+        // 8. PRAGMA integrity_check
+        val cursor = db.query("PRAGMA integrity_check")
+        cursor.use {
+            if (it.moveToFirst()) {
+                val result = it.getString(0)
+                check(result == "ok") { "Database integrity check failed after migration 2 -> 3: $result" }
+            }
+        }
+    }
+}
+

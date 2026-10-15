@@ -102,4 +102,35 @@ class Converters {
 
     @TypeConverter
     fun toMonthCloseReconciliationStatus(value: String?): MonthCloseReconciliationStatus? = value?.let { MonthCloseReconciliationStatus.valueOf(it) }
+
+    @TypeConverter
+    fun fromSavingsGoalStatus(value: com.tapledger.core.model.SavingsGoalStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toSavingsGoalStatus(value: String?): com.tapledger.core.model.SavingsGoalStatus? = value?.let { com.tapledger.core.model.SavingsGoalStatus.valueOf(it) }
+
+    @TypeConverter
+    fun fromSavingsContributionSource(value: com.tapledger.core.model.SavingsContributionSource?): String? = value?.name
+
+    @TypeConverter
+    fun toSavingsContributionSource(value: String?): com.tapledger.core.model.SavingsContributionSource? = value?.let { com.tapledger.core.model.SavingsContributionSource.valueOf(it) }
+
+    @TypeConverter
+    fun fromRecurringCommitmentType(value: com.tapledger.core.model.RecurringCommitmentType?): String? = value?.name
+
+    @TypeConverter
+    fun toRecurringCommitmentType(value: String?): com.tapledger.core.model.RecurringCommitmentType? = value?.let { com.tapledger.core.model.RecurringCommitmentType.valueOf(it) }
+
+    @TypeConverter
+    fun fromCommitmentPaymentStatus(value: com.tapledger.core.model.CommitmentPaymentStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toCommitmentPaymentStatus(value: String?): com.tapledger.core.model.CommitmentPaymentStatus? = value?.let { com.tapledger.core.model.CommitmentPaymentStatus.valueOf(it) }
+
+    @TypeConverter
+    fun fromCompoundingFrequency(value: com.tapledger.core.model.CompoundingFrequency?): String? = value?.name
+
+    @TypeConverter
+    fun toCompoundingFrequency(value: String?): com.tapledger.core.model.CompoundingFrequency? = value?.let { com.tapledger.core.model.CompoundingFrequency.valueOf(it) }
 }
+

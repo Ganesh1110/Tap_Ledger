@@ -13,6 +13,9 @@ import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.MerchantMapDao
 import com.tapledger.core.database.dao.MonthCloseDao
+import com.tapledger.core.database.dao.SavingsContributionDao
+import com.tapledger.core.database.dao.SavingsGoalDao
+import com.tapledger.core.database.dao.SavingsPlanEntryDao
 import com.tapledger.core.database.dao.StatementImportDao
 import com.tapledger.core.database.dao.StatementLineDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
@@ -25,8 +28,14 @@ import com.tapledger.core.database.entity.BudgetAdjustmentEntity
 import com.tapledger.core.database.entity.BudgetAllocationEntity
 import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.CategoryEntity
+import com.tapledger.core.database.entity.CommitmentPaymentEntity
+import com.tapledger.core.database.entity.FixedDepositEntity
 import com.tapledger.core.database.entity.MerchantMapEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
+import com.tapledger.core.database.entity.RecurringCommitmentEntity
+import com.tapledger.core.database.entity.SavingsContributionEntity
+import com.tapledger.core.database.entity.SavingsGoalEntity
+import com.tapledger.core.database.entity.SavingsPlanEntryEntity
 import com.tapledger.core.database.entity.StatementImportEntity
 import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
@@ -48,7 +57,13 @@ import com.tapledger.core.database.entity.UnparsedAlertEntity
         StatementImportEntity::class,
         StatementLineEntity::class,
         MonthCloseEntity::class,
-        AuditLogEntity::class
+        AuditLogEntity::class,
+        SavingsGoalEntity::class,
+        SavingsContributionEntity::class,
+        SavingsPlanEntryEntity::class,
+        RecurringCommitmentEntity::class,
+        CommitmentPaymentEntity::class,
+        FixedDepositEntity::class
     ],
     version = TapLedgerDatabase.DATABASE_VERSION,
     exportSchema = true
@@ -70,9 +85,13 @@ abstract class TapLedgerDatabase : RoomDatabase() {
     abstract fun statementLineDao(): StatementLineDao
     abstract fun monthCloseDao(): MonthCloseDao
     abstract fun auditLogDao(): AuditLogDao
+    abstract fun savingsGoalDao(): SavingsGoalDao
+    abstract fun savingsContributionDao(): SavingsContributionDao
+    abstract fun savingsPlanEntryDao(): SavingsPlanEntryDao
 
     companion object {
         const val DATABASE_NAME = "tapledger.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
     }
 }
+

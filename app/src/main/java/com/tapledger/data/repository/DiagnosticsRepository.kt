@@ -32,8 +32,11 @@ class DiagnosticsRepository @Inject constructor(
     private val monthCloseDao: MonthCloseDao,
     private val statementImportDao: StatementImportDao,
     private val statementLineDao: StatementLineDao,
-    private val auditLogDao: AuditLogDao
+    private val auditLogDao: AuditLogDao,
+    private val savingsGoalDao: com.tapledger.core.database.dao.SavingsGoalDao,
+    private val savingsContributionDao: com.tapledger.core.database.dao.SavingsContributionDao
 ) {
+
 
     fun observeAuditLogs(limit: Int = 100): Flow<List<AuditLogEntity>> =
         auditLogDao.observeRecentAudits(limit)
@@ -50,6 +53,8 @@ class DiagnosticsRepository @Inject constructor(
         val monthCloses = monthCloseDao.getAllMonthClosesSync()
         val statementImports = statementImportDao.getAllImportsSync()
         val statementLines = statementLineDao.getAllLinesSync()
+        val savingsGoals = savingsGoalDao.getAllGoalsSync()
+        val savingsContributions = savingsContributionDao.getAllContributionsSync()
 
         val checker = DataIntegrityChecker()
         return checker.verifyIntegrity(
@@ -63,7 +68,10 @@ class DiagnosticsRepository @Inject constructor(
             adjustments = adjustments,
             advances = advances,
             statementImports = statementImports,
-            statementLines = statementLines
+            statementLines = statementLines,
+            savingsGoals = savingsGoals,
+            savingsContributions = savingsContributions
         )
     }
 }
+

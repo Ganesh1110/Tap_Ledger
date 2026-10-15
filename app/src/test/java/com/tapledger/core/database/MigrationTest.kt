@@ -350,4 +350,49 @@ class MigrationTest {
             assertThat(rs.getString("closing_balances_json")).isEqualTo("{}")
         }
     }
+
+    @Test
+    fun migration_2_to_3_createsSavingsTablesAndTriggers() {
+        // First migrate 1 -> 2
+        MIGRATION_1_2.migrate(dbAdapter)
+
+        // Now migrate 2 -> 3
+        MIGRATION_2_3.migrate(dbAdapter)
+
+        // Verify tables exist by inserting test rows
+        conn.createStatement().use { stmt ->
+            stmt.execute("""
+                INSERT INTO savings_goals (id, name, target_paise, deadline_epoch_ms, priority, status, linked_account_id, created_at, updated_at)
+                VALUES (1, 'Emergency Fund', 10000000, 2000000000000, 1, 'ACTIVE', 1, 1000, 1000)
+            """)
+
+            stmt.execute("""
+                INSERT INTO savings_contributions (id, goal_id, amount_paise, source, transaction_id, period_id, note, created_at)
+                VALUES (1, 1, 500000, 'MANUAL', NULL, NULL, 'Initial seed', 1000)
+            """)
+
+            val rs = stmt.executeQuery("SELECT name, target_paise FROM savings_goals WHERE id = 1")
+            assertThat(rs.next()).isTrue()
+            assertThat(rs.getString("name")).isEqualTo("Emergency Fund")
+            assertThat(rs.getLong("target_paise")).isEqualTo(10000000L)
+
+            val rsContrib = stmt.executeQuery("SELECT SUM(amount_paise) FROM savings_contributions WHERE goal_id = 1")
+            assertThat(rsContrib.next()).isTrue()
+            assertThat(rsContrib.getLong(1)).isEqualTo(500000L)
+        }
+
+        // Verify overdraw trigger prevents balance going negative
+        try {
+            conn.createStatement().use { stmt ->
+                stmt.execute("""
+                    INSERT INTO savings_contributions (id, goal_id, amount_paise, source, transaction_id, period_id, note, created_at)
+                    VALUES (2, 1, -600000, 'MANUAL', NULL, NULL, 'Overdraw attempt', 2000)
+                """)
+            }
+            org.junit.Assert.fail("Expected trigger to abort on goal overdraw")
+        } catch (e: Exception) {
+            assertThat(e.message).contains("Savings goal balance cannot be negative")
+        }
+    }
 }
+

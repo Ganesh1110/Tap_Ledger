@@ -108,3 +108,45 @@ enum class AuditAction {
     PERIOD_REOPENED,
     DB_RESTORED
 }
+
+enum class SavingsGoalStatus {
+    ACTIVE,
+    PAUSED,
+    DONE,
+    ARCHIVED
+}
+
+enum class SavingsContributionSource {
+    MANUAL,
+    TRANSACTION,
+    MONTH_CLOSE,
+    RULE
+}
+
+enum class GoalTrackStatus {
+    ON_TRACK,
+    BEHIND,
+    DONE,
+    OVERDUE
+}
+
+enum class RecurringCommitmentType {
+    SIP,
+    RD,
+    CHIT,
+    GOLD
+}
+
+enum class CommitmentPaymentStatus {
+    PENDING,
+    PAID,
+    SKIPPED
+}
+
+enum class CompoundingFrequency {
+    SIMPLE,
+    QUARTERLY,
+    MONTHLY,
+    ANNUAL
+}
+

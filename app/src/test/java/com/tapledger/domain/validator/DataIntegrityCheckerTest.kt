@@ -692,4 +692,81 @@ class DataIntegrityCheckerTest {
         assertThat(issueR2).isNotNull()
         assertThat(issueR2!!.severity).isEqualTo(IntegritySeverity.ERROR)
     }
+
+    @Test
+    fun testSavingsIntegrity_catchesInvalidTarget_negativeBalance_andOrphanedContributions() {
+        val validGoal = com.tapledger.core.database.entity.SavingsGoalEntity(
+            id = 1,
+            name = "Bike",
+            targetPaise = 50_000_00L,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+        val invalidTargetGoal = com.tapledger.core.database.entity.SavingsGoalEntity(
+            id = 2,
+            name = "Zero Target",
+            targetPaise = 0L,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+        val negativeBalanceGoal = com.tapledger.core.database.entity.SavingsGoalEntity(
+            id = 3,
+            name = "Negative Balance",
+            targetPaise = 10_000_00L,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+
+        val contribValid = com.tapledger.core.database.entity.SavingsContributionEntity(
+            id = 10,
+            goalId = 1,
+            amountPaise = 20_000_00L,
+            source = com.tapledger.core.model.SavingsContributionSource.MANUAL,
+            createdAt = 1000L
+        )
+        val contribNegative = com.tapledger.core.database.entity.SavingsContributionEntity(
+            id = 11,
+            goalId = 3,
+            amountPaise = -5_000_00L,
+            source = com.tapledger.core.model.SavingsContributionSource.MANUAL,
+            createdAt = 1000L
+        )
+        val contribOrphan = com.tapledger.core.database.entity.SavingsContributionEntity(
+            id = 12,
+            goalId = 999, // Non-existent goal
+            amountPaise = 10_000_00L,
+            source = com.tapledger.core.model.SavingsContributionSource.MANUAL,
+            createdAt = 1000L
+        )
+
+        val issues = checker.verifyIntegrity(
+            accounts = listOf(account1),
+            categories = listOf(category1),
+            periods = listOf(period1),
+            allocations = emptyList(),
+            transactions = emptyList(),
+            transactionAllocations = emptyList(),
+            monthCloses = emptyList(),
+            adjustments = emptyList<BudgetAdjustmentEntity>(),
+            advances = emptyList<AdvanceLedgerEntity>(),
+            statementImports = emptyList<StatementImportEntity>(),
+            statementLines = emptyList<StatementLineEntity>(),
+            savingsGoals = listOf(validGoal, invalidTargetGoal, negativeBalanceGoal),
+            savingsContributions = listOf(contribValid, contribNegative, contribOrphan)
+        )
+
+        val sg1 = issues.find { it.ruleId == "SG1_INVALID_GOAL_TARGET" }
+        assertThat(sg1).isNotNull()
+        assertThat(sg1!!.entityId).isEqualTo("2")
+
+        val sg2 = issues.find { it.ruleId == "SG2_GOAL_NEGATIVE_BALANCE" }
+        assertThat(sg2).isNotNull()
+        assertThat(sg2!!.entityId).isEqualTo("3")
+        assertThat(sg2.severity).isEqualTo(IntegritySeverity.CRITICAL)
+
+        val sg3 = issues.find { it.ruleId == "SG3_ORPHANED_SAVINGS_CONTRIBUTION" }
+        assertThat(sg3).isNotNull()
+        assertThat(sg3!!.entityId).isEqualTo("12")
+    }
 }
+

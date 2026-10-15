@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
@@ -132,8 +133,10 @@ fun DashboardScreen(
     onNavigateToDiagnostics: () -> Unit,
     onNavigateToInsights: () -> Unit = {},
     onNavigateToAppLockSettings: () -> Unit = {},
+    onNavigateToSavings: () -> Unit = {},
     onShowWhatsNew: () -> Unit = {}
 ) {
+
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -287,6 +290,14 @@ fun DashboardScreen(
                                                 onShowWhatsNew()
                                             },
                                             leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Savings & Goals (Beta)") },
+                                            onClick = {
+                                                showSettingsMenu = false
+                                                onNavigateToSavings()
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Savings, contentDescription = null) }
                                         )
                                         DropdownMenuItem(
                                             text = { Text("Backup & Restore") },

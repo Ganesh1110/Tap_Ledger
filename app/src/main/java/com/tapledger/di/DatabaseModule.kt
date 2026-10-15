@@ -36,10 +36,14 @@ object DatabaseModule {
             TapLedgerDatabase::class.java,
             TapLedgerDatabase.DATABASE_NAME
         )
-            .addMigrations(com.tapledger.core.database.MIGRATION_1_2)
+            .addMigrations(
+                com.tapledger.core.database.MIGRATION_1_2,
+                com.tapledger.core.database.MIGRATION_2_3
+            )
             .addCallback(com.tapledger.core.database.DatabaseTriggers.Callback)
             .build()
     }
+
 
     @Provides
     fun provideAccountDao(db: TapLedgerDatabase): AccountDao = db.accountDao()
@@ -84,6 +88,16 @@ object DatabaseModule {
     fun provideAuditLogDao(db: TapLedgerDatabase): AuditLogDao = db.auditLogDao()
 
     @Provides
+    fun provideSavingsGoalDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.SavingsGoalDao = db.savingsGoalDao()
+
+    @Provides
+    fun provideSavingsContributionDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.SavingsContributionDao = db.savingsContributionDao()
+
+    @Provides
+    fun provideSavingsPlanEntryDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.SavingsPlanEntryDao = db.savingsPlanEntryDao()
+
+    @Provides
     @Singleton
     fun provideDatabaseTransactionRunner(runner: com.tapledger.core.database.RoomDatabaseTransactionRunner): com.tapledger.core.database.DatabaseTransactionRunner = runner
 }
+
