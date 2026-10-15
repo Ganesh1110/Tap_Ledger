@@ -34,6 +34,7 @@ import androidx.navigation.compose.rememberNavController
 import com.tapledger.ui.components.isKeyboardVisible
 import com.tapledger.ui.screens.mpin.MpinLockScreen
 import com.tapledger.ui.screens.mpin.MpinSetupScreen
+import com.tapledger.ui.screens.whatsnew.WhatsNewDialog
 
 data class BottomNavItem(
     val route: String,
@@ -58,6 +59,7 @@ fun MainScaffold(
     val isLocked by viewModel.isAppLocked.collectAsState()
     val lockMessage by viewModel.lockMessage.collectAsState()
     val shouldShowUpgradePrompt by viewModel.shouldShowUpgradePrompt.collectAsState()
+    val shouldShowWhatsNew by viewModel.shouldShowWhatsNew.collectAsState()
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -181,8 +183,18 @@ fun MainScaffold(
                 navController = navController,
                 startDestination = effectiveStartDestination,
                 initialDashboardScrollIndex = initialDashboardScrollIndex,
+                onShowWhatsNew = { viewModel.showWhatsNewManually() },
                 modifier = Modifier.fillMaxSize()
             )
+
+            if (shouldShowWhatsNew) {
+                WhatsNewDialog(
+                    releaseInfo = viewModel.currentReleaseNotes,
+                    allReleases = viewModel.allReleaseNotes,
+                    databaseSchemaVersion = viewModel.appVersionManager.databaseSchemaVersion,
+                    onDismiss = { viewModel.dismissWhatsNew() }
+                )
+            }
         }
     }
 }

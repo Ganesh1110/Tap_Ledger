@@ -50,7 +50,7 @@ import com.tapledger.core.database.entity.UnparsedAlertEntity
         MonthCloseEntity::class,
         AuditLogEntity::class
     ],
-    version = 2,
+    version = TapLedgerDatabase.DATABASE_VERSION,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -73,5 +73,6 @@ abstract class TapLedgerDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "tapledger.db"
+        const val DATABASE_VERSION = 2
     }
 }

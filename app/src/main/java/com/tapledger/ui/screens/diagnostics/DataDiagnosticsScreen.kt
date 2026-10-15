@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tapledger.BuildConfig
+import com.tapledger.core.database.TapLedgerDatabase
 import com.tapledger.core.database.entity.AuditLogEntity
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.domain.model.IntegrityIssue
@@ -127,6 +129,13 @@ fun DataDiagnosticsScreen(
                             text = "Ledger Invariant Scanner",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Engine v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE}) • Schema v${TapLedgerDatabase.DATABASE_VERSION}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = state.lastScannedAt?.let { "Last scanned: ${DateTimeUtils.formatDateTime(it)}" }

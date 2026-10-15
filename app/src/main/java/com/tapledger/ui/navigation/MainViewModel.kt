@@ -1,10 +1,13 @@
 package com.tapledger.ui.navigation
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tapledger.core.security.AppLockCoordinator
 import com.tapledger.core.security.MpinManager
+import com.tapledger.core.version.AppVersionInfo
+import com.tapledger.core.version.AppVersionManager
 import com.tapledger.data.backup.BackupManager
 import com.tapledger.data.repository.OnboardingRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,16 +22,55 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class MainViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+class MainViewModel internal constructor(
+    private val context: Context?,
     onboardingRepository: OnboardingRepository,
     val mpinManager: MpinManager,
     private val appLockCoordinator: AppLockCoordinator,
-    private val backupManager: BackupManager
+    private val backupManager: BackupManager?,
+    val appVersionManager: AppVersionManager,
+    private val customPrefs: SharedPreferences?
 ) : ViewModel() {
 
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        onboardingRepository: OnboardingRepository,
+        mpinManager: MpinManager,
+        appLockCoordinator: AppLockCoordinator,
+        backupManager: BackupManager,
+        appVersionManager: AppVersionManager
+    ) : this(
+        context = context,
+        onboardingRepository = onboardingRepository,
+        mpinManager = mpinManager,
+        appLockCoordinator = appLockCoordinator,
+        backupManager = backupManager,
+        appVersionManager = appVersionManager,
+        customPrefs = null
+    )
+
+    // Secondary constructor for unit testing
+    constructor(
+        onboardingRepository: OnboardingRepository,
+        mpinManager: MpinManager,
+        appLockCoordinator: AppLockCoordinator,
+        backupManager: BackupManager? = null,
+        appVersionManager: AppVersionManager,
+        customPrefs: SharedPreferences
+    ) : this(
+        context = null,
+        onboardingRepository = onboardingRepository,
+        mpinManager = mpinManager,
+        appLockCoordinator = appLockCoordinator,
+        backupManager = backupManager,
+        appVersionManager = appVersionManager,
+        customPrefs = customPrefs
+    )
+
     private val prefs by lazy {
-        context.getSharedPreferences("tapledger_app_state_prefs", Context.MODE_PRIVATE)
+        customPrefs ?: context?.getSharedPreferences("tapledger_app_state_prefs", Context.MODE_PRIVATE)
+        ?: error("Context or customPrefs required")
     }
 
     val isOnboarded: StateFlow<Boolean?> = onboardingRepository.observeIsOnboarded()
@@ -44,10 +86,22 @@ class MainViewModel @Inject constructor(
     private val _shouldShowUpgradePrompt = MutableStateFlow(false)
     val shouldShowUpgradePrompt: StateFlow<Boolean> = _shouldShowUpgradePrompt.asStateFlow()
 
+    private val _shouldShowWhatsNew = MutableStateFlow(false)
+    val shouldShowWhatsNew: StateFlow<Boolean> = _shouldShowWhatsNew.asStateFlow()
+
+    val currentReleaseNotes: AppVersionInfo by lazy {
+        appVersionManager.getReleaseNotes()
+    }
+
+    val allReleaseNotes: List<AppVersionInfo> by lazy {
+        appVersionManager.getAllReleaseNotes()
+    }
+
     private var initialOnboardedState: Boolean? = null
 
     init {
         checkUpgradePrompt()
+        checkWhatsNewPrompt()
     }
 
     private fun checkUpgradePrompt() {
@@ -96,8 +150,29 @@ class MainViewModel @Inject constructor(
 
     fun eraseAllData() {
         viewModelScope.launch {
-            backupManager.eraseAllDataAndReset()
+            backupManager?.eraseAllDataAndReset()
             appLockCoordinator.unlock()
         }
+    }
+
+    private fun checkWhatsNewPrompt() {
+        viewModelScope.launch {
+            isOnboarded.collect { onboarded ->
+                if (onboarded == true) {
+                    if (appVersionManager.shouldShowWhatsNew(isOnboarded = true)) {
+                        _shouldShowWhatsNew.value = true
+                    }
+                }
+            }
+        }
+    }
+
+    fun dismissWhatsNew() {
+        appVersionManager.markWhatsNewSeen()
+        _shouldShowWhatsNew.value = false
+    }
+
+    fun showWhatsNewManually() {
+        _shouldShowWhatsNew.value = true
     }
 }

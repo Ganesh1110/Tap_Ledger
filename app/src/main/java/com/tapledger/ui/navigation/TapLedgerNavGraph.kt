@@ -52,6 +52,7 @@ fun TapLedgerNavGraph(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Screen.Dashboard.route,
     initialDashboardScrollIndex: Int = 0,
+    onShowWhatsNew: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -87,7 +88,8 @@ fun TapLedgerNavGraph(
                 onNavigateToMonthClose = { navController.navigate(Screen.MonthClose.route) },
                 onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
-                onNavigateToAppLockSettings = { navController.navigate(Screen.AppLockSettings.route) }
+                onNavigateToAppLockSettings = { navController.navigate(Screen.AppLockSettings.route) },
+                onShowWhatsNew = onShowWhatsNew
             )
         }
         composable(Screen.Transactions.route) {

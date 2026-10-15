@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Lock
@@ -58,6 +59,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import com.tapledger.BuildConfig
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -128,7 +131,8 @@ fun DashboardScreen(
     onNavigateToMonthClose: () -> Unit,
     onNavigateToDiagnostics: () -> Unit,
     onNavigateToInsights: () -> Unit = {},
-    onNavigateToAppLockSettings: () -> Unit = {}
+    onNavigateToAppLockSettings: () -> Unit = {},
+    onShowWhatsNew: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -277,6 +281,14 @@ fun DashboardScreen(
                                         onDismissRequest = { showSettingsMenu = false }
                                     ) {
                                         DropdownMenuItem(
+                                            text = { Text("What's New & Updates") },
+                                            onClick = {
+                                                showSettingsMenu = false
+                                                onShowWhatsNew()
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
+                                        )
+                                        DropdownMenuItem(
                                             text = { Text("Backup & Restore") },
                                             onClick = {
                                                 showSettingsMenu = false
@@ -308,6 +320,18 @@ fun DashboardScreen(
                                             },
                                             leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
                                         )
+                                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = Spacing.md, vertical = Spacing.xs)
+                                        ) {
+                                            Text(
+                                                text = "TapLedger v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }
