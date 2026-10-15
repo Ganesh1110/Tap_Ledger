@@ -1,3 +1,73 @@
 <resources>
     <string name="app_name">Tap Ledger</string>
+
+    <!-- Chart Summary Templates (V1 - V13) -->
+    <string name="chart_v1_summary_on_track">%1$s left • %2$s</string>
+    <string name="chart_v1_summary_exceeded">%1$s over budget • %2$s used</string>
+    <string name="chart_v1_pace_ahead">%1$d days ahead of pace</string>
+    <string name="chart_v1_pace_behind">%1$d days behind pace</string>
+    <string name="chart_v1_pace_on_track">on pace</string>
+
+    <string name="chart_v2_summary">Spent %1$s of %2$s budget • %3$s</string>
+    <string name="chart_v2_projected">Projected: %1$s</string>
+
+    <string name="chart_v3_summary">Needs &amp; Wants %1$s • %2$s</string>
+    <string name="chart_v3_savings_achieved">Savings goal achieved</string>
+    <string name="chart_v3_savings_pending">Savings in progress</string>
+
+    <string name="chart_v4_summary">Income %1$s, spent %2$s • %3$s saved (%4$s%%)</string>
+    <string name="chart_v4_in_progress">Current period in progress</string>
+
+    <string name="chart_v5_summary">%1$s is %2$s used • %3$s</string>
+    <string name="chart_v5_over_budget_count">%1$d categories over budget</string>
+    <string name="chart_v5_all_on_track">all envelopes on track</string>
+
+    <string name="chart_v6_summary">%1$s is your biggest spend: %2$s</string>
+    <string name="chart_v6_empty_summary">No spending recorded in this period</string>
+
+    <string name="chart_v7_summary">%1$d active spending days • highest spend %2$s on %3$s</string>
+    <string name="chart_v7_summary_empty">No spending days recorded in this month</string>
+
+    <string name="chart_v8_summary">%1$s is your top merchant: %2$s (%3$s)</string>
+    <string name="chart_v8_empty_summary">No merchant spending recorded</string>
+
+    <string name="chart_v9_summary">Net worth %1$s • %2$s %3$s in %4$s</string>
+    <string name="chart_v9_up">up</string>
+    <string name="chart_v9_down">down</string>
+    <string name="chart_v9_steady">unchanged</string>
+
+    <string name="chart_v10_summary">%1$s assets vs %2$s liabilities • %3$s CC utilization</string>
+
+    <string name="chart_v11_summary">%1$s carried forward • %2$s swept</string>
+
+    <string name="chart_v12_summary_reconciled">Fully reconciled with statement closing balance</string>
+    <string name="chart_v12_summary_discrepancy">%1$s discrepancy requires review</string>
+
+    <string name="chart_v13_summary_clean">All financial data clean • 0 issues found</string>
+    <string name="chart_v13_summary_issues">%1$d issues found (%2$d critical, %3$d error)</string>
+
+    <!-- Chart Status & Indicators -->
+    <string name="chart_status_on_track">On Track</string>
+    <string name="chart_status_caution">Caution</string>
+    <string name="chart_status_over_budget">Over Budget</string>
+    <string name="chart_status_goal_achieved">Goal Achieved</string>
+    <string name="chart_used_label">%1$s used</string>
+    <string name="chart_today_pace_label">Today</string>
+
+    <!-- CC Gauge Labels -->
+    <string name="cc_gauge_normal">Normal (&lt;30%)</string>
+    <string name="cc_gauge_caution">Caution (30–70%)</string>
+    <string name="cc_gauge_high">High (&gt;70%)</string>
+
+    <!-- Pattern Legend Strings -->
+    <string name="chart_pattern_legend_title">Chart Pattern Meanings</string>
+    <string name="chart_pattern_legend_desc">Patterns highlight special conditions without relying on color alone.</string>
+    <string name="chart_pattern_striped_title">Striped Pattern</string>
+    <string name="chart_pattern_striped_desc">Advance funds carried in from the previous month.</string>
+    <string name="chart_pattern_shaded_title">Shaded Pattern</string>
+    <string name="chart_pattern_shaded_desc">Deficit applied from earlier advances or negative rollovers.</string>
+    <string name="chart_pattern_hatched_title">Hatched Red Pattern</string>
+    <string name="chart_pattern_hatched_desc">Budget overflow (spend &gt; 100%) or unresolved statement discrepancy.</string>
+    <string name="chart_pattern_dashed_title">Dashed / Hatch Line</string>
+    <string name="chart_pattern_dashed_desc">Current period in progress or display-only spending projection.</string>
 </resources>
