@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.TableChart
@@ -52,11 +53,23 @@ import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartPatternInfoButton
+import com.tapledger.ui.charts.render.ChartPatternLegendSheet
+import com.tapledger.ui.charts.render.ChartPatternType
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+
 /**
  * V4 Six-Period Trend Card per Flow.md §17.2 V4.
  * Clustered bars for actual income, spent, and saved across the last 6 periods,
  * plus a savings-rate line. OPEN period is rendered hatched and labeled "In progress".
- * Supports "Show as table" tabular toggle.
+ * Supports "Show as table" tabular toggle, pattern legend sheet, and compact single-metric FilterChips.
  */
 @Composable
 fun DashboardSixPeriodTrendCard(
@@ -68,14 +81,30 @@ fun DashboardSixPeriodTrendCard(
 ) {
     var isExpanded by remember { mutableStateOf(initiallyExpanded) }
     var showTable by remember { mutableStateOf(false) }
+    var showPatternLegend by remember { mutableStateOf(false) }
+    var selectedMetric by remember { mutableStateOf("ALL") }
+    val isCompact = rememberIsCompactChart()
+
+    val summaryLine = remember(trendState) {
+        if (trendState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV4Trend(trendState.data)
+        } else {
+            subtitle
+        }
+    }
+
+    if (showPatternLegend) {
+        ChartPatternLegendSheet(
+            patterns = listOf(ChartPatternType.DASHED_IN_PROGRESS),
+            onDismissRequest = { showPatternLegend = false }
+        )
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (trendState is ChartState.Data) {
-                    contentDescription = trendState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -86,7 +115,7 @@ fun DashboardSixPeriodTrendCard(
                 .fillMaxWidth()
                 .padding(Spacing.md)
         ) {
-            // Header with toggle
+            // Header with pattern info and toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -94,20 +123,21 @@ fun DashboardSixPeriodTrendCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    ChartPatternInfoButton(onClick = { showPatternLegend = true })
                     IconButton(onClick = { isExpanded = !isExpanded }) {
                         Icon(
                             imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -162,10 +192,44 @@ fun DashboardSixPeriodTrendCard(
                         }
                         is ChartState.Data -> {
                             val data = trendState.data
-                            var selectedIndex by remember(data.periods) { mutableStateOf(data.periods.size - 1) }
-                            val activePeriod = data.periods.getOrNull(selectedIndex) ?: data.periods.lastOrNull()
+                            val displayPeriods = remember(data.periods, isCompact) {
+                                if (isCompact && data.periods.size > 6) data.periods.takeLast(6) else data.periods
+                            }
+                            var selectedIndex by remember(displayPeriods) { mutableStateOf(displayPeriods.size - 1) }
+                            val activePeriod = displayPeriods.getOrNull(selectedIndex) ?: displayPeriods.lastOrNull()
 
                             if (!showTable) {
+                                // FilterChips on compact mode (§17.1 D12)
+                                if (isCompact) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = Spacing.xs),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = selectedMetric == "ALL",
+                                            onClick = { selectedMetric = "ALL" },
+                                            label = { Text("All", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = selectedMetric == "INCOME",
+                                            onClick = { selectedMetric = "INCOME" },
+                                            label = { Text("Income", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = selectedMetric == "SPENT",
+                                            onClick = { selectedMetric = "SPENT" },
+                                            label = { Text("Spent", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                        FilterChip(
+                                            selected = selectedMetric == "SAVED",
+                                            onClick = { selectedMetric = "SAVED" },
+                                            label = { Text("Saved", style = MaterialTheme.typography.labelSmall) }
+                                        )
+                                    }
+                                }
+
                                 // 1. Active Period Structured Breakdown Capsule
                                 activePeriod?.let { p ->
                                     Surface(
@@ -274,11 +338,12 @@ fun DashboardSixPeriodTrendCard(
 
                                 // 2. Clustered Bars Render
                                 ClusteredBarChartRender(
-                                    periods = data.periods,
+                                    periods = displayPeriods,
                                     incomeColor = IncomeGreen,
                                     spentColor = ExpenseRed,
                                     savedColor = ChartPalette.LightSavings,
                                     savingsLineColor = ChartPalette.LightWants,
+                                    visibleMetric = selectedMetric,
                                     selectedIndex = selectedIndex,
                                     onSelectIndex = { selectedIndex = it },
                                     height = 190.dp
@@ -286,15 +351,18 @@ fun DashboardSixPeriodTrendCard(
 
                                 Spacer(modifier = Modifier.height(Spacing.xs))
 
-                                // 3. Period Labels Row
+                                // 3. Period Labels Row (with >= 48dp touch targets)
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceAround
                                 ) {
-                                    data.periods.forEachIndexed { idx, p ->
+                                    displayPeriods.forEachIndexed { idx, p ->
                                         Column(
                                             horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier.clickable { selectedIndex = idx }
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .clickable { selectedIndex = idx }
+                                                .padding(horizontal = 4.dp, vertical = 6.dp)
                                         ) {
                                             Text(
                                                 text = p.label,
@@ -313,6 +381,28 @@ fun DashboardSixPeriodTrendCard(
                                         }
                                     }
                                 }
+
+                                // Detail Strip
+                                val detailItem = activePeriod?.let { p ->
+                                    val valueText = when (selectedMetric) {
+                                        "INCOME" -> "Income: ${MoneyFormatter.formatPaiseToRupees(p.incomePaise)}"
+                                        "SPENT" -> "Spent: ${MoneyFormatter.formatPaiseToRupees(p.spentPaise)}"
+                                        "SAVED" -> "Saved: ${MoneyFormatter.formatPaiseToRupees(p.savedPaise)}"
+                                        else -> "Spent ${MoneyFormatter.formatCompactIndian(p.spentPaise)} of ${MoneyFormatter.formatCompactIndian(p.incomePaise)}"
+                                    }
+                                    ChartTooltipItem(
+                                        id = p.periodId.toString(),
+                                        title = formatPeriodLabel(p.label),
+                                        valueFormatted = valueText,
+                                        context = p.savingsRateBp?.let { "Rate: ${it / 100}%" } ?: if (p.isInProgress) "In progress" else null,
+                                        statusIcon = if (p.isInProgress) Icons.Default.Info else null
+                                    )
+                                }
+                                ChartDetailStrip(
+                                    item = detailItem,
+                                    defaultSummary = summaryLine,
+                                    onClear = { /* retain selection */ }
+                                )
 
                                 Spacer(modifier = Modifier.height(Spacing.xs))
 

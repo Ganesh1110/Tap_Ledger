@@ -197,6 +197,7 @@ fun ClusteredBarChartRender(
     spentColor: Color = Color(0xFFD55E00),
     savedColor: Color = Color(0xFF0072B2),
     savingsLineColor: Color = Color(0xFFE69F00),
+    visibleMetric: String = "ALL",
     selectedIndex: Int? = null,
     onSelectIndex: ((Int) -> Unit)? = null
 ) {
@@ -259,7 +260,12 @@ fun ClusteredBarChartRender(
         val baselineY = topPaddingPx + chartHeightPx
 
         val maxPaise = periods.maxOfOrNull {
-            maxOf(it.incomePaise, it.spentPaise, it.savedPaise)
+            when (visibleMetric) {
+                "INCOME" -> it.incomePaise
+                "SPENT" -> it.spentPaise
+                "SAVED" -> it.savedPaise
+                else -> maxOf(it.incomePaise, it.spentPaise, it.savedPaise)
+            }
         }?.coerceAtLeast(100_00L) ?: 100_00L
 
         val midPaise = maxPaise / 2L
@@ -312,11 +318,16 @@ fun ClusteredBarChartRender(
         val clusterWidth = plotWidth / n.toFloat()
 
         // Adaptive bar sizing
-        val barWidth = when {
-            n == 1 -> 24.dp.toPx()
-            n == 2 -> 20.dp.toPx()
-            n <= 4 -> 16.dp.toPx()
-            else -> (clusterWidth * 0.22f).coerceIn(4.dp.toPx(), 14.dp.toPx())
+        val isSingleMetric = visibleMetric != "ALL"
+        val barWidth = if (isSingleMetric) {
+            (clusterWidth * 0.42f).coerceIn(12.dp.toPx(), 28.dp.toPx())
+        } else {
+            when {
+                n == 1 -> 24.dp.toPx()
+                n == 2 -> 20.dp.toPx()
+                n <= 4 -> 16.dp.toPx()
+                else -> (clusterWidth * 0.22f).coerceIn(4.dp.toPx(), 14.dp.toPx())
+            }
         }
         val barSpacing = when {
             n <= 2 -> 4.dp.toPx()
@@ -332,8 +343,16 @@ fun ClusteredBarChartRender(
             // Selected period soft highlight pill
             if (selectedIndex == i) {
                 val highlightPadding = 6.dp.toPx()
-                val hlLeft = (clusterCenterX - (barWidth * 1.5f + barSpacing + highlightPadding)).coerceAtLeast(leftPaddingPx)
-                val hlWidth = (barWidth * 3f + barSpacing * 2f + highlightPadding * 2f).coerceAtMost(clusterWidth)
+                val hlLeft = if (isSingleMetric) {
+                    (clusterCenterX - (barWidth * 0.5f + highlightPadding)).coerceAtLeast(leftPaddingPx)
+                } else {
+                    (clusterCenterX - (barWidth * 1.5f + barSpacing + highlightPadding)).coerceAtLeast(leftPaddingPx)
+                }
+                val hlWidth = if (isSingleMetric) {
+                    (barWidth + highlightPadding * 2f).coerceAtMost(clusterWidth)
+                } else {
+                    (barWidth * 3f + barSpacing * 2f + highlightPadding * 2f).coerceAtMost(clusterWidth)
+                }
                 drawRoundRect(
                     color = Color.Gray.copy(alpha = 0.08f),
                     topLeft = Offset(hlLeft, topPaddingPx),
@@ -341,14 +360,6 @@ fun ClusteredBarChartRender(
                     cornerRadius = CornerRadius(8.dp.toPx(), 8.dp.toPx())
                 )
             }
-
-            val incomeH = (p.incomePaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
-            val spentH = (p.spentPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
-            val savedH = (p.savedPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
-
-            val xIncome = clusterCenterX - barWidth * 1.5f - barSpacing
-            val xSpent = clusterCenterX - barWidth * 0.5f
-            val xSaved = clusterCenterX + barWidth * 0.5f + barSpacing
 
             fun drawBar(x: Float, h: Float, color: Color) {
                 if (h <= 0f) return
@@ -380,24 +391,52 @@ fun ClusteredBarChartRender(
                 }
             }
 
-            drawBar(xIncome, incomeH, incomeColor)
-            drawBar(xSpent, spentH, spentColor)
-            drawBar(xSaved, savedH, savedColor)
+            if (isSingleMetric) {
+                val singleX = clusterCenterX - barWidth * 0.5f
+                when (visibleMetric) {
+                    "INCOME" -> {
+                        val incomeH = (p.incomePaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+                        drawBar(singleX, incomeH, incomeColor)
+                    }
+                    "SPENT" -> {
+                        val spentH = (p.spentPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+                        drawBar(singleX, spentH, spentColor)
+                    }
+                    "SAVED" -> {
+                        val savedH = (p.savedPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+                        drawBar(singleX, savedH, savedColor)
+                    }
+                }
+            } else {
+                val incomeH = (p.incomePaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+                val spentH = (p.spentPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
+                val savedH = (p.savedPaise.coerceAtLeast(0L).toFloat() / maxPaise.toFloat()) * chartHeightPx
 
-            // Savings rate point (0..10,000 bp = 0..100%)
-            p.savingsRateBp?.let { bp ->
-                val rateFraction = (bp.toFloat() / 10_000f).coerceIn(0f, 1f)
-                val ptY = baselineY - (rateFraction * chartHeightPx)
-                savingsPoints.add(Offset(clusterCenterX, ptY))
+                val xIncome = clusterCenterX - barWidth * 1.5f - barSpacing
+                val xSpent = clusterCenterX - barWidth * 0.5f
+                val xSaved = clusterCenterX + barWidth * 0.5f + barSpacing
 
-                if (n <= 4) {
-                    val pct = bp / 100
-                    drawContext.canvas.nativeCanvas.drawText(
-                        "$pct%",
-                        clusterCenterX,
-                        (ptY - 7.dp.toPx()).coerceAtLeast(14.dp.toPx()),
-                        savingsRateTextPaint
-                    )
+                drawBar(xIncome, incomeH, incomeColor)
+                drawBar(xSpent, spentH, spentColor)
+                drawBar(xSaved, savedH, savedColor)
+            }
+
+            // Savings rate point (0..10,000 bp = 0..100%) - shown for ALL or SAVED
+            if (visibleMetric == "ALL" || visibleMetric == "SAVED") {
+                p.savingsRateBp?.let { bp ->
+                    val rateFraction = (bp.toFloat() / 10_000f).coerceIn(0f, 1f)
+                    val ptY = baselineY - (rateFraction * chartHeightPx)
+                    savingsPoints.add(Offset(clusterCenterX, ptY))
+
+                    if (n <= 4) {
+                        val pct = bp / 100
+                        drawContext.canvas.nativeCanvas.drawText(
+                            "$pct%",
+                            clusterCenterX,
+                            (ptY - 7.dp.toPx()).coerceAtLeast(14.dp.toPx()),
+                            savingsRateTextPaint
+                        )
+                    }
                 }
             }
         }
