@@ -27,11 +27,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import com.tapledger.core.database.entity.FixedDepositEntity
 import com.tapledger.core.database.entity.RecurringCommitmentEntity
 import com.tapledger.domain.calculator.FdCalculator
+import com.tapledger.ui.charts.render.ProgressBarRender
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -210,14 +210,12 @@ fun SavingHomeScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(Spacing.xs))
-                            val progressFraction = (state.emergencyFundTenths.toFloat() / 60f).coerceIn(0f, 1f)
-                            LinearProgressIndicator(
-                                progress = { progressFraction },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp),
+                            val progressBp = ((state.emergencyFundTenths * 10_000L) / 60L).coerceIn(0L, 10_000L).toInt()
+                            ProgressBarRender(
+                                percentageBp = progressBp,
                                 color = if (state.emergencyFundTenths >= 30L) IncomeGreen else WarningAmber,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                height = 8.dp
                             )
                             Spacer(modifier = Modifier.height(Spacing.xs))
                             Text(

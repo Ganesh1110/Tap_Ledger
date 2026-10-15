@@ -2,28 +2,23 @@ package com.tapledger.domain.calculator
 
 import com.tapledger.core.database.entity.FixedDepositEntity
 import com.tapledger.core.model.CompoundingFrequency
-import java.math.BigDecimal
-import java.math.MathContext
-import java.math.RoundingMode
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Pure financial calculator for Fixed Deposits (Flow.md §18, Phase 3).
  *
- * Strictly follows guiding rules:
- * - All money in Long paise, rates in basis points (10,000 = 100.00%).
- * - Uses BigDecimal with a single HALF_UP rounding at the end to Long paise.
- * - Zero Double / Float.
- * - Compounding follows Indian banking standard: quarterly/monthly/annual compounding
- *   for full periods, plus simple interest for remaining days.
+ * Strictly zero floating-point arithmetic (zero Double, BigDecimal, or Float).
+ * All money is signed 64-bit Long paise, and percentages are basis points (Int, 10,000 = 100%).
+ * Compounding follows Indian banking standard: quarterly/monthly/annual compounding
+ * credited per period, with simple interest for broken remaining days.
  */
 @Singleton
 class FdCalculator @Inject constructor() {
 
-    private val mathContext = MathContext(34, RoundingMode.HALF_UP)
-    private val daysPerYear = BigDecimal("365")
-    private val millisPerDay = 86_400_000L
+    private val millisPerDay: Long = 86_400_000L
+    private val daysPerYear: Long = 365L
+    private val bpScale: Long = 10_000L
 
     /**
      * Calculates days to maturity as of [asOfMs].
@@ -112,48 +107,57 @@ class FdCalculator @Inject constructor() {
     ): Long {
         if (principalPaise <= 0L || totalDays <= 0L || rateBp <= 0) return principalPaise
 
-        val p = BigDecimal(principalPaise)
-        val annualRate = BigDecimal(rateBp).divide(BigDecimal(10000), mathContext)
-
-        val multiplier: BigDecimal = when (compounding) {
-            CompoundingFrequency.SIMPLE -> {
-                val timeFraction = BigDecimal(totalDays).divide(daysPerYear, mathContext)
-                BigDecimal.ONE.add(annualRate.multiply(timeFraction, mathContext))
-            }
-            CompoundingFrequency.QUARTERLY -> calculateCompoundedMultiplier(annualRate, totalDays, periodsPerYear = 4)
-            CompoundingFrequency.MONTHLY -> calculateCompoundedMultiplier(annualRate, totalDays, periodsPerYear = 12)
-            CompoundingFrequency.ANNUAL -> calculateCompoundedMultiplier(annualRate, totalDays, periodsPerYear = 1)
+        return when (compounding) {
+            CompoundingFrequency.SIMPLE -> calculateSimpleInterestMaturity(principalPaise, rateBp, totalDays)
+            CompoundingFrequency.QUARTERLY -> calculateCompoundedMaturity(principalPaise, rateBp, totalDays, periodsPerYear = 4)
+            CompoundingFrequency.MONTHLY -> calculateCompoundedMaturity(principalPaise, rateBp, totalDays, periodsPerYear = 12)
+            CompoundingFrequency.ANNUAL -> calculateCompoundedMaturity(principalPaise, rateBp, totalDays, periodsPerYear = 1)
         }
-
-        val maturityPaiseBd = p.multiply(multiplier, mathContext)
-        return maturityPaiseBd.setScale(0, RoundingMode.HALF_UP).longValueExact()
     }
 
-    private fun calculateCompoundedMultiplier(
-        annualRate: BigDecimal,
+    private fun calculateSimpleInterestMaturity(
+        principalPaise: Long,
+        rateBp: Int,
+        totalDays: Long
+    ): Long {
+        val denominator = bpScale * daysPerYear // 3,650,000
+        val numerator = Math.multiplyExact(Math.multiplyExact(principalPaise, rateBp.toLong()), totalDays)
+        val interest = (numerator + (denominator / 2L)) / denominator
+        return Math.addExact(principalPaise, interest)
+    }
+
+    private fun calculateCompoundedMaturity(
+        principalPaise: Long,
+        rateBp: Int,
         totalDays: Long,
         periodsPerYear: Int
-    ): BigDecimal {
-        val nBd = BigDecimal(periodsPerYear)
-        val daysPerPeriodBd = daysPerYear.divide(nBd, mathContext)
+    ): Long {
+        val periodsPerYearLong = periodsPerYear.toLong()
+        val periodDenominator = bpScale * periodsPerYearLong // e.g. 40,000 for quarterly
+        val daysPerPeriodNumerator = daysPerYear // 365
+        val daysPerPeriodDenominator = periodsPerYearLong // 4 -> 91.25 days per period
 
-        // Number of completed compounding periods
-        val completedPeriods = (BigDecimal(totalDays).divide(daysPerPeriodBd, 0, RoundingMode.DOWN)).toInt()
-        val ratePerPeriod = annualRate.divide(nBd, mathContext)
-        val periodBase = BigDecimal.ONE.add(ratePerPeriod)
-        val compoundedPart = periodBase.pow(completedPeriods, mathContext)
+        // Number of completed periods: (totalDays * periodsPerYear) / 365
+        val completedPeriods = ((totalDays * periodsPerYearLong) / daysPerPeriodNumerator).toInt()
 
-        // Remaining days treated with simple interest (Indian banking standard)
-        val completedDays = daysPerPeriodBd.multiply(BigDecimal(completedPeriods), mathContext)
-        val remainingDays = BigDecimal(totalDays).subtract(completedDays)
-
-        val remainingFraction = if (remainingDays.signum() > 0) {
-            val simplePart = annualRate.multiply(remainingDays.divide(daysPerYear, mathContext), mathContext)
-            BigDecimal.ONE.add(simplePart)
-        } else {
-            BigDecimal.ONE
+        var currentBalance = principalPaise
+        for (i in 0 until completedPeriods) {
+            val periodInterestNum = currentBalance * rateBp.toLong()
+            val periodInterest = (periodInterestNum + (periodDenominator / 2L)) / periodDenominator
+            currentBalance += periodInterest
         }
 
-        return compoundedPart.multiply(remainingFraction, mathContext)
+        // Remaining broken days
+        val completedDays = (completedPeriods.toLong() * daysPerPeriodNumerator) / daysPerPeriodDenominator
+        val remainingDays = maxOf(0L, totalDays - completedDays)
+
+        if (remainingDays > 0L) {
+            val brokenDenominator = bpScale * daysPerYear // 3,650,000
+            val brokenNumerator = currentBalance * rateBp.toLong() * remainingDays
+            val brokenInterest = (brokenNumerator + (brokenDenominator / 2L)) / brokenDenominator
+            currentBalance += brokenInterest
+        }
+
+        return currentBalance
     }
 }

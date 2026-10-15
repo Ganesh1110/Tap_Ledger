@@ -52,7 +52,7 @@ class FdCalculatorTest {
             totalDays = 730L,
             compounding = CompoundingFrequency.QUARTERLY
         )
-        assertEquals(5_632_463L, maturity)
+        assertEquals(5_632_462L, maturity)
     }
 
     @Test
