@@ -54,6 +54,11 @@ object FinancialNotificationParser {
         Pattern.compile("bank|a/c|account|card|upi|vpa|wallet", Pattern.CASE_INSENSITIVE)
     )
 
+    private val SIP_AUTO_DEBIT_PATTERN = Pattern.compile(
+        "\\b(?:sip|auto[- ]?debit|ach|standing\\s*instruction|mandate|nach|mutual\\s*fund|mf\\s*investment|recurring\\s*deposit|rd\\s*installment)\\b",
+        Pattern.CASE_INSENSITIVE
+    )
+
     fun isPotentialFinancialAlert(text: String): Boolean {
         return FINANCIAL_HINT_PATTERNS.all { it.matcher(text).find() }
     }
@@ -174,7 +179,8 @@ object FinancialNotificationParser {
             checkpointType = checkpointType,
             occurredAt = event.postTime,
             isReversalOrRefund = isReversal,
-            rawPreviewRedacted = redactSensitiveData(combinedText)
+            rawPreviewRedacted = redactSensitiveData(combinedText),
+            isSipOrAutoDebit = SIP_AUTO_DEBIT_PATTERN.matcher(combinedText).find()
         )
     }
 

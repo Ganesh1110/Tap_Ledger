@@ -29,5 +29,6 @@ data class ParsedFinancialEvent(
     val checkpointType: CheckpointType? = null,
     val occurredAt: Long,
     val isReversalOrRefund: Boolean = false,
-    val rawPreviewRedacted: String
+    val rawPreviewRedacted: String,
+    val isSipOrAutoDebit: Boolean = false
 )

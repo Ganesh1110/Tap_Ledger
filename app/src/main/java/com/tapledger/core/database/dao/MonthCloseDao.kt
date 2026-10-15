@@ -24,4 +24,7 @@ interface MonthCloseDao {
 
     @Query("SELECT * FROM month_closes")
     suspend fun getAllMonthClosesSync(): List<MonthCloseEntity>
+
+    @Query("SELECT * FROM month_closes ORDER BY closed_at DESC")
+    fun getAllMonthClosesFlow(): Flow<List<MonthCloseEntity>>
 }

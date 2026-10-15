@@ -35,6 +35,7 @@ import com.tapledger.data.repository.BudgetRepository
 import com.tapledger.domain.validator.DataIntegrityChecker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertThrows
 import org.junit.Before
@@ -203,6 +204,7 @@ class MonthCloseEngineTest {
             storage.entries.removeIf { it.value.budgetPeriodId == periodId }
         }
         override suspend fun getAllMonthClosesSync(): List<MonthCloseEntity> = storage.values.toList()
+        override fun getAllMonthClosesFlow(): Flow<List<MonthCloseEntity>> = flowOf(storage.values.toList())
     }
 
     private class FakeTransactionDao : TransactionDao {

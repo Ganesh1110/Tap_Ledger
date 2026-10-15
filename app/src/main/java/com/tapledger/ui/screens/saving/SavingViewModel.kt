@@ -2,6 +2,8 @@ package com.tapledger.ui.screens.saving
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tapledger.core.model.CompoundingFrequency
+import com.tapledger.core.model.RecurringCommitmentType
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.SavingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,8 +24,11 @@ class SavingViewModel @Inject constructor(
 
     val uiState: StateFlow<SavingHomeUiState> = combine(
         savingsRepository.getOverviewSummaryFlow(),
-        accountRepository.getAllActiveAccounts()
-    ) { overview, accounts ->
+        accountRepository.getAllActiveAccounts(),
+        savingsRepository.getEmergencyFundCoverageTenthsFlow(),
+        savingsRepository.getAllCommitmentsFlow(),
+        savingsRepository.getAllFixedDepositsFlow()
+    ) { overview, accounts, efTenths, commitments, fds ->
         SavingHomeUiState(
             isLoading = false,
             totalSavedPaise = overview.totalSavedPaise,
@@ -32,6 +37,9 @@ class SavingViewModel @Inject constructor(
             goals = overview.goals,
             accounts = accounts,
             earmarkWarnings = overview.accountEarmarkWarnings,
+            emergencyFundTenths = efTenths,
+            commitments = commitments,
+            fixedDeposits = fds,
             errorMessage = null
         )
     }.stateIn(
@@ -187,6 +195,71 @@ class SavingViewModel @Inject constructor(
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.message ?: "Failed to archive goal")
+            }
+        }
+    }
+
+    // --- Phase 3: Commitments & Fixed Deposits ---
+
+    fun createCommitment(
+        type: RecurringCommitmentType,
+        name: String,
+        amountPaise: Long,
+        dueDay: Int,
+        accountId: Long?,
+        goalId: Long?,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                savingsRepository.createCommitment(type, name, amountPaise, dueDay, accountId, goalId)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to create commitment")
+            }
+        }
+    }
+
+    fun deleteCommitment(id: Long, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                savingsRepository.deleteCommitment(id)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to delete commitment")
+            }
+        }
+    }
+
+    fun createFixedDeposit(
+        name: String,
+        principalPaise: Long,
+        rateBp: Int,
+        startMs: Long,
+        maturityMs: Long,
+        compounding: CompoundingFrequency,
+        goalId: Long?,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                savingsRepository.createFixedDeposit(name, principalPaise, rateBp, startMs, maturityMs, compounding, goalId)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to create fixed deposit")
+            }
+        }
+    }
+
+    fun deleteFixedDeposit(id: Long, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                savingsRepository.deleteFixedDeposit(id)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to delete fixed deposit")
             }
         }
     }

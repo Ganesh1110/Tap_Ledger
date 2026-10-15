@@ -380,6 +380,7 @@ class ChartInvariantsTest {
             override fun observeByPeriodId(periodId: Long): Flow<MonthCloseEntity?> = emptyFlow()
             override suspend fun deleteForPeriod(periodId: Long) { monthCloseStore.removeAll { it.budgetPeriodId == periodId } }
             override suspend fun getAllMonthClosesSync(): List<MonthCloseEntity> = monthCloseStore
+            override fun getAllMonthClosesFlow(): Flow<List<MonthCloseEntity>> = emptyFlow()
         }
 
         val fakeAccountDao = object : AccountDao {

@@ -12,7 +12,10 @@ import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.MerchantMapDao
+import com.tapledger.core.database.dao.CommitmentPaymentDao
+import com.tapledger.core.database.dao.FixedDepositDao
 import com.tapledger.core.database.dao.MonthCloseDao
+import com.tapledger.core.database.dao.RecurringCommitmentDao
 import com.tapledger.core.database.dao.SavingsContributionDao
 import com.tapledger.core.database.dao.SavingsGoalDao
 import com.tapledger.core.database.dao.SavingsPlanEntryDao
@@ -88,6 +91,9 @@ abstract class TapLedgerDatabase : RoomDatabase() {
     abstract fun savingsGoalDao(): SavingsGoalDao
     abstract fun savingsContributionDao(): SavingsContributionDao
     abstract fun savingsPlanEntryDao(): SavingsPlanEntryDao
+    abstract fun recurringCommitmentDao(): RecurringCommitmentDao
+    abstract fun commitmentPaymentDao(): CommitmentPaymentDao
+    abstract fun fixedDepositDao(): FixedDepositDao
 
     companion object {
         const val DATABASE_NAME = "tapledger.db"

@@ -29,6 +29,13 @@ import com.tapledger.domain.calculator.BudgetCalculator
 import com.tapledger.domain.model.BudgetPeriodSummary
 import com.tapledger.domain.model.IntegritySeverity
 import com.tapledger.domain.validator.DataIntegrityChecker
+import com.tapledger.core.model.SavingsGoalStatus
+import com.tapledger.core.model.SavingsContributionSource
+import com.tapledger.core.database.dao.SavingsGoalDao
+import com.tapledger.core.database.dao.SavingsPlanEntryDao
+import com.tapledger.core.database.dao.SavingsContributionDao
+import com.tapledger.core.database.entity.SavingsContributionEntity
+import com.tapledger.domain.calculator.SavingsPlanner
 import java.time.YearMonth
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,7 +60,11 @@ class MonthCloseEngine @Inject constructor(
     private val accountDao: AccountDao,
     private val categoryDao: CategoryDao,
     private val budgetRepository: BudgetRepository,
-    private val dataIntegrityChecker: DataIntegrityChecker
+    private val dataIntegrityChecker: DataIntegrityChecker,
+    private val savingsGoalDao: SavingsGoalDao? = null,
+    private val savingsPlanEntryDao: SavingsPlanEntryDao? = null,
+    private val savingsContributionDao: SavingsContributionDao? = null,
+    private val savingsPlanner: SavingsPlanner? = null
 ) {
 
     data class PreCloseChecklistResult(
@@ -135,7 +146,8 @@ class MonthCloseEngine @Inject constructor(
         periodId: Long,
         reconciliationStatus: MonthCloseReconciliationStatus = MonthCloseReconciliationStatus.RECONCILED,
         overrideReason: String? = null,
-        allowUnreviewedOverride: Boolean = false
+        allowUnreviewedOverride: Boolean = false,
+        surplusGoalId: Long? = null
     ): Long {
         val now = DateTimeUtils.nowEpochMillis()
         return transactionRunner.run {
@@ -268,6 +280,46 @@ class MonthCloseEngine @Inject constructor(
                 closingBalancesJson = closingBalancesJson
             )
             val closeId = monthCloseDao.insert(monthClose)
+
+            // Phase 2 (M14): Optional surplus allocation to a savings goal
+            if (surplusGoalId != null && summary.actualSavingsPaise > 0L && savingsContributionDao != null) {
+                savingsContributionDao.insert(
+                    SavingsContributionEntity(
+                        id = 0L,
+                        goalId = surplusGoalId,
+                        amountPaise = summary.actualSavingsPaise,
+                        source = SavingsContributionSource.MONTH_CLOSE,
+                        transactionId = null,
+                        periodId = period.id,
+                        note = "Month close surplus from period #${period.id}",
+                        createdAt = now
+                    )
+                )
+            }
+
+            // Phase 2 (M14): Generate savings plan for next period (M+1)
+            if (savingsGoalDao != null && savingsPlanEntryDao != null && savingsPlanner != null) {
+                val activeGoals = savingsGoalDao.getAllGoalsSync()
+                    .filter { it.status == SavingsGoalStatus.ACTIVE }
+                if (activeGoals.isNotEmpty()) {
+                    val goalBalances = savingsContributionDao?.getAllContributionsSync()
+                        ?.groupBy { it.goalId }
+                        ?.mapValues { (_, contribs) -> contribs.sumOf { it.amountPaise } }
+                        ?: emptyMap()
+
+                    val planEntries = savingsPlanner.planForPeriod(
+                        goals = activeGoals,
+                        goalBalances = goalBalances,
+                        periodId = nextPeriod.id,
+                        totalSavingsPaise = summary.actualSavingsPaise,
+                        createdAt = now
+                    )
+                    if (planEntries.isNotEmpty()) {
+                        savingsPlanEntryDao.insertAll(planEntries)
+                    }
+                }
+            }
+
             closeId
         }
     }

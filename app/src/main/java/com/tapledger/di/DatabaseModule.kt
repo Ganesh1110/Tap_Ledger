@@ -97,6 +97,15 @@ object DatabaseModule {
     fun provideSavingsPlanEntryDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.SavingsPlanEntryDao = db.savingsPlanEntryDao()
 
     @Provides
+    fun provideRecurringCommitmentDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.RecurringCommitmentDao = db.recurringCommitmentDao()
+
+    @Provides
+    fun provideCommitmentPaymentDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.CommitmentPaymentDao = db.commitmentPaymentDao()
+
+    @Provides
+    fun provideFixedDepositDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.FixedDepositDao = db.fixedDepositDao()
+
+    @Provides
     @Singleton
     fun provideDatabaseTransactionRunner(runner: com.tapledger.core.database.RoomDatabaseTransactionRunner): com.tapledger.core.database.DatabaseTransactionRunner = runner
 }

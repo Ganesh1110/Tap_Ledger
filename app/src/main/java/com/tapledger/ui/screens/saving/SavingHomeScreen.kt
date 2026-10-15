@@ -27,7 +27,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import com.tapledger.core.database.entity.FixedDepositEntity
+import com.tapledger.core.database.entity.RecurringCommitmentEntity
+import com.tapledger.domain.calculator.FdCalculator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -172,6 +176,59 @@ fun SavingHomeScreen(
                     }
                 }
 
+                // 1b. Emergency Fund Coverage Card (Phase 2)
+                item(key = "emergency_fund_card") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(Spacing.lg)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Emergency Fund Coverage",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                val whole = state.emergencyFundTenths / 10L
+                                val frac = state.emergencyFundTenths % 10L
+                                Text(
+                                    text = "$whole.$frac months",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (state.emergencyFundTenths >= 30L) IncomeGreen else WarningAmber
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(Spacing.xs))
+                            val progressFraction = (state.emergencyFundTenths.toFloat() / 60f).coerceIn(0f, 1f)
+                            LinearProgressIndicator(
+                                progress = { progressFraction },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp),
+                                color = if (state.emergencyFundTenths >= 30L) IncomeGreen else WarningAmber,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(Spacing.xs))
+                            Text(
+                                text = "Target: 6.0 months of average expenses",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
                 // 2. Earmark Warnings (D011: soft warning if earmarked > account balance)
                 if (state.earmarkWarnings.isNotEmpty()) {
                     item(key = "earmark_warnings") {
@@ -233,6 +290,26 @@ fun SavingHomeScreen(
                             summary = goalSummary,
                             onClick = { onNavigateToGoalDetail(goalSummary.goal.id) }
                         )
+                    }
+                }
+
+                // 5. Recurring Commitments (Phase 3: SIP, RD, Chit, Gold)
+                if (state.commitments.isNotEmpty()) {
+                    item(key = "commitments_header") {
+                        SectionHeader(title = "Recurring Commitments (${state.commitments.size})")
+                    }
+                    items(state.commitments, key = { "commitment_${it.id}" }) { commitment ->
+                        CommitmentCard(commitment = commitment)
+                    }
+                }
+
+                // 6. Fixed Deposits (Phase 3)
+                if (state.fixedDeposits.isNotEmpty()) {
+                    item(key = "fds_header") {
+                        SectionHeader(title = "Fixed Deposits (${state.fixedDeposits.size})")
+                    }
+                    items(state.fixedDeposits, key = { "fd_${it.id}" }) { fd ->
+                        FixedDepositCard(fd = fd)
                     }
                 }
             }
@@ -366,6 +443,129 @@ private fun GoalCard(
                 }
 
             }
+        }
+    }
+}
+
+@Composable
+private fun CommitmentCard(commitment: RecurringCommitmentEntity) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Text(
+                        text = commitment.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        Text(
+                            text = commitment.type.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Due on day ${commitment.dueDay} of each month",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = MoneyFormatter.formatPaiseToRupees(commitment.amountPaise),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = IncomeGreen
+            )
+        }
+    }
+}
+
+@Composable
+private fun FixedDepositCard(fd: FixedDepositEntity) {
+    val calculator = remember { FdCalculator() }
+    val now = remember { System.currentTimeMillis() }
+    val daysLeft = calculator.calculateDaysToMaturity(fd.maturityMs, now)
+    val maturityValue = calculator.calculateMaturityValue(fd)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = fd.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                val rateWhole = fd.rateBp / 100
+                val rateDec = (fd.rateBp % 100).toString().padStart(2, '0')
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Text(
+                        text = "$rateWhole.$rateDec% p.a.",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Principal: ${MoneyFormatter.formatPaiseToRupees(fd.principalPaise)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Maturity: ${MoneyFormatter.formatPaiseToRupees(maturityValue)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = IncomeGreen
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = if (daysLeft > 0) "$daysLeft days to maturity" else "Matured",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (daysLeft > 0) MaterialTheme.colorScheme.onSurfaceVariant else IncomeGreen
+            )
         }
     }
 }

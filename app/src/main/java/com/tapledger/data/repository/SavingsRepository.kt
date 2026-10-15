@@ -2,15 +2,28 @@ package com.tapledger.data.repository
 
 import com.tapledger.core.database.DatabaseTransactionRunner
 import com.tapledger.core.database.dao.AccountDao
+import com.tapledger.core.database.dao.CommitmentPaymentDao
+import com.tapledger.core.database.dao.FixedDepositDao
+import com.tapledger.core.database.dao.MonthCloseDao
+import com.tapledger.core.database.dao.RecurringCommitmentDao
 import com.tapledger.core.database.dao.SavingsContributionDao
 import com.tapledger.core.database.dao.SavingsGoalDao
+import com.tapledger.core.database.dao.SavingsPlanEntryDao
 import com.tapledger.core.database.dao.TransactionDao
+import com.tapledger.core.database.entity.CommitmentPaymentEntity
+import com.tapledger.core.database.entity.FixedDepositEntity
+import com.tapledger.core.database.entity.RecurringCommitmentEntity
 import com.tapledger.core.database.entity.SavingsContributionEntity
 import com.tapledger.core.database.entity.SavingsGoalEntity
+import com.tapledger.core.database.entity.SavingsPlanEntryEntity
+import com.tapledger.core.model.CommitmentPaymentStatus
+import com.tapledger.core.model.CompoundingFrequency
+import com.tapledger.core.model.RecurringCommitmentType
 import com.tapledger.core.model.SavingsContributionSource
 import com.tapledger.core.model.SavingsGoalStatus
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.domain.calculator.AccountBalanceCalculator
+import com.tapledger.domain.calculator.EmergencyFundCalculator
 import com.tapledger.domain.calculator.SavingsCalculator
 import com.tapledger.domain.model.SavingsGoalSummary
 import com.tapledger.domain.model.SavingsOverviewSummary
@@ -24,6 +37,12 @@ import javax.inject.Singleton
 class SavingsRepository @Inject constructor(
     private val savingsGoalDao: SavingsGoalDao,
     private val savingsContributionDao: SavingsContributionDao,
+    private val savingsPlanEntryDao: SavingsPlanEntryDao,
+    private val recurringCommitmentDao: RecurringCommitmentDao,
+    private val commitmentPaymentDao: CommitmentPaymentDao,
+    private val fixedDepositDao: FixedDepositDao,
+    private val monthCloseDao: MonthCloseDao,
+    private val emergencyFundCalculator: EmergencyFundCalculator,
     private val accountDao: AccountDao,
     private val transactionDao: TransactionDao,
     private val transactionRunner: DatabaseTransactionRunner
@@ -277,5 +296,132 @@ class SavingsRepository @Inject constructor(
                 accountEarmarkWarnings = earmarkWarnings
             )
         }
+    }
+
+    // --- Phase 2: Monthly Savings Plan & Emergency Fund ---
+
+    fun getSavingsPlanForPeriod(periodId: Long): Flow<List<SavingsPlanEntryEntity>> =
+        savingsPlanEntryDao.getEntriesForPeriod(periodId)
+
+    suspend fun getSavingsPlanForPeriodSync(periodId: Long): List<SavingsPlanEntryEntity> =
+        savingsPlanEntryDao.getEntriesForPeriodSync(periodId)
+
+    fun getEmergencyFundCoverageTenthsFlow(lookbackMonths: Int = 3): Flow<Long> {
+        return combine(
+            savingsContributionDao.getTotalSavedFlow(),
+            monthCloseDao.getAllMonthClosesFlow()
+        ) { totalSaved, monthCloses ->
+            emergencyFundCalculator.calculateFromMonthCloses(
+                totalSavingsPaise = totalSaved,
+                monthCloses = monthCloses,
+                lookbackMonths = lookbackMonths
+            )
+        }
+    }
+
+    // --- Phase 3: Recurring Commitments (SIP, RD, Chit, Gold) ---
+
+    fun getAllCommitmentsFlow(): Flow<List<RecurringCommitmentEntity>> =
+        recurringCommitmentDao.getAllFlow()
+
+    fun getAllActiveCommitmentsFlow(): Flow<List<RecurringCommitmentEntity>> =
+        recurringCommitmentDao.getAllActiveFlow()
+
+    suspend fun createCommitment(
+        type: RecurringCommitmentType,
+        name: String,
+        amountPaise: Long,
+        dueDay: Int,
+        accountId: Long? = null,
+        goalId: Long? = null
+    ): Long {
+        require(name.isNotBlank()) { "Commitment name cannot be empty" }
+        require(amountPaise > 0L) { "Commitment amount must be positive" }
+        require(dueDay in 1..31) { "Due day must be between 1 and 31" }
+
+        val commitment = RecurringCommitmentEntity(
+            type = type,
+            name = name.trim(),
+            amountPaise = amountPaise,
+            dueDay = dueDay,
+            accountId = accountId,
+            goalId = goalId,
+            active = true,
+            createdAt = DateTimeUtils.nowEpochMillis()
+        )
+        return recurringCommitmentDao.insert(commitment)
+    }
+
+    suspend fun updateCommitmentActiveStatus(id: Long, active: Boolean) {
+        recurringCommitmentDao.updateActiveStatus(id, active)
+    }
+
+    suspend fun deleteCommitment(id: Long) {
+        recurringCommitmentDao.delete(id)
+    }
+
+    fun getCommitmentPaymentsForPeriod(periodId: Long): Flow<List<CommitmentPaymentEntity>> =
+        commitmentPaymentDao.getPaymentsForPeriodFlow(periodId)
+
+    suspend fun markCommitmentPaid(
+        commitmentId: Long,
+        periodId: Long,
+        transactionId: Long
+    ) {
+        val existing = commitmentPaymentDao.getPaymentForCommitmentAndPeriod(commitmentId, periodId)
+        if (existing != null) {
+            commitmentPaymentDao.markPaid(
+                commitmentId = commitmentId,
+                periodId = periodId,
+                transactionId = transactionId,
+                status = CommitmentPaymentStatus.PAID
+            )
+        } else {
+            commitmentPaymentDao.insert(
+                CommitmentPaymentEntity(
+                    commitmentId = commitmentId,
+                    periodId = periodId,
+                    paidTransactionId = transactionId,
+                    status = CommitmentPaymentStatus.PAID,
+                    createdAt = DateTimeUtils.nowEpochMillis()
+                )
+            )
+        }
+    }
+
+    // --- Phase 3: Fixed Deposits ---
+
+    fun getAllFixedDepositsFlow(): Flow<List<FixedDepositEntity>> =
+        fixedDepositDao.getAllFlow()
+
+    suspend fun createFixedDeposit(
+        name: String,
+        principalPaise: Long,
+        rateBp: Int,
+        startMs: Long,
+        maturityMs: Long,
+        compounding: CompoundingFrequency = CompoundingFrequency.QUARTERLY,
+        goalId: Long? = null
+    ): Long {
+        require(name.isNotBlank()) { "Fixed deposit name cannot be empty" }
+        require(principalPaise > 0L) { "Principal must be positive" }
+        require(rateBp > 0) { "Interest rate must be positive" }
+        require(maturityMs > startMs) { "Maturity date must be after start date" }
+
+        val fd = FixedDepositEntity(
+            name = name.trim(),
+            principalPaise = principalPaise,
+            rateBp = rateBp,
+            startMs = startMs,
+            maturityMs = maturityMs,
+            compounding = compounding,
+            goalId = goalId,
+            createdAt = DateTimeUtils.nowEpochMillis()
+        )
+        return fixedDepositDao.insert(fd)
+    }
+
+    suspend fun deleteFixedDeposit(id: Long) {
+        fixedDepositDao.delete(id)
     }
 }
