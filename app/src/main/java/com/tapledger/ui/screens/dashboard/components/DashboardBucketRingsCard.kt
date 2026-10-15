@@ -42,10 +42,18 @@ import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.Spacing
 
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.WarningAmber
+
 /**
  * V3 50/30/20 Bucket Rings Card per Flow.md §17.2 V3.
  * Three rings for Needs (#0072B2), Wants (#E69F00), and Savings (#009E73).
  * Savings envelope is rendered with goal styling (check icon when achieved, never red).
+ * Supports plain-language summary line, status icons (✓, ⚠, ▲), and compact sizing.
  */
 @Composable
 fun DashboardBucketRingsCard(
@@ -53,6 +61,13 @@ fun DashboardBucketRingsCard(
     onManageCategories: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isCompact = rememberIsCompactChart()
+    val summaryLine = if (bucketRingsState is ChartState.Data) {
+        ChartSummaryHelper.summarizeV3BucketRings(bucketRingsState.data)
+    } else {
+        "50/30/20 Envelope Rule"
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
         SectionHeader(
             title = "Budget Buckets",
@@ -67,80 +82,92 @@ fun DashboardBucketRingsCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics(mergeDescendants = true) {
-                    if (bucketRingsState is ChartState.Data) {
-                        contentDescription = bucketRingsState.data.contentDescription
-                    }
+                    contentDescription = summaryLine
                 },
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             shape = RoundedCornerShape(20.dp)
         ) {
-            when (bucketRingsState) {
-                is ChartState.Loading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(36.dp))
-                    }
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.sm)) {
+                if (bucketRingsState is ChartState.Data) {
+                    Text(
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs)
+                    )
                 }
-                is ChartState.Empty -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = bucketRingsState.message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-                is ChartState.Error -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Spacing.md),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = bucketRingsState.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-                is ChartState.Data -> {
-                    val data = bucketRingsState.data
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = Spacing.md, horizontal = Spacing.sm),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BucketRingColumn(
-                            item = data.needs,
-                            ringColor = ChartPalette.LightNeeds,
-                            title = "Needs (50%)"
-                        )
-                        BucketRingColumn(
-                            item = data.wants,
-                            ringColor = ChartPalette.LightWants,
-                            title = "Wants (30%)"
-                        )
-                        BucketRingColumn(
-                            item = data.savings,
-                            ringColor = ChartPalette.LightSavings,
-                            title = "Savings (20%)"
-                        )
+                when (bucketRingsState) {
+                    is ChartState.Loading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                        }
+                    }
+                    is ChartState.Empty -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = bucketRingsState.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    is ChartState.Error -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(Spacing.md),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = bucketRingsState.message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    is ChartState.Data -> {
+                        val data = bucketRingsState.data
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Spacing.xs),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BucketRingColumn(
+                                item = data.needs,
+                                ringColor = ChartPalette.LightNeeds,
+                                title = "Needs (50%)",
+                                isCompact = isCompact
+                            )
+                            BucketRingColumn(
+                                item = data.wants,
+                                ringColor = ChartPalette.LightWants,
+                                title = "Wants (30%)",
+                                isCompact = isCompact
+                            )
+                            BucketRingColumn(
+                                item = data.savings,
+                                ringColor = ChartPalette.LightSavings,
+                                title = "Savings (20%)",
+                                isCompact = isCompact
+                            )
+                        }
                     }
                 }
             }
@@ -153,18 +180,22 @@ private fun BucketRingColumn(
     item: BucketRingItem,
     ringColor: Color,
     title: String,
+    isCompact: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val ringSize = if (isCompact) 78.dp else 84.dp
+    val ringStroke = if (isCompact) 11.dp else 9.dp
+
     Column(
-        modifier = modifier.width(105.dp),
+        modifier = modifier.width(if (isCompact) 96.dp else 105.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         RingChartRender(
             percentageUsedBp = item.percentageBp,
             ringColor = if (item.isExceeded) ExpenseRed else ringColor,
             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            size = 84.dp,
-            strokeWidth = 9.dp,
+            size = ringSize,
+            strokeWidth = ringStroke,
             showOverflowHatch = item.bucket != BudgetBucket.SAVINGS,
             centerContent = {
                 if (item.bucket == BudgetBucket.SAVINGS && item.isGoalAchieved) {
@@ -194,13 +225,31 @@ private fun BucketRingColumn(
 
         Spacer(modifier = Modifier.height(Spacing.xs))
 
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            val (icon, tint) = when {
+                item.bucket == BudgetBucket.SAVINGS && item.isGoalAchieved -> Icons.Default.CheckCircle to IncomeGreen
+                item.isExceeded -> Icons.Default.Error to ExpenseRed
+                item.isWarning -> Icons.Default.Warning to WarningAmber
+                else -> Icons.Default.CheckCircle to IncomeGreen
+            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(12.dp)
+            )
+        }
 
         Text(
             text = MoneyFormatter.formatCompactIndian(item.spentPaise),

@@ -43,10 +43,14 @@ import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
 
+import androidx.compose.material.icons.filled.CheckCircle
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+
 /**
  * V1 Dashboard Hero Ring Card per Flow.md §17.2 V1.
- * Shows hero ring with spent vs budget, remaining in center, pace marker tick (D3),
- * and Net Worth summary.
+ * Shows hero ring with spent vs budget, remaining in center, "X% used",
+ * pace marker tick (D3), plain-language summary line, status icons, and Net Worth summary.
  */
 @Composable
 fun DashboardHeroRingCard(
@@ -54,14 +58,19 @@ fun DashboardHeroRingCard(
     netWorthPaise: Long?,
     modifier: Modifier = Modifier
 ) {
+    val isCompact = rememberIsCompactChart()
+    val summaryLine = if (heroRingState is ChartState.Data) {
+        ChartSummaryHelper.summarizeV1HeroRing(heroRingState.data)
+    } else {
+        "Monthly Spend vs Budget"
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (heroRingState is ChartState.Data) {
-                    val nwText = if (netWorthPaise != null) ". Net worth: ${MoneyFormatter.formatPaiseToRupees(netWorthPaise)}" else ""
-                    contentDescription = heroRingState.data.contentDescription + nwText
-                }
+                val nwText = if (netWorthPaise != null) ". Net worth: ${MoneyFormatter.formatPaiseToRupees(netWorthPaise)}" else ""
+                contentDescription = summaryLine + nwText
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -72,13 +81,13 @@ fun DashboardHeroRingCard(
                 .fillMaxWidth()
                 .padding(Spacing.lg)
         ) {
-            // Net Worth Header
+            // Summary Line & Net Worth Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Net Worth",
                         style = MaterialTheme.typography.labelMedium,
@@ -92,6 +101,34 @@ fun DashboardHeroRingCard(
                         )
                     }
                 }
+
+                if (heroRingState is ChartState.Data) {
+                    val statusIcon = when {
+                        heroRingState.data.isExceeded -> Icons.Default.Error
+                        heroRingState.data.isWarning -> Icons.Default.Warning
+                        else -> Icons.Default.CheckCircle
+                    }
+                    val statusColor = when {
+                        heroRingState.data.isExceeded -> ExpenseRed
+                        heroRingState.data.isWarning -> WarningAmber
+                        else -> IncomeGreen
+                    }
+                    Icon(
+                        imageVector = statusIcon,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            if (heroRingState is ChartState.Data) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Text(
+                    text = summaryLine,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
 
             Spacer(modifier = Modifier.height(Spacing.md))
@@ -145,6 +182,9 @@ fun DashboardHeroRingCard(
                         else -> MaterialTheme.colorScheme.primary
                     }
 
+                    val ringSize = if (isCompact) 140.dp else 150.dp
+                    val ringStroke = if (isCompact) 18.dp else 14.dp
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -155,8 +195,8 @@ fun DashboardHeroRingCard(
                             percentageUsedBp = data.percentageBp,
                             ringColor = ringColor,
                             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            size = 150.dp,
-                            strokeWidth = 14.dp,
+                            size = ringSize,
+                            strokeWidth = ringStroke,
                             paceBp = data.paceBp,
                             centerContent = {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -169,6 +209,12 @@ fun DashboardHeroRingCard(
                                         text = MoneyFormatter.formatCompactIndian(data.remainingPaise),
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                         color = if (data.remainingPaise >= 0L) IncomeGreen else ExpenseRed
+                                    )
+                                    Text(
+                                        text = "${ChartMath.formatBasisPoints(data.percentageBp)} used",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = ringColor,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
                             }
