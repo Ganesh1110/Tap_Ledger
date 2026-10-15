@@ -192,11 +192,16 @@ fun DonutChartRender(
                     val sweepAngle = (slice.percentageBp.toFloat() / 10_000f) * 360f
                     val sliceColor = ChartPalette.sliceColor(index)
                     val isSelected = selectedCategoryId == slice.categoryId
-                    val currentStroke = if (isSelected) strokePx + 4.dp.toPx() else strokePx
+                    val currentStroke = if (isSelected) strokePx + 6.dp.toPx() else strokePx
+                    val drawColor = if (selectedCategoryId != null && !isSelected) {
+                        sliceColor.copy(alpha = 0.4f)
+                    } else {
+                        sliceColor
+                    }
 
                     if (sweepAngle > 0f) {
                         drawArc(
-                            color = sliceColor,
+                            color = drawColor,
                             startAngle = startAngle,
                             sweepAngle = sweepAngle,
                             useCenter = false,

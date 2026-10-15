@@ -35,15 +35,25 @@ import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.ui.charts.model.CategoryDonutModel
 import com.tapledger.ui.charts.model.CategoryDonutSlice
 import com.tapledger.ui.charts.model.ChartState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.runtime.remember
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartTooltipItem
 import com.tapledger.ui.charts.render.DonutChartRender
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartMath
+import com.tapledger.ui.charts.util.ChartSummaryHelper
 import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 
 /**
  * V6 Category Donut Card per Flow.md §17.2 V6.
- * Multi-slice donut chart for Needs+Wants categories with NetSpent > 0 (top 6 + Other),
- * D2 percentages, and interactive tap selection card.
+ * Multi-slice donut chart for Needs+Wants categories with NetSpent > 0 (top 6 + Other, or top 4 + Other on compact),
+ * D2 percentages, plain-language summary line, and interactive tap selection card/detail strip.
  * Net-negative (refund-heavy) categories are excluded from donut slices and listed in the legend as "Net refund".
  */
 @Composable
@@ -53,13 +63,20 @@ fun CategoryDonutCard(
     onSelectSlice: (CategoryDonutSlice?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isCompact = rememberIsCompactChart()
+    val summaryLine = remember(donutState) {
+        if (donutState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV6Donut(donutState.data)
+        } else {
+            "Needs + Wants category apportionment"
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (donutState is ChartState.Data) {
-                    contentDescription = donutState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -76,9 +93,9 @@ fun CategoryDonutCard(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Needs + Wants category apportionment",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = summaryLine,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(Spacing.md))
@@ -125,7 +142,25 @@ fun CategoryDonutCard(
                     }
                 }
                 is ChartState.Data -> {
-                    val data = donutState.data
+                    val rawData = donutState.data
+                    val data = remember(rawData, isCompact) {
+                        if (isCompact && rawData.slices.size > 5) {
+                            val top4 = rawData.slices.take(4)
+                            val rest = rawData.slices.drop(4)
+                            val restPaise = rest.sumOf { it.amountPaise }
+                            val restBp = rest.sumOf { it.percentageBp }
+                            val restSlice = CategoryDonutSlice(
+                                categoryId = -1L,
+                                categoryName = "Other",
+                                amountPaise = restPaise,
+                                percentageBp = restBp,
+                                percentageFormatted = ChartMath.formatBasisPoints(restBp)
+                            )
+                            rawData.copy(slices = top4 + restSlice)
+                        } else {
+                            rawData
+                        }
+                    }
 
                     if (data.slices.isEmpty()) {
                         Box(
@@ -141,6 +176,9 @@ fun CategoryDonutCard(
                             )
                         }
                     } else {
+                        val donutDiameter = if (isCompact) 160.dp else 180.dp
+                        val donutStroke = if (isCompact) 26.dp else 22.dp
+
                         // Donut Chart Centered
                         Box(
                             modifier = Modifier.fillMaxWidth(),
@@ -148,8 +186,8 @@ fun CategoryDonutCard(
                         ) {
                             DonutChartRender(
                                 slices = data.slices,
-                                diameter = 180.dp,
-                                strokeWidth = 24.dp,
+                                diameter = donutDiameter,
+                                strokeWidth = donutStroke,
                                 selectedCategoryId = selectedSlice?.categoryId,
                                 onSliceClick = { slice ->
                                     if (selectedSlice?.categoryId == slice.categoryId) {
@@ -189,46 +227,27 @@ fun CategoryDonutCard(
                             )
                         }
 
-                        // Selected Slice Detail Card (when tapped per §17.2 V6)
-                        if (selectedSlice != null) {
-                            Spacer(modifier = Modifier.height(Spacing.sm))
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = selectedSlice.categoryName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "${selectedSlice.percentageFormatted} of Needs + Wants",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Text(
-                                        text = MoneyFormatter.formatPaiseToRupees(selectedSlice.amountPaise),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
+                        // Detail Strip for non-technical users and small phones
+                        val detailItem = selectedSlice?.let { slice ->
+                            val sliceIdx = data.slices.indexOfFirst { it.categoryId == slice.categoryId }.coerceAtLeast(0)
+                            ChartTooltipItem(
+                                id = slice.categoryId.toString(),
+                                title = slice.categoryName,
+                                valueFormatted = MoneyFormatter.formatPaiseToRupees(slice.amountPaise),
+                                context = "${slice.percentageFormatted} of spend",
+                                statusIcon = Icons.Default.PieChart,
+                                statusColor = ChartPalette.sliceColor(sliceIdx)
+                            )
                         }
+                        ChartDetailStrip(
+                            item = detailItem,
+                            defaultSummary = summaryLine,
+                            onClear = { onSelectSlice(null) }
+                        )
 
                         Spacer(modifier = Modifier.height(Spacing.md))
 
-                        // Slices Legend Grid
+                        // Slices Legend List (with >= 48dp touch targets and clear selection borders)
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -240,25 +259,32 @@ fun CategoryDonutCard(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
                                         .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) sliceColor.copy(alpha = 0.12f) else Color.Transparent
+                                        )
+                                        .then(
+                                            if (isSelected) Modifier.border(1.5.dp, sliceColor, RoundedCornerShape(8.dp)) else Modifier
+                                        )
                                         .clickable {
                                             onSelectSlice(if (isSelected) null else slice)
                                         }
-                                        .padding(vertical = 4.dp, horizontal = 4.dp),
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                         Box(
                                             modifier = Modifier
-                                                .size(10.dp)
+                                                .size(12.dp)
                                                 .clip(CircleShape)
                                                 .background(sliceColor)
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         Text(
                                             text = slice.categoryName,
-                                            style = MaterialTheme.typography.bodySmall,
+                                            style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                         )
                                     }
