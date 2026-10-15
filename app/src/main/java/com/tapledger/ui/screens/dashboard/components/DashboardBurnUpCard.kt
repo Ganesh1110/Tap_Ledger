@@ -48,10 +48,17 @@ import com.tapledger.ui.charts.render.BurnUpChartRender
 import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.Spacing
 
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+
 /**
  * V2 Spend Burn-Up Line Card per Flow.md §17.2 V2.
  * Displays cumulative daily Needs+Wants NetSpent vs linear pace vs budget cap,
- * plus D4 projection. Supports horizontal scrub inspection and "Show as table" tabular toggle.
+ * plus D4 projection. Supports horizontal scrub inspection, summary line, detail strip, and "Show as table" tabular toggle.
  */
 @Composable
 fun DashboardBurnUpCard(
@@ -62,14 +69,21 @@ fun DashboardBurnUpCard(
     var isExpanded by remember { mutableStateOf(initiallyExpanded) }
     var showTable by remember { mutableStateOf(false) }
     var scrubbedPoint by remember { mutableStateOf<BurnUpPoint?>(null) }
+    val isCompact = rememberIsCompactChart()
+
+    val summaryLine = remember(burnUpState) {
+        if (burnUpState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV2BurnUp(burnUpState.data)
+        } else {
+            "Cumulative spend vs pace & cap"
+        }
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (burnUpState is ChartState.Data) {
-                    contentDescription = burnUpState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -88,16 +102,16 @@ fun DashboardBurnUpCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Spend Burn-Up",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Cumulative spend vs pace & cap",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -380,6 +394,30 @@ fun DashboardBurnUpCard(
                                         Text(if (showTable) "Chart" else "Table", style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
+
+                                // Detail Strip
+                                val detailItem = scrubbedPoint?.let { pt ->
+                                    val paceOnDay = data.pacePoints.getOrNull(pt.dayIndex)?.netSpentPaise ?: 0L
+                                    val paceDiff = pt.netSpentPaise - paceOnDay
+                                    val paceContext = if (paceDiff <= 0L) {
+                                        "${MoneyFormatter.formatPaiseToRupees(-paceDiff)} under pace"
+                                    } else {
+                                        "+${MoneyFormatter.formatPaiseToRupees(paceDiff)} over pace"
+                                    }
+                                    ChartTooltipItem(
+                                        id = pt.dayIndex.toString(),
+                                        title = "Day ${pt.dayIndex + 1} of $totalDays",
+                                        valueFormatted = MoneyFormatter.formatPaiseToRupees(pt.netSpentPaise),
+                                        context = paceContext,
+                                        statusIcon = if (paceDiff <= 0L) Icons.Default.CheckCircle else Icons.Default.Error,
+                                        statusColor = if (paceDiff <= 0L) ChartPalette.LightNeeds else ChartPalette.OverflowHatch
+                                    )
+                                }
+                                ChartDetailStrip(
+                                    item = detailItem,
+                                    defaultSummary = summaryLine,
+                                    onClear = { scrubbedPoint = null }
+                                )
                             } else {
                                 // Accessible Table View (§17.3)
                                 Column(

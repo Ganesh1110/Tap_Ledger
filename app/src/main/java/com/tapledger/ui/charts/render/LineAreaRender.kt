@@ -606,20 +606,23 @@ fun NetWorthChartRender(
     val baselineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
     val scrubLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
 
-    val textPaint = remember(labelColorArgb) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val minTextSizePx = with(density) { 12.dp.toPx() }
+
+    val textPaint = remember(labelColorArgb, minTextSizePx) {
         Paint().apply {
             color = labelColorArgb
-            textSize = 28f
+            textSize = maxOf(28f, minTextSizePx)
             textAlign = Paint.Align.CENTER
             isAntiAlias = true
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
     }
 
-    val rightAxisPaint = remember(labelColorArgb) {
+    val rightAxisPaint = remember(labelColorArgb, minTextSizePx) {
         Paint().apply {
             color = labelColorArgb
-            textSize = 24f
+            textSize = maxOf(24f, minTextSizePx)
             textAlign = Paint.Align.LEFT
             isAntiAlias = true
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
@@ -802,7 +805,11 @@ fun NetWorthChartRender(
                 }
             }
 
-            val step = if (points.size > 8) 2 else 1
+            val step = when {
+                points.size > 10 -> 3
+                points.size > 5 -> 2
+                else -> 1
+            }
             points.forEachIndexed { i, pt ->
                 if (i == points.size - 1 || i % step == 0) {
                     val labelText = formatMonthOnly(pt.label)
@@ -978,7 +985,11 @@ fun NetWorthChartRender(
                 drawCircle(color = liabilitiesColor, radius = 3.dp.toPx(), center = Offset(toX(i), toYLiab(pt.liabilitiesPaise)))
             }
 
-            val step = if (points.size > 8) 2 else 1
+            val step = when {
+                points.size > 10 -> 3
+                points.size > 5 -> 2
+                else -> 1
+            }
             points.forEachIndexed { i, pt ->
                 if (i == points.size - 1 || i % step == 0) {
                     val labelText = formatMonthOnly(pt.label)

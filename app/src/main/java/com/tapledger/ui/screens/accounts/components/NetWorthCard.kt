@@ -47,6 +47,12 @@ import com.tapledger.ui.charts.builder.NetWorthRange
 import com.tapledger.ui.charts.model.ChartState
 import com.tapledger.ui.charts.model.NetWorthChartModel
 import com.tapledger.ui.charts.model.NetWorthPoint
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
 import com.tapledger.ui.charts.render.NetWorthChartRender
 import com.tapledger.ui.components.MoneyIndicator
 import com.tapledger.ui.components.MoneySemantic
@@ -61,7 +67,7 @@ import com.tapledger.ui.theme.rememberAnimatedMoney
  * V9 Net worth line/area card per Flow.md §17.2 V9.
  * Ranges: 3M / 6M / 1Y / All.
  * Horizontal-drag scrub shows date and ₹ value with vertical scroll pass-through.
- * Stacked Assets/Liabilities toggle, accessibility table view, and unassigned exclusion notice.
+ * Stacked Assets/Liabilities toggle, accessibility table view, summary line, detail strip, and unassigned exclusion notice.
  */
 @Composable
 fun NetWorthCard(
@@ -79,6 +85,15 @@ fun NetWorthCard(
 ) {
     val animatedNetWorth by rememberAnimatedMoney(targetPaise = currentNetWorthPaise)
     var scrubbedPoint by remember { mutableStateOf<NetWorthPoint?>(null) }
+    val isCompact = rememberIsCompactChart()
+
+    val summaryLine = remember(chartState) {
+        if (chartState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV9NetWorth(chartState.data)
+        } else {
+            "Total net worth and asset breakdown"
+        }
+    }
 
     // Dynamic values: live scrubbed point takes precedence smoothly without shifting layout
     val activeNetWorth = scrubbedPoint?.netWorthPaise ?: animatedNetWorth
@@ -97,9 +112,7 @@ fun NetWorthCard(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (chartState is ChartState.Data) {
-                    contentDescription = chartState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -116,7 +129,7 @@ fun NetWorthCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "TOTAL NET WORTH",
@@ -164,6 +177,12 @@ fun NetWorthCard(
                         amountPaise = activeNetWorth,
                         style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         semantic = if (activeNetWorth >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                    )
+                    Text(
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
 
@@ -380,6 +399,22 @@ fun NetWorthCard(
                             liabilitiesColor = ExpenseRed,
                             height = 205.dp,
                             onScrub = { scrubbedPoint = it }
+                        )
+
+                        // Detail Strip (§17.2 D10)
+                        ChartDetailStrip(
+                            item = scrubbedPoint?.let { pt ->
+                                ChartTooltipItem(
+                                    id = pt.label,
+                                    title = pt.label,
+                                    valueFormatted = MoneyFormatter.formatPaiseToRupees(pt.netWorthPaise),
+                                    context = "Assets: ${MoneyFormatter.formatPaiseToRupees(pt.assetsPaise)} • Debt: ${MoneyFormatter.formatPaiseToRupees(pt.liabilitiesPaise)}",
+                                    statusIcon = if (pt.netWorthPaise >= 0L) Icons.Default.CheckCircle else Icons.Default.Error,
+                                    statusColor = if (pt.netWorthPaise >= 0L) IncomeGreen else ExpenseRed
+                                )
+                            },
+                            defaultSummary = summaryLine,
+                            onClear = { scrubbedPoint = null }
                         )
                     }
 
