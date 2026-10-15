@@ -1,6 +1,7 @@
 package com.tapledger.ui.screens.accounts.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.ui.charts.model.AccountCompositionModel
 import com.tapledger.ui.charts.model.ChartState
@@ -42,23 +44,48 @@ import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.tapledger.ui.charts.model.AccountCompositionBarItem
+import com.tapledger.ui.charts.model.CreditCardUtilizationGaugeItem
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+
 /**
  * V10 Account composition card per Flow.md §17.2 V10.
  * Diverging bars per account (assets right, liabilities left, sorted by |balance|)
  * and credit-card utilization gauges with <30% normal, 30-70% caution, >70% high zones.
+ * Enhanced with plain-language summary line, compact scaling, and detail strip.
  */
 @Composable
 fun AccountCompositionCard(
     compositionState: ChartState<AccountCompositionModel>,
     modifier: Modifier = Modifier
 ) {
+    val isCompact = rememberIsCompactChart()
+    var selectedAccount by remember { mutableStateOf<AccountCompositionBarItem?>(null) }
+    var selectedCc by remember { mutableStateOf<CreditCardUtilizationGaugeItem?>(null) }
+
+    val summaryLine = remember(compositionState) {
+        if (compositionState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV10AccountComposition(compositionState.data)
+        } else {
+            "Diverging balance distribution (Assets vs Liabilities)"
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (compositionState is ChartState.Data) {
-                    contentDescription = compositionState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -75,9 +102,9 @@ fun AccountCompositionCard(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Diverging balance distribution (Assets vs Liabilities)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = summaryLine,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(Spacing.md))
@@ -131,7 +158,25 @@ fun AccountCompositionCard(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         data.accounts.forEach { acc ->
-                            Column(modifier = Modifier.fillMaxWidth()) {
+                            val isSelected = selectedAccount == acc
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                        else androidx.compose.ui.graphics.Color.Transparent
+                                    )
+                                    .defaultMinSize(minHeight = 48.dp)
+                                    .clickable {
+                                        selectedAccount = if (isSelected) null else acc
+                                        selectedCc = null
+                                    }
+                                    .semantics {
+                                        stateDescription = "${acc.accountName}: ${MoneyFormatter.formatPaiseToRupees(acc.balancePaise)}"
+                                    }
+                                    .padding(vertical = 4.dp, horizontal = 4.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -156,7 +201,7 @@ fun AccountCompositionCard(
                                     maxAbsPaise = maxAbs,
                                     assetColor = IncomeGreen,
                                     liabilityColor = ExpenseRed,
-                                    height = 8.dp
+                                    height = if (isCompact) 12.dp else 8.dp
                                 )
                             }
                         }
@@ -185,8 +230,26 @@ fun AccountCompositionCard(
                                     UtilizationZone.CAUTION -> Triple(Icons.Default.Warning, "Caution (30-70%)", WarningAmber)
                                     UtilizationZone.HIGH -> Triple(Icons.Default.Error, "High (>70%)", ExpenseRed)
                                 }
+                                val isSelected = selectedCc == cc
 
-                                Column(modifier = Modifier.fillMaxWidth()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                            else androidx.compose.ui.graphics.Color.Transparent
+                                        )
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .clickable {
+                                            selectedCc = if (isSelected) null else cc
+                                            selectedAccount = null
+                                        }
+                                        .semantics {
+                                            stateDescription = "${cc.accountName}: ${ChartMath.formatBasisPoints(cc.utilizationBp)}, $zoneLabel"
+                                        }
+                                        .padding(vertical = 4.dp, horizontal = 4.dp)
+                                ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -243,12 +306,56 @@ fun AccountCompositionCard(
                                     CreditCardGaugeRender(
                                         utilizationBp = cc.utilizationBp,
                                         zone = cc.zone,
-                                        height = 8.dp
+                                        height = if (isCompact) 12.dp else 8.dp
                                     )
                                 }
                             }
                         }
                     }
+
+                    // Detail Strip (§17.2 D10)
+                    val detailItem = selectedAccount?.let { acc ->
+                        ChartTooltipItem(
+                            id = acc.accountName,
+                            title = acc.accountName,
+                            valueFormatted = MoneyFormatter.formatPaiseToRupees(acc.balancePaise),
+                            context = if (acc.isAsset) "Asset account" else "Liability account",
+                            statusIcon = if (acc.isAsset) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            statusColor = if (acc.isAsset) IncomeGreen else ExpenseRed
+                        )
+                    } ?: selectedCc?.let { cc ->
+                        val zoneIcon = when (cc.zone) {
+                            UtilizationZone.NORMAL -> Icons.Default.CheckCircle
+                            UtilizationZone.CAUTION -> Icons.Default.Warning
+                            UtilizationZone.HIGH -> Icons.Default.Error
+                        }
+                        val zoneLabel = when (cc.zone) {
+                            UtilizationZone.NORMAL -> "Normal (<30%)"
+                            UtilizationZone.CAUTION -> "Caution (30-70%)"
+                            UtilizationZone.HIGH -> "High (>70%)"
+                        }
+                        val zoneColor = when (cc.zone) {
+                            UtilizationZone.NORMAL -> IncomeGreen
+                            UtilizationZone.CAUTION -> WarningAmber
+                            UtilizationZone.HIGH -> ExpenseRed
+                        }
+                        ChartTooltipItem(
+                            id = cc.accountName,
+                            title = cc.accountName,
+                            valueFormatted = "${MoneyFormatter.formatPaiseToRupees(cc.balancePaise)} of ${MoneyFormatter.formatPaiseToRupees(cc.creditLimitPaise)}",
+                            context = "Utilization ${ChartMath.formatBasisPoints(cc.utilizationBp)} • $zoneLabel",
+                            statusIcon = zoneIcon,
+                            statusColor = zoneColor
+                        )
+                    }
+                    ChartDetailStrip(
+                        item = detailItem,
+                        defaultSummary = summaryLine,
+                        onClear = {
+                            selectedAccount = null
+                            selectedCc = null
+                        }
+                    )
                 }
             }
         }

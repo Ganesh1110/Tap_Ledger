@@ -48,10 +48,23 @@ import com.tapledger.ui.charts.render.WaterfallStep
 import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.Spacing
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.semantics.stateDescription
+import com.tapledger.ui.charts.model.ReconciliationBridgeStep
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartPatternInfoButton
+import com.tapledger.ui.charts.render.ChartPatternLegendSheet
+import com.tapledger.ui.charts.render.ChartPatternType
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+
 /**
  * V12 Reconciliation Bridge Card per Flow.md §17.2 V12.
  * Waterfall: AppBalance(end) -> opening diff -> MISSING_IN_APP -> MISSING_IN_STMT -> DISCREPANCY -> TIMING_DIFFERENCE -> StmtClosing.
  * Non-zero residual drawn as a red bar and screen must not show "Reconciled".
+ * Enhanced with summary line, compact vertical list-style bridge, pattern explanations, and detail strip.
  */
 @Composable
 fun ReconciliationBridgeCard(
@@ -59,14 +72,23 @@ fun ReconciliationBridgeCard(
     modifier: Modifier = Modifier
 ) {
     var showTable by remember { mutableStateOf(false) }
+    var showPatternSheet by remember { mutableStateOf(false) }
+    var selectedStep by remember { mutableStateOf<ReconciliationBridgeStep?>(null) }
+    val isCompact = rememberIsCompactChart()
+
+    val summaryLine = remember(bridgeState) {
+        if (bridgeState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV12Reconciliation(bridgeState.data)
+        } else {
+            "Waterfall from App Balance to Statement Closing"
+        }
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (bridgeState is ChartState.Data) {
-                    contentDescription = bridgeState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -84,28 +106,31 @@ fun ReconciliationBridgeCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Reconciliation Bridge",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Waterfall from App Balance to Statement Closing",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
-                if (bridgeState is ChartState.Data) {
-                    TextButton(onClick = { showTable = !showTable }) {
-                        Icon(
-                            imageVector = Icons.Default.TableChart,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (showTable) "Chart" else "Table")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ChartPatternInfoButton(onClick = { showPatternSheet = true })
+                    if (bridgeState is ChartState.Data) {
+                        TextButton(onClick = { showTable = !showTable }) {
+                            Icon(
+                                imageVector = Icons.Default.TableChart,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (showTable) "Chart" else "Table")
+                        }
                     }
                 }
             }
@@ -247,51 +272,153 @@ fun ReconciliationBridgeCard(
                             }
                         }
                     } else {
-                        // Waterfall Visual Render
-                        val totalColor = MaterialTheme.colorScheme.primary
-                        val waterfallSteps = remember(model.steps, totalColor) {
-                            model.steps.mapIndexed { index, step ->
-                                val isTotal = index == 0 || index == model.steps.lastIndex
-                                val color = when {
-                                    step.isResidual -> ChartPalette.OverflowHatch
-                                    isTotal -> totalColor
-                                    step.deltaPaise >= 0L -> Color(0xFF009E73)
-                                    else -> Color(0xFFD55E00)
+                        if (isCompact) {
+                            // Vertical list-style bridge for compact screens (§17.2 Task 3)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                            ) {
+                                model.steps.forEachIndexed { index, step ->
+                                    val isSelected = selectedStep == step
+                                    val isTotal = index == 0 || index == model.steps.lastIndex
+                                    val stepColor = when {
+                                        step.isResidual -> ChartPalette.OverflowHatch
+                                        isTotal -> MaterialTheme.colorScheme.primary
+                                        step.deltaPaise >= 0L -> Color(0xFF009E73)
+                                        else -> Color(0xFFD55E00)
+                                    }
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                                else Color.Transparent
+                                            )
+                                            .defaultMinSize(minHeight = 48.dp)
+                                            .clickable { selectedStep = if (isSelected) null else step }
+                                            .semantics {
+                                                stateDescription = "${step.label}: ${MoneyFormatter.formatPaiseToRupees(step.runningTotalPaise)}"
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(stepColor)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = step.label,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = if (isTotal) FontWeight.Bold else FontWeight.Medium,
+                                                    color = if (step.isResidual) ChartPalette.OverflowHatch else MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+
+                                            Column(horizontalAlignment = Alignment.End) {
+                                                if (!isTotal) {
+                                                    val deltaStr = if (step.deltaPaise >= 0) "+${MoneyFormatter.formatPaiseToRupees(step.deltaPaise)}" else MoneyFormatter.formatPaiseToRupees(step.deltaPaise)
+                                                    Text(
+                                                        text = deltaStr,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = stepColor,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                                Text(
+                                                    text = MoneyFormatter.formatPaiseToRupees(step.runningTotalPaise),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
-                                WaterfallStep(
-                                    label = step.label,
-                                    deltaPaise = step.deltaPaise,
-                                    runningTotalPaise = step.runningTotalPaise,
-                                    color = color,
-                                    isTotal = isTotal
-                                )
+                            }
+                        } else {
+                            // Waterfall Visual Render
+                            val totalColor = MaterialTheme.colorScheme.primary
+                            val waterfallSteps = remember(model.steps, totalColor) {
+                                model.steps.mapIndexed { index, step ->
+                                    val isTotal = index == 0 || index == model.steps.lastIndex
+                                    val color = when {
+                                        step.isResidual -> ChartPalette.OverflowHatch
+                                        isTotal -> totalColor
+                                        step.deltaPaise >= 0L -> Color(0xFF009E73)
+                                        else -> Color(0xFFD55E00)
+                                    }
+                                    WaterfallStep(
+                                        label = step.label,
+                                        deltaPaise = step.deltaPaise,
+                                        runningTotalPaise = step.runningTotalPaise,
+                                        color = color,
+                                        isTotal = isTotal
+                                    )
+                                }
+                            }
+
+                            WaterfallRender(
+                                steps = waterfallSteps,
+                                modifier = Modifier.fillMaxWidth(),
+                                height = 180.dp
+                            )
+
+                            Spacer(modifier = Modifier.height(Spacing.xs))
+
+                            // Step Labels below waterfall
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                model.steps.forEach { step ->
+                                    Text(
+                                        text = step.label,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        color = if (step.isResidual) ChartPalette.OverflowHatch else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
 
-                        WaterfallRender(
-                            steps = waterfallSteps,
-                            modifier = Modifier.fillMaxWidth(),
-                            height = 180.dp
+                        // Detail Strip (§17.2 D10)
+                        val detailItem = selectedStep?.let { step ->
+                            val deltaStr = if (step.deltaPaise >= 0) "+${MoneyFormatter.formatPaiseToRupees(step.deltaPaise)}" else MoneyFormatter.formatPaiseToRupees(step.deltaPaise)
+                            ChartTooltipItem(
+                                id = step.label,
+                                title = step.label,
+                                valueFormatted = MoneyFormatter.formatPaiseToRupees(step.runningTotalPaise),
+                                context = "Delta: $deltaStr",
+                                statusIcon = if (step.isResidual) Icons.Default.Error else Icons.Default.CheckCircle,
+                                statusColor = if (step.isResidual) ChartPalette.OverflowHatch else Color(0xFF009E73)
+                            )
+                        }
+                        ChartDetailStrip(
+                            item = detailItem,
+                            defaultSummary = summaryLine,
+                            onClear = { selectedStep = null }
                         )
-
-                        Spacer(modifier = Modifier.height(Spacing.xs))
-
-                        // Step Labels below waterfall
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            model.steps.forEach { step ->
-                                Text(
-                                    text = step.label,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                    color = if (step.isResidual) ChartPalette.OverflowHatch else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
                     }
                 }
             }
         }
+    }
+
+    if (showPatternSheet) {
+        ChartPatternLegendSheet(
+            patterns = listOf(ChartPatternType.HATCHED_OVERFLOW),
+            onDismissRequest = { showPatternSheet = false }
+        )
     }
 }

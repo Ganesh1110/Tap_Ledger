@@ -46,10 +46,18 @@ import com.tapledger.ui.theme.Spacing
 import java.time.Instant
 import java.time.YearMonth
 
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+import com.tapledger.ui.theme.WarningAmber
+
 /**
  * V7 Spending Calendar Heatmap Card per Flow.md §17.2 V7.
  * Daily Needs+Wants NetSpent in 5 intensity levels by integer quantile.
- * Tapping a day applies/clears date filter.
+ * Tapping a day applies/clears date filter, displays detail strip, and adapts to compact screens.
  */
 @Composable
 fun SpendingHeatmapCard(
@@ -64,13 +72,20 @@ fun SpendingHeatmapCard(
     onNextMonth: (() -> Unit)? = null,
     onJumpToCurrentMonth: (() -> Unit)? = null
 ) {
+    val isCompact = rememberIsCompactChart()
+    val summaryLine = remember(heatmapState) {
+        if (heatmapState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV7Heatmap(heatmapState.data)
+        } else {
+            "Needs + Wants daily intensity"
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (heatmapState is ChartState.Data) {
-                    contentDescription = heatmapState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -91,6 +106,11 @@ fun SpendingHeatmapCard(
                         text = "Spending Calendar",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary
                     )
                     if (selectedYear != null && selectedMonth != null && onPreviousMonth != null && onNextMonth != null) {
                         Spacer(modifier = Modifier.height(2.dp))
@@ -138,12 +158,6 @@ fun SpendingHeatmapCard(
                                 )
                             }
                         }
-                    } else {
-                        Text(
-                            text = "Needs + Wants daily intensity",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
 
@@ -293,6 +307,24 @@ fun SpendingHeatmapCard(
                             )
                         }
                     }
+
+                    // Detail Strip (§17.2 D10)
+                    val selectedCell = selectedDateEpoch?.let { epoch -> data.cells.find { it.epochMillis == epoch } }
+                    val detailItem = selectedCell?.let { cell ->
+                        ChartTooltipItem(
+                            id = cell.dayOfMonth.toString(),
+                            title = "Day ${cell.dayOfMonth}",
+                            valueFormatted = MoneyFormatter.formatPaiseToRupees(cell.netSpentPaise),
+                            context = "Intensity level ${cell.intensityLevel} of 4 • Tap cell to clear",
+                            statusIcon = if (cell.intensityLevel >= 3) Icons.Default.Warning else Icons.Default.CheckCircle,
+                            statusColor = if (cell.intensityLevel >= 3) WarningAmber else ChartPalette.NeedsBase
+                        )
+                    }
+                    ChartDetailStrip(
+                        item = detailItem,
+                        defaultSummary = summaryLine,
+                        onClear = onClearDateFilter
+                    )
                 }
             }
         }

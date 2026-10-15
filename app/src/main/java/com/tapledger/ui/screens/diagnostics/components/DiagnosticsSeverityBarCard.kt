@@ -33,25 +33,46 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tapledger.ui.charts.model.ChartState
 import com.tapledger.ui.charts.model.DiagnosticsSeverityBarModel
-import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.Spacing
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.stateDescription
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
 
 /**
  * V13 Diagnostics Severity Bar Card per Flow.md §17.2 V13.
  * Count of violations by CRITICAL / ERROR / WARNING from DataIntegrityChecker.
+ * Enhanced with summary line, interactive badges with >=48dp touch targets, and detail strip.
  */
 @Composable
 fun DiagnosticsSeverityBarCard(
     severityBarState: ChartState<DiagnosticsSeverityBarModel>,
     modifier: Modifier = Modifier
 ) {
+    val isCompact = rememberIsCompactChart()
+    var selectedSeverity by remember { mutableStateOf<String?>(null) }
+
+    val summaryLine = remember(severityBarState) {
+        if (severityBarState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV13Diagnostics(severityBarState.data)
+        } else {
+            "Invariant violations grouped by severity"
+        }
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (severityBarState is ChartState.Data) {
-                    contentDescription = severityBarState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -70,9 +91,9 @@ fun DiagnosticsSeverityBarCard(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Invariant violations grouped by severity",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = summaryLine,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(Spacing.sm))
@@ -170,19 +191,57 @@ fun DiagnosticsSeverityBarCard(
                             SeverityBadge(
                                 label = "Critical",
                                 count = model.criticalCount,
-                                color = criticalColor
+                                color = criticalColor,
+                                isSelected = selectedSeverity == "Critical",
+                                onClick = { selectedSeverity = if (selectedSeverity == "Critical") null else "Critical" }
                             )
                             SeverityBadge(
                                 label = "Error",
                                 count = model.errorCount,
-                                color = errorColor
+                                color = errorColor,
+                                isSelected = selectedSeverity == "Error",
+                                onClick = { selectedSeverity = if (selectedSeverity == "Error") null else "Error" }
                             )
                             SeverityBadge(
                                 label = "Warning",
                                 count = model.warningCount,
-                                color = warningColor
+                                color = warningColor,
+                                isSelected = selectedSeverity == "Warning",
+                                onClick = { selectedSeverity = if (selectedSeverity == "Warning") null else "Warning" }
                             )
                         }
+
+                        // Detail Strip (§17.2 D10)
+                        val detailItem = selectedSeverity?.let { sev ->
+                            val count = when (sev) {
+                                "Critical" -> model.criticalCount
+                                "Error" -> model.errorCount
+                                else -> model.warningCount
+                            }
+                            val color = when (sev) {
+                                "Critical" -> criticalColor
+                                "Error" -> errorColor
+                                else -> warningColor
+                            }
+                            val icon = when (sev) {
+                                "Critical" -> Icons.Default.Error
+                                "Error" -> Icons.Default.Error
+                                else -> Icons.Default.Warning
+                            }
+                            ChartTooltipItem(
+                                id = sev,
+                                title = "$sev Severity",
+                                valueFormatted = "$count issues detected",
+                                context = if (count > 0) "Requires review in Diagnostics tab" else "No $sev issues present",
+                                statusIcon = icon,
+                                statusColor = color
+                            )
+                        }
+                        ChartDetailStrip(
+                            item = detailItem,
+                            defaultSummary = summaryLine,
+                            onClear = { selectedSeverity = null }
+                        )
                     }
                 }
             }
@@ -194,9 +253,23 @@ fun DiagnosticsSeverityBarCard(
 private fun SeverityBadge(
     label: String,
     count: Int,
-    color: Color
+    color: Color,
+    isSelected: Boolean = false,
+    onClick: () -> Unit = {}
 ) {
     Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                else Color.Transparent
+            )
+            .defaultMinSize(minHeight = 48.dp, minWidth = 48.dp)
+            .clickable(onClick = onClick)
+            .semantics {
+                stateDescription = "$label: $count"
+            }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {

@@ -44,10 +44,23 @@ import com.tapledger.ui.charts.render.AdvanceRolloverBarRender
 import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.Spacing
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.ui.semantics.stateDescription
+import com.tapledger.ui.charts.model.AdvanceRolloverBarItem
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartPatternInfoButton
+import com.tapledger.ui.charts.render.ChartPatternLegendSheet
+import com.tapledger.ui.charts.render.ChartPatternType
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+
 /**
  * V11 Advance Rollover Card per Flow.md §17.2 V11.
  * Shows diverging bars for carry (positive), sweep, applied deficit (negative), and uncovered pool (hatched).
- * Includes toggle to show data as an accessible table.
+ * Includes pattern legend info sheet, summary takeaway line, and detail strip.
  */
 @Composable
 fun AdvanceRolloverCard(
@@ -55,14 +68,23 @@ fun AdvanceRolloverCard(
     modifier: Modifier = Modifier
 ) {
     var showTable by remember { mutableStateOf(false) }
+    var showPatternSheet by remember { mutableStateOf(false) }
+    var selectedRow by remember { mutableStateOf<AdvanceRolloverBarItem?>(null) }
+    val isCompact = rememberIsCompactChart()
+
+    val summaryLine = remember(rolloverState) {
+        if (rolloverState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV11AdvanceRollover(rolloverState.data)
+        } else {
+            "Deficit absorption & surplus carry to next month"
+        }
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (rolloverState is ChartState.Data) {
-                    contentDescription = rolloverState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
@@ -80,28 +102,31 @@ fun AdvanceRolloverCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Advance Rollover Preview",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Deficit absorption & surplus carry to next month",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
-                if (rolloverState is ChartState.Data) {
-                    TextButton(onClick = { showTable = !showTable }) {
-                        Icon(
-                            imageVector = Icons.Default.TableChart,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (showTable) "Chart" else "Table")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ChartPatternInfoButton(onClick = { showPatternSheet = true })
+                    if (rolloverState is ChartState.Data) {
+                        TextButton(onClick = { showTable = !showTable }) {
+                            Icon(
+                                imageVector = Icons.Default.TableChart,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (showTable) "Chart" else "Table")
+                        }
                     }
                 }
             }
@@ -246,7 +271,29 @@ fun AdvanceRolloverCard(
                             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                         ) {
                             model.rows.forEach { item ->
-                                Column(modifier = Modifier.fillMaxWidth()) {
+                                val isSelected = selectedRow == item
+                                val netText = when {
+                                    item.uncoveredPoolPaise > 0L -> "-${MoneyFormatter.formatPaiseToRupees(item.appliedDeficitPaise + item.uncoveredPoolPaise)} (uncovered)"
+                                    item.appliedDeficitPaise > 0L -> "-${MoneyFormatter.formatPaiseToRupees(item.appliedDeficitPaise)}"
+                                    item.carryPaise > 0L -> "+${MoneyFormatter.formatPaiseToRupees(item.carryPaise)}"
+                                    else -> "₹0"
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                            else Color.Transparent
+                                        )
+                                        .defaultMinSize(minHeight = 48.dp)
+                                        .clickable { selectedRow = if (isSelected) null else item }
+                                        .semantics {
+                                            stateDescription = "${item.categoryName}: $netText"
+                                        }
+                                        .padding(vertical = 4.dp, horizontal = 4.dp)
+                                ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
@@ -256,12 +303,6 @@ fun AdvanceRolloverCard(
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = FontWeight.Medium
                                         )
-                                        val netText = when {
-                                            item.uncoveredPoolPaise > 0L -> "-${MoneyFormatter.formatPaiseToRupees(item.appliedDeficitPaise + item.uncoveredPoolPaise)} (uncovered)"
-                                            item.appliedDeficitPaise > 0L -> "-${MoneyFormatter.formatPaiseToRupees(item.appliedDeficitPaise)}"
-                                            item.carryPaise > 0L -> "+${MoneyFormatter.formatPaiseToRupees(item.carryPaise)}"
-                                            else -> "₹0"
-                                        }
                                         Text(
                                             text = netText,
                                             style = MaterialTheme.typography.bodySmall,
@@ -287,9 +328,43 @@ fun AdvanceRolloverCard(
                                 }
                             }
                         }
+
+                        // Detail Strip (§17.2 D10)
+                        val detailItem = selectedRow?.let { item ->
+                            val netText = when {
+                                item.uncoveredPoolPaise > 0L -> "-${MoneyFormatter.formatPaiseToRupees(item.appliedDeficitPaise + item.uncoveredPoolPaise)}"
+                                item.appliedDeficitPaise > 0L -> "-${MoneyFormatter.formatPaiseToRupees(item.appliedDeficitPaise)}"
+                                item.carryPaise > 0L -> "+${MoneyFormatter.formatPaiseToRupees(item.carryPaise)}"
+                                else -> "₹0"
+                            }
+                            ChartTooltipItem(
+                                id = item.categoryName,
+                                title = item.categoryName,
+                                valueFormatted = netText,
+                                context = "Carry: ${MoneyFormatter.formatPaiseToRupees(item.carryPaise)} • Deficit: ${MoneyFormatter.formatPaiseToRupees(item.appliedDeficitPaise)} • Uncovered: ${MoneyFormatter.formatPaiseToRupees(item.uncoveredPoolPaise)}",
+                                statusIcon = if (item.uncoveredPoolPaise > 0L) Icons.Default.Warning else Icons.Default.CheckCircle,
+                                statusColor = if (item.uncoveredPoolPaise > 0L) ChartPalette.OverflowHatch else Color(0xFF009E73)
+                            )
+                        }
+                        ChartDetailStrip(
+                            item = detailItem,
+                            defaultSummary = summaryLine,
+                            onClear = { selectedRow = null }
+                        )
                     }
                 }
             }
         }
+    }
+
+    if (showPatternSheet) {
+        ChartPatternLegendSheet(
+            patterns = listOf(
+                ChartPatternType.STRIPED_ADVANCE,
+                ChartPatternType.SHADED_DEFICIT,
+                ChartPatternType.HATCHED_OVERFLOW
+            ),
+            onDismissRequest = { showPatternSheet = false }
+        )
     }
 }

@@ -21,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tapledger.ui.theme.ChartPalette
 
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.tapledger.core.model.MoneyFormatter
+
 data class HeatmapDay(
     val dayOfMonth: Int,
     val dateEpochMillis: Long,
@@ -31,6 +35,7 @@ data class HeatmapDay(
 /**
  * Render primitive for V7 Spending Calendar Heatmap per Flow.md §17.2 V7.
  * Renders month grid with 5 intensity levels by integer quantile.
+ * Adapts cell size for compact screens and enforces accessibility semantics.
  */
 @Composable
 fun HeatmapRender(
@@ -40,12 +45,14 @@ fun HeatmapRender(
     baseColor: Color = ChartPalette.NeedsBase
 ) {
     val weekDays = listOf("M", "T", "W", "T", "F", "S", "S")
+    val isCompact = rememberIsCompactChart()
+    val cellSize = if (isCompact) 40.dp else 36.dp
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         // Weekday header
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             weekDays.forEach { d ->
-                Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.size(cellSize), contentAlignment = Alignment.Center) {
                     Text(
                         text = d,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
@@ -72,10 +79,13 @@ fun HeatmapRender(
 
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(cellSize)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(cellColor)
-                                .clickable { onDayClick(day) },
+                                .clickable { onDayClick(day) }
+                                .semantics {
+                                    stateDescription = "Day ${day.dayOfMonth}: ${MoneyFormatter.formatPaiseToRupees(day.netSpentPaise)}"
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -85,12 +95,12 @@ fun HeatmapRender(
                             )
                         }
                     } else {
-                        Box(modifier = Modifier.size(36.dp))
+                        Box(modifier = Modifier.size(cellSize))
                     }
                 }
                 // Fill remaining empty cells in partial week
                 repeat(7 - week.size) {
-                    Box(modifier = Modifier.size(36.dp))
+                    Box(modifier = Modifier.size(cellSize))
                 }
             }
         }
