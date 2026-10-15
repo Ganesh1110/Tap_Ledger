@@ -138,6 +138,38 @@ fun rememberChartTooltipState(
 }
 
 /**
+ * Positioning calculations and screen compact thresholds for chart tooltips.
+ */
+object ChartTooltipPositioner {
+    fun isCompactScreen(screenWidthDp: Int, fontScale: Float): Boolean {
+        return screenWidthDp < 360 || fontScale > 1.15f
+    }
+
+    fun calculateTooltipOffset(
+        touchX: Float,
+        touchY: Float,
+        containerWidth: Float,
+        containerHeight: Float,
+        tooltipWidth: Float,
+        tooltipHeight: Float,
+        margin: Float,
+        verticalOffset: Float,
+        flipDownOffset: Float
+    ): Pair<Float, Float> {
+        val rawX = touchX - (tooltipWidth / 2f)
+        val clampedX = rawX.coerceIn(margin, (containerWidth - tooltipWidth - margin).coerceAtLeast(margin))
+
+        val fitsAbove = (touchY - verticalOffset - tooltipHeight) >= margin
+        val clampedY = if (fitsAbove) {
+            touchY - verticalOffset - tooltipHeight
+        } else {
+            (touchY + flipDownOffset).coerceAtMost(containerHeight - tooltipHeight - margin)
+        }
+        return Pair(clampedX, clampedY)
+    }
+}
+
+/**
  * Helper to determine if the device is a small screen or large font scale.
  * When true, compact layouts, larger touch hit targets, and detail strip modes are preferred.
  */
@@ -145,7 +177,7 @@ fun rememberChartTooltipState(
 fun rememberIsCompactChart(): Boolean {
     val config = LocalConfiguration.current
     return remember(config.screenWidthDp, config.fontScale) {
-        config.screenWidthDp < 360 || config.fontScale > 1.15f
+        ChartTooltipPositioner.isCompactScreen(config.screenWidthDp, config.fontScale)
     }
 }
 
@@ -171,18 +203,19 @@ fun ChartTooltipOverlay(
     val tooltipHeightPx = with(density) { tooltipHeightDp.toPx() }
     val marginPx = with(density) { 8.dp.toPx() }
     val verticalOffsetPx = with(density) { 56.dp.toPx() }
+    val flipDownOffsetPx = with(density) { 24.dp.toPx() }
 
-    // X-position clamped within container bounds
-    val rawX = touch.x - (tooltipWidthPx / 2f)
-    val clampedX = rawX.coerceIn(marginPx, (containerWidthPx - tooltipWidthPx - marginPx).coerceAtLeast(marginPx))
-
-    // Y-position: above touch point if possible, otherwise flip below
-    val fitsAbove = (touch.y - verticalOffsetPx - tooltipHeightPx) >= marginPx
-    val clampedY = if (fitsAbove) {
-        touch.y - verticalOffsetPx - tooltipHeightPx
-    } else {
-        (touch.y + 24.dp.value * density.density).coerceAtMost(containerHeightPx - tooltipHeightPx - marginPx)
-    }
+    val (clampedX, clampedY) = ChartTooltipPositioner.calculateTooltipOffset(
+        touchX = touch.x,
+        touchY = touch.y,
+        containerWidth = containerWidthPx,
+        containerHeight = containerHeightPx,
+        tooltipWidth = tooltipWidthPx,
+        tooltipHeight = tooltipHeightPx,
+        margin = marginPx,
+        verticalOffset = verticalOffsetPx,
+        flipDownOffset = flipDownOffsetPx
+    )
 
     Box(
         modifier = modifier
