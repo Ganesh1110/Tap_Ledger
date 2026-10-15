@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tapledger.core.model.BudgetBucket
@@ -38,6 +39,8 @@ import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
+import androidx.compose.foundation.layout.defaultMinSize
+import com.tapledger.ui.charts.render.rememberIsCompactChart
 
 /**
  * V5 Envelope Bullet Bar Row per Flow.md §17.2 V5.
@@ -50,6 +53,7 @@ fun EnvelopeBulletBarRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isCompact = rememberIsCompactChart()
     val barColor = when {
         item.bucket == BudgetBucket.SAVINGS -> ChartPalette.LightSavings
         item.isExceeded -> ExpenseRed
@@ -75,9 +79,11 @@ fun EnvelopeBulletBarRow(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = contentDesc
+                stateDescription = "${MoneyFormatter.formatPaiseToRupees(item.spentPaise)} of ${MoneyFormatter.formatPaiseToRupees(item.adjustedBudgetPaise)}, ${ChartMath.formatBasisPoints(item.percentageBp)}"
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(
@@ -89,7 +95,7 @@ fun EnvelopeBulletBarRow(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+                .padding(horizontal = Spacing.md, vertical = if (isCompact) Spacing.md else Spacing.sm)
         ) {
             // Header: Category Name, Status Icon, and Rupee Values
             Row(
@@ -125,6 +131,13 @@ fun EnvelopeBulletBarRow(
                             tint = WarningAmber,
                             modifier = Modifier.size(16.dp)
                         )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "On Track",
+                            tint = ChartPalette.LightNeeds,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
 
@@ -156,7 +169,7 @@ fun EnvelopeBulletBarRow(
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 isExceeded = item.isExceeded,
                 isGoalAchieved = item.isGoalAchieved,
-                height = 14.dp
+                height = if (isCompact) 18.dp else 14.dp
             )
 
             Spacer(modifier = Modifier.height(4.dp))

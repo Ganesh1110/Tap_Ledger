@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -46,9 +47,19 @@ import com.tapledger.ui.charts.util.ChartMath
 import com.tapledger.ui.theme.ChartPalette
 import com.tapledger.ui.theme.Spacing
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material.icons.filled.CheckCircle
+import com.tapledger.ui.charts.render.ChartDetailStrip
+import com.tapledger.ui.charts.render.ChartTooltipItem
+import com.tapledger.ui.charts.render.rememberIsCompactChart
+import com.tapledger.ui.charts.util.ChartSummaryHelper
+import com.tapledger.ui.charts.model.TopMerchantItem
+
 /**
  * V8 Top Merchants Card per Flow.md §17.2 V8.
  * Top 8 merchants by CATEGORIZED expense with horizontal proportion bars and tabular toggle.
+ * Adapts to Top 5 in compact mode with >=48dp touch targets and detail strip.
  */
 @Composable
 fun TopMerchantsCard(
@@ -56,14 +67,22 @@ fun TopMerchantsCard(
     modifier: Modifier = Modifier
 ) {
     var showTable by remember { mutableStateOf(false) }
+    var selectedMerchant by remember { mutableStateOf<TopMerchantItem?>(null) }
+    val isCompact = rememberIsCompactChart()
+
+    val summaryLine = remember(merchantsState) {
+        if (merchantsState is ChartState.Data) {
+            ChartSummaryHelper.summarizeV8TopMerchants(merchantsState.data)
+        } else {
+            "Top merchants by categorized expense"
+        }
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                if (merchantsState is ChartState.Data) {
-                    contentDescription = merchantsState.data.contentDescription
-                }
+                contentDescription = summaryLine
             },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
@@ -80,16 +99,16 @@ fun TopMerchantsCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Top Merchants",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Top 8 by categorized expense",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = summaryLine,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -269,12 +288,28 @@ fun TopMerchantsCard(
                             }
                         } else {
                             // Visual bar list
+                            val visibleMerchants = if (isCompact) data.merchants.take(5) else data.merchants
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
                             ) {
-                                data.merchants.forEachIndexed { index, m ->
-                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                visibleMerchants.forEachIndexed { index, m ->
+                                    val isSelected = selectedMerchant == m
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                                else androidx.compose.ui.graphics.Color.Transparent
+                                            )
+                                            .defaultMinSize(minHeight = 48.dp)
+                                            .clickable { selectedMerchant = if (isSelected) null else m }
+                                            .semantics {
+                                                stateDescription = "${m.amountFormatted}, ${ChartMath.formatBasisPoints(m.percentageBp)}"
+                                            }
+                                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                                    ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -331,11 +366,28 @@ fun TopMerchantsCard(
                                         Spacer(modifier = Modifier.height(4.dp))
                                         TopMerchantBarRender(
                                             percentageBp = m.percentageBp,
-                                            barColor = ChartPalette.NeedsBase
+                                            barColor = if (isSelected) MaterialTheme.colorScheme.primary else ChartPalette.NeedsBase,
+                                            height = if (isCompact) 12.dp else 8.dp
                                         )
                                     }
                                 }
                             }
+
+                            // Detail Strip (§17.2 D10)
+                            ChartDetailStrip(
+                                item = selectedMerchant?.let { m ->
+                                    ChartTooltipItem(
+                                        id = m.merchantName,
+                                        title = m.merchantName,
+                                        valueFormatted = m.amountFormatted,
+                                        context = "${m.transactionCount} transactions • ${ChartMath.formatBasisPoints(m.percentageBp)} of total spend",
+                                        statusIcon = Icons.Default.CheckCircle,
+                                        statusColor = ChartPalette.NeedsBase
+                                    )
+                                },
+                                defaultSummary = summaryLine,
+                                onClear = { selectedMerchant = null }
+                            )
                         }
                     }
                 }

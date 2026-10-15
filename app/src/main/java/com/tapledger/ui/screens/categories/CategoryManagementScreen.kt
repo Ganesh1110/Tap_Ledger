@@ -88,6 +88,10 @@ import com.tapledger.ui.components.SkeletonList
 import com.tapledger.ui.charts.model.ChartState
 import com.tapledger.ui.screens.categories.components.CategoryDonutCard
 import com.tapledger.ui.screens.categories.components.EnvelopeBulletBarRow
+import com.tapledger.ui.charts.render.ChartPatternInfoButton
+import com.tapledger.ui.charts.render.ChartPatternLegendSheet
+import com.tapledger.ui.charts.render.ChartPatternType
+import com.tapledger.ui.charts.util.ChartSummaryHelper
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
@@ -111,6 +115,7 @@ fun CategoryManagementScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
+    var showPatternSheet by remember { mutableStateOf(false) }
     var editingCategoryItem by remember { mutableStateOf<CategoryItemState?>(null) }
     var categoryToDelete by remember { mutableStateOf<CategoryEntity?>(null) }
 
@@ -233,6 +238,30 @@ fun CategoryManagementScreen(
                         )
                     }
                 } else {
+                    item(key = "bullet_summary_bar") {
+                        val bulletBars = state.bulletBarsState
+                        val bulletSummary = remember(bulletBars) {
+                            if (bulletBars is ChartState.Data) {
+                                ChartSummaryHelper.summarizeV5BulletBars(bulletBars.data)
+                            } else null
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = bulletSummary ?: "Category envelopes vs monthly pace",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            ChartPatternInfoButton(onClick = { showPatternSheet = true })
+                        }
+                    }
+
                     listOf(BudgetBucket.NEEDS, BudgetBucket.WANTS, BudgetBucket.SAVINGS).forEach { bucket ->
                         val bucketItems = categoriesByBucket[bucket] ?: emptyList()
                         if (bucketItems.isNotEmpty()) {
@@ -271,6 +300,13 @@ fun CategoryManagementScreen(
                 }
             }
         }
+    }
+
+    if (showPatternSheet) {
+        ChartPatternLegendSheet(
+            patterns = listOf(ChartPatternType.STRIPED_ADVANCE, ChartPatternType.SHADED_DEFICIT),
+            onDismissRequest = { showPatternSheet = false }
+        )
     }
 
     // Add Category Dialog
