@@ -5,6 +5,7 @@ import com.tapledger.core.database.entity.FixedDepositEntity
 import com.tapledger.core.database.entity.RecurringCommitmentEntity
 import com.tapledger.domain.model.AccountEarmarkWarning
 import com.tapledger.domain.model.SavingsGoalSummary
+import com.tapledger.domain.model.SavingsMilestoneBadge
 
 data class SavingHomeUiState(
     val isLoading: Boolean = true,
@@ -18,5 +19,6 @@ data class SavingHomeUiState(
     val commitments: List<RecurringCommitmentEntity> = emptyList(),
     val paidCommitmentIds: Set<Long> = emptySet(),
     val fixedDeposits: List<FixedDepositEntity> = emptyList(),
+    val milestones: List<SavingsMilestoneBadge> = emptyList(),
     val errorMessage: String? = null
 )

@@ -23,12 +23,17 @@ class SavingViewModel @Inject constructor(
 ) : ViewModel() {
 
     val uiState: StateFlow<SavingHomeUiState> = combine(
-        savingsRepository.getOverviewSummaryFlow(),
-        accountRepository.getAllActiveAccounts(),
-        savingsRepository.getEmergencyFundCoverageTenthsFlow(),
+        combine(
+            savingsRepository.getOverviewSummaryFlow(),
+            accountRepository.getAllActiveAccounts(),
+            savingsRepository.getEmergencyFundCoverageTenthsFlow()
+        ) { overview, accounts, efTenths ->
+            Triple(overview, accounts, efTenths)
+        },
         savingsRepository.getAllCommitmentsFlow(),
-        savingsRepository.getAllFixedDepositsFlow()
-    ) { overview, accounts, efTenths, commitments, fds ->
+        savingsRepository.getAllFixedDepositsFlow(),
+        savingsRepository.getMilestonesFlow()
+    ) { (overview, accounts, efTenths), commitments, fds, milestones ->
         SavingHomeUiState(
             isLoading = false,
             totalSavedPaise = overview.totalSavedPaise,
@@ -40,6 +45,7 @@ class SavingViewModel @Inject constructor(
             emergencyFundTenths = efTenths,
             commitments = commitments,
             fixedDeposits = fds,
+            milestones = milestones,
             errorMessage = null
         )
     }.stateIn(
@@ -47,6 +53,27 @@ class SavingViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = SavingHomeUiState(isLoading = true)
     )
+
+    fun applyRuleContribution(
+        goalId: Long,
+        amountPaise: Long,
+        note: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                savingsRepository.applyRuleContribution(
+                    goalId = goalId,
+                    amountPaise = amountPaise,
+                    note = note
+                )
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Failed to apply rule contribution")
+            }
+        }
+    }
 
     fun getGoalDetailFlow(goalId: Long): StateFlow<GoalDetailUiState> {
         return combine(

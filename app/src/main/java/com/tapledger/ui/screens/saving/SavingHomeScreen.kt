@@ -18,8 +18,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,9 +63,9 @@ import com.tapledger.domain.model.SavingsGoalSummary
 import com.tapledger.ui.charts.render.RingChartRender
 import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.components.SectionHeader
-import com.tapledger.ui.components.StatusBadge
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.IncomeGreenContainer
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
 import kotlinx.coroutines.launch
@@ -70,7 +74,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun SavingHomeScreen(
     viewModel: SavingViewModel = hiltViewModel(),
+    canNavigateBack: Boolean = true,
     onNavigateBack: () -> Unit = {},
+    onSwitchToManager: (() -> Unit)? = null,
     onNavigateToGoalDetail: (goalId: Long) -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -90,10 +96,28 @@ fun SavingHomeScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                    if (canNavigateBack) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    if (onSwitchToManager != null) {
+                        AssistChip(
+                            onClick = onSwitchToManager,
+                            label = { Text("Manager") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.AccountBalanceWallet,
+                                    contentDescription = "Switch to Manager",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier.padding(end = Spacing.sm)
                         )
                     }
                 },
@@ -308,6 +332,17 @@ fun SavingHomeScreen(
                     }
                     items(state.fixedDeposits, key = { "fd_${it.id}" }) { fd ->
                         FixedDepositCard(fd = fd)
+                    }
+                }
+
+                // 7. Savings Milestones & Badges (Phase 4)
+                if (state.milestones.isNotEmpty()) {
+                    val unlockedCount = state.milestones.count { it.isUnlocked }
+                    item(key = "milestones_header") {
+                        SectionHeader(title = "Milestones & Badges ($unlockedCount/${state.milestones.size} Unlocked)")
+                    }
+                    items(state.milestones, key = { "milestone_${it.type.name}" }) { milestone ->
+                        MilestoneBadgeCard(milestone = milestone)
                     }
                 }
             }
@@ -567,3 +602,84 @@ private fun FixedDepositCard(fd: FixedDepositEntity) {
         }
     }
 }
+
+@Composable
+private fun MilestoneBadgeCard(milestone: com.tapledger.domain.model.SavingsMilestoneBadge) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (milestone.isUnlocked)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            else
+                MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = if (milestone.isUnlocked) IncomeGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = milestone.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (milestone.isUnlocked) IncomeGreen else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (milestone.isUnlocked) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = IncomeGreenContainer
+                    ) {
+                        Text(
+                            text = "UNLOCKED",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = IncomeGreen,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "${milestone.progressBp / 100}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(Spacing.xs))
+            Text(
+                text = milestone.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!milestone.isUnlocked) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                ProgressBarRender(
+                    percentageBp = milestone.progressBp,
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    height = 6.dp
+                )
+            }
+        }
+    }
+}
+

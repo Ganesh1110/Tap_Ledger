@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -19,6 +21,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tapledger.core.model.AppMode
 import com.tapledger.core.security.MpinLockoutState
 import com.tapledger.core.security.MpinManager
 import com.tapledger.core.security.MpinVerifyResult
@@ -51,6 +56,8 @@ fun MpinLockScreen(
     onUnlocked: () -> Unit,
     modifier: Modifier = Modifier,
     customMessage: String? = null,
+    initialAppMode: AppMode = AppMode.MANAGER,
+    onUnlockedWithMode: (AppMode) -> Unit = {},
     onNavigateToRestoreBackup: () -> Unit = {},
     onEraseAllData: () -> Unit = {}
 ) {
@@ -58,6 +65,7 @@ fun MpinLockScreen(
     val expectedLength by mpinManager.mpinLength.collectAsState()
     val lockoutState by mpinManager.lockoutState.collectAsState()
 
+    var selectedMode by remember { mutableStateOf(initialAppMode) }
     var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var shakeTrigger by remember { mutableIntStateOf(0) }
@@ -86,6 +94,7 @@ fun MpinLockScreen(
                 is MpinVerifyResult.Success -> {
                     errorMessage = null
                     enteredPin = ""
+                    onUnlockedWithMode(selectedMode)
                     onUnlocked()
                 }
                 is MpinVerifyResult.LockedOut -> {
@@ -155,7 +164,32 @@ fun MpinLockScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(Spacing.xl))
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            // Mode Selector: Manager vs Saving (Flow.md §18, D012)
+            TabRow(
+                selectedTabIndex = if (selectedMode == AppMode.MANAGER) 0 else 1,
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(bottom = Spacing.md),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.primary
+            ) {
+                Tab(
+                    selected = selectedMode == AppMode.MANAGER,
+                    onClick = { selectedMode = AppMode.MANAGER },
+                    text = { Text("Manager", fontWeight = if (selectedMode == AppMode.MANAGER) FontWeight.Bold else FontWeight.Normal) },
+                    icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = "Manager Mode") }
+                )
+                Tab(
+                    selected = selectedMode == AppMode.SAVING,
+                    onClick = { selectedMode = AppMode.SAVING },
+                    text = { Text("Saving", fontWeight = if (selectedMode == AppMode.SAVING) FontWeight.Bold else FontWeight.Normal) },
+                    icon = { Icon(Icons.Default.Savings, contentDescription = "Saving Mode") }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.md))
 
             // PIN Dots Indicator
             MpinDots(

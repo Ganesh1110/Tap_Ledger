@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.tapledger.core.model.AppMode
 import com.tapledger.ui.components.isKeyboardVisible
 import com.tapledger.ui.screens.mpin.MpinLockScreen
 import com.tapledger.ui.screens.mpin.MpinSetupScreen
@@ -60,6 +61,7 @@ fun MainScaffold(
     val lockMessage by viewModel.lockMessage.collectAsState()
     val shouldShowUpgradePrompt by viewModel.shouldShowUpgradePrompt.collectAsState()
     val shouldShowWhatsNew by viewModel.shouldShowWhatsNew.collectAsState()
+    val appMode by viewModel.appMode.collectAsState()
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -88,6 +90,8 @@ fun MainScaffold(
         MpinLockScreen(
             mpinManager = viewModel.mpinManager,
             customMessage = lockMessage,
+            initialAppMode = appMode,
+            onUnlockedWithMode = { unlockedMode -> viewModel.unlock(unlockedMode) },
             onUnlocked = { viewModel.unlock() },
             onNavigateToRestoreBackup = {
                 viewModel.unlock()
@@ -107,6 +111,18 @@ fun MainScaffold(
             canSkip = true,
             onSkip = { viewModel.dismissUpgradePrompt() },
             onSetupSuccess = { viewModel.dismissUpgradePrompt() }
+        )
+        return
+    }
+
+    // 3. SAVING MODE (Flow.md §18, D012)
+    // When in Saving mode, render dedicated SavingNavGraph without manager navigation or screens.
+    // Sensitive Manager actions (accounts, budget periods, statements, backup/restore) are strictly gated.
+    if (appMode == AppMode.SAVING) {
+        SavingNavGraph(
+            onSwitchToManager = {
+                viewModel.lockForModeSwitch(AppMode.MANAGER)
+            }
         )
         return
     }

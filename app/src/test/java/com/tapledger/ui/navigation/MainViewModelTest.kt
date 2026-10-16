@@ -176,4 +176,57 @@ class MainViewModelTest {
         viewModel.dismissWhatsNew()
         assertThat(viewModel.shouldShowWhatsNew.value).isFalse()
     }
+
+    @Test
+    fun `default appMode is MANAGER and can be updated with persistence`() = runTest {
+        val viewModel = MainViewModel(
+            onboardingRepository = onboardingRepository,
+            mpinManager = mpinManager,
+            appLockCoordinator = appLockCoordinator,
+            appVersionManager = versionManager,
+            customPrefs = appStatePrefs
+        )
+
+        assertThat(viewModel.appMode.value).isEqualTo(com.tapledger.core.model.AppMode.MANAGER)
+
+        viewModel.setAppMode(com.tapledger.core.model.AppMode.SAVING)
+        assertThat(viewModel.appMode.value).isEqualTo(com.tapledger.core.model.AppMode.SAVING)
+        assertThat(appStatePrefs.getString("preferred_app_mode", null)).isEqualTo("SAVING")
+    }
+
+    @Test
+    fun `unlock with mode updates mode and unlocks app`() = runTest {
+        val viewModel = MainViewModel(
+            onboardingRepository = onboardingRepository,
+            mpinManager = mpinManager,
+            appLockCoordinator = appLockCoordinator,
+            appVersionManager = versionManager,
+            customPrefs = appStatePrefs
+        )
+
+        appLockCoordinator.lock("Test lock")
+        assertThat(viewModel.isAppLocked.value).isTrue()
+
+        viewModel.unlock(com.tapledger.core.model.AppMode.SAVING)
+        assertThat(viewModel.isAppLocked.value).isFalse()
+        assertThat(viewModel.appMode.value).isEqualTo(com.tapledger.core.model.AppMode.SAVING)
+    }
+
+    @Test
+    fun `lockForModeSwitch sets target mode and locks app with message`() = runTest {
+        val viewModel = MainViewModel(
+            onboardingRepository = onboardingRepository,
+            mpinManager = mpinManager,
+            appLockCoordinator = appLockCoordinator,
+            appVersionManager = versionManager,
+            customPrefs = appStatePrefs
+        )
+
+        viewModel.setAppMode(com.tapledger.core.model.AppMode.SAVING)
+        viewModel.lockForModeSwitch(com.tapledger.core.model.AppMode.MANAGER)
+
+        assertThat(viewModel.appMode.value).isEqualTo(com.tapledger.core.model.AppMode.MANAGER)
+        assertThat(viewModel.isAppLocked.value).isTrue()
+        assertThat(viewModel.lockMessage.value).contains("switch to Manager mode")
+    }
 }

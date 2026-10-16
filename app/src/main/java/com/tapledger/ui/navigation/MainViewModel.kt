@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tapledger.core.model.AppMode
 import com.tapledger.core.security.AppLockCoordinator
 import com.tapledger.core.security.MpinManager
 import com.tapledger.core.version.AppVersionInfo
@@ -136,6 +137,11 @@ class MainViewModel internal constructor(
         _shouldShowUpgradePrompt.value = false
     }
 
+    private val _appMode = MutableStateFlow(
+        AppMode.fromNameOrDefault(prefs.getString("preferred_app_mode", AppMode.MANAGER.name))
+    )
+    val appMode: StateFlow<AppMode> = _appMode.asStateFlow()
+
     fun onAppBackgrounded() {
         appLockCoordinator.onAppBackgrounded()
     }
@@ -144,8 +150,19 @@ class MainViewModel internal constructor(
         appLockCoordinator.onAppForegrounded()
     }
 
-    fun unlock() {
+    fun unlock(mode: AppMode = _appMode.value) {
+        setAppMode(mode)
         appLockCoordinator.unlock()
+    }
+
+    fun setAppMode(mode: AppMode) {
+        _appMode.value = mode
+        prefs.edit().putString("preferred_app_mode", mode.name).apply()
+    }
+
+    fun lockForModeSwitch(targetMode: AppMode) {
+        setAppMode(targetMode)
+        appLockCoordinator.lock("Enter MPIN to switch to ${targetMode.name.lowercase().replaceFirstChar { it.uppercase() }} mode")
     }
 
     fun eraseAllData() {

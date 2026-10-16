@@ -45,7 +45,8 @@ class SavingsRepository @Inject constructor(
     private val emergencyFundCalculator: EmergencyFundCalculator,
     private val accountDao: AccountDao,
     private val transactionDao: TransactionDao,
-    private val transactionRunner: DatabaseTransactionRunner
+    private val transactionRunner: DatabaseTransactionRunner,
+    private val savingsMilestoneEvaluator: com.tapledger.domain.calculator.SavingsMilestoneEvaluator
 ) {
 
     fun getAllGoalsFlow(): Flow<List<SavingsGoalEntity>> = savingsGoalDao.getAllNonArchivedGoals()
@@ -423,5 +424,40 @@ class SavingsRepository @Inject constructor(
 
     suspend fun deleteFixedDeposit(id: Long) {
         fixedDepositDao.delete(id)
+    }
+
+    // --- Phase 4: Habits, Rules & Milestones ---
+
+    suspend fun applyRuleContribution(
+        goalId: Long,
+        amountPaise: Long,
+        note: String,
+        transactionId: Long? = null,
+        periodId: Long? = null
+    ): Long {
+        return deposit(
+            goalId = goalId,
+            amountPaise = amountPaise,
+            note = note,
+            transactionId = transactionId,
+            periodId = periodId,
+            source = SavingsContributionSource.RULE
+        )
+    }
+
+    fun getMilestonesFlow(lookbackMonths: Int = 3): Flow<List<com.tapledger.domain.model.SavingsMilestoneBadge>> {
+        return combine(
+            getOverviewSummaryFlow(),
+            getEmergencyFundCoverageTenthsFlow(lookbackMonths)
+        ) { overview, efTenths ->
+            val totalContributions = savingsContributionDao.getAllContributionsSync().size
+            savingsMilestoneEvaluator.evaluateMilestones(
+                totalSavedPaise = overview.totalSavedPaise,
+                emergencyFundTenths = efTenths,
+                totalGoalsCount = overview.goals.size,
+                completedGoalsCount = overview.completedGoalsCount,
+                totalContributionsCount = totalContributions
+            )
+        }
     }
 }
