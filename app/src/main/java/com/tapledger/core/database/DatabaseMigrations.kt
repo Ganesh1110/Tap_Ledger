@@ -543,3 +543,52 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * Migration from Database Version 3 to Version 4 (Milestones M18-M22: Savings Transfer Guide).
+ * - Creates `savings_transfer_plans` table
+ * - Unique composite index on `(period_id, kind)`
+ * - Indices on `source_account_id`, `dest_account_id`, `transfer_group_id`, `trigger_transaction_id`, `status`
+ * - Runs PRAGMA integrity_check
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `savings_transfer_plans` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `period_id` INTEGER NOT NULL,
+                `kind` TEXT NOT NULL,
+                `source_account_id` INTEGER NOT NULL,
+                `dest_account_id` INTEGER NOT NULL,
+                `suggested_paise` INTEGER NOT NULL,
+                `moved_paise` INTEGER,
+                `status` TEXT NOT NULL,
+                `transfer_group_id` TEXT,
+                `trigger_transaction_id` INTEGER,
+                `created_at` INTEGER NOT NULL,
+                `moved_at` INTEGER,
+                `verified_at` INTEGER,
+                FOREIGN KEY(`period_id`) REFERENCES `budget_periods`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`source_account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(`dest_account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(`trigger_transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_savings_transfer_plans_period_id_kind` ON `savings_transfer_plans` (`period_id`, `kind`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_transfer_plans_source_account_id` ON `savings_transfer_plans` (`source_account_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_transfer_plans_dest_account_id` ON `savings_transfer_plans` (`dest_account_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_transfer_plans_transfer_group_id` ON `savings_transfer_plans` (`transfer_group_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_transfer_plans_trigger_transaction_id` ON `savings_transfer_plans` (`trigger_transaction_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_savings_transfer_plans_status` ON `savings_transfer_plans` (`status`)")
+
+        val cursor = db.query("PRAGMA integrity_check")
+        cursor.use {
+            if (it.moveToFirst()) {
+                val result = it.getString(0)
+                check(result == "ok") { "Database integrity check failed after migration 3 -> 4: $result" }
+            }
+        }
+    }
+}
+
+

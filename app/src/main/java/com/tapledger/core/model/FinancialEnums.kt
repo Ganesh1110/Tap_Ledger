@@ -106,7 +106,11 @@ enum class AuditAction {
     DUPLICATE_DROPPED,
     PERIOD_CLOSED,
     PERIOD_REOPENED,
-    DB_RESTORED
+    DB_RESTORED,
+    PLAN_ADOPTED,
+    PLAN_CREATED,
+    PLAN_MOVED,
+    PLAN_DISMISSED
 }
 
 enum class SavingsGoalStatus {
@@ -149,4 +153,19 @@ enum class CompoundingFrequency {
     MONTHLY,
     ANNUAL
 }
+
+enum class TransferPlanKind {
+    PAYDAY,
+    SWEEP,
+    MANUAL
+}
+
+enum class TransferPlanStatus {
+    SUGGESTED,
+    MARKED_MOVED,
+    VERIFIED,
+    DISMISSED,
+    EXPIRED
+}
+
 

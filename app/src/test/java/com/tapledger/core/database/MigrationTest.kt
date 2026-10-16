@@ -394,5 +394,49 @@ class MigrationTest {
             assertThat(e.message).contains("Savings goal balance cannot be negative")
         }
     }
+
+    @Test
+    fun migration_3_to_4_createsSavingsTransferPlansTableAndIndices() {
+        // Migrate 1 -> 2 -> 3 -> 4
+        MIGRATION_1_2.migrate(dbAdapter)
+        MIGRATION_2_3.migrate(dbAdapter)
+        MIGRATION_3_4.migrate(dbAdapter)
+
+        conn.createStatement().use { stmt ->
+            // Insert account 2 (Savings)
+            stmt.execute("INSERT INTO accounts (id, name, type, identifier_last4, opening_balance_paise, opening_balance_date, is_savings, is_active, created_at, updated_at) VALUES (2, 'SBI Savings', 'BANK', '5678', 10000000, 1000, 1, 1, 1000, 1000)")
+
+            stmt.execute("""
+                INSERT INTO savings_transfer_plans (
+                    id, period_id, kind, source_account_id, dest_account_id, suggested_paise, moved_paise, status, transfer_group_id, trigger_transaction_id, created_at, moved_at, verified_at
+                ) VALUES (
+                    1, 100, 'PAYDAY', 1, 2, 1200000, NULL, 'SUGGESTED', NULL, NULL, 1000, NULL, NULL
+                )
+            """)
+
+            val rs = stmt.executeQuery("SELECT kind, suggested_paise, status FROM savings_transfer_plans WHERE id = 1")
+            assertThat(rs.next()).isTrue()
+            assertThat(rs.getString("kind")).isEqualTo("PAYDAY")
+            assertThat(rs.getLong("suggested_paise")).isEqualTo(1200000L)
+            assertThat(rs.getString("status")).isEqualTo("SUGGESTED")
+        }
+
+        // Verify unique index on (period_id, kind)
+        try {
+            conn.createStatement().use { stmt ->
+                stmt.execute("""
+                    INSERT INTO savings_transfer_plans (
+                        id, period_id, kind, source_account_id, dest_account_id, suggested_paise, moved_paise, status, transfer_group_id, trigger_transaction_id, created_at, moved_at, verified_at
+                    ) VALUES (
+                        2, 100, 'PAYDAY', 1, 2, 1500000, NULL, 'SUGGESTED', NULL, NULL, 2000, NULL, NULL
+                    )
+                """)
+            }
+            org.junit.Assert.fail("Expected unique index constraint violation for duplicate (period_id, kind)")
+        } catch (e: Exception) {
+            assertThat(e.message).contains("UNIQUE constraint failed")
+        }
+    }
 }
+
 

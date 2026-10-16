@@ -132,5 +132,18 @@ class Converters {
 
     @TypeConverter
     fun toCompoundingFrequency(value: String?): com.tapledger.core.model.CompoundingFrequency? = value?.let { com.tapledger.core.model.CompoundingFrequency.valueOf(it) }
+
+    @TypeConverter
+    fun fromTransferPlanKind(value: com.tapledger.core.model.TransferPlanKind?): String? = value?.name
+
+    @TypeConverter
+    fun toTransferPlanKind(value: String?): com.tapledger.core.model.TransferPlanKind? = value?.let { com.tapledger.core.model.TransferPlanKind.valueOf(it) }
+
+    @TypeConverter
+    fun fromTransferPlanStatus(value: com.tapledger.core.model.TransferPlanStatus?): String? = value?.name
+
+    @TypeConverter
+    fun toTransferPlanStatus(value: String?): com.tapledger.core.model.TransferPlanStatus? = value?.let { com.tapledger.core.model.TransferPlanStatus.valueOf(it) }
 }
+
 

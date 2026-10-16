@@ -19,6 +19,7 @@ import com.tapledger.core.database.dao.RecurringCommitmentDao
 import com.tapledger.core.database.dao.SavingsContributionDao
 import com.tapledger.core.database.dao.SavingsGoalDao
 import com.tapledger.core.database.dao.SavingsPlanEntryDao
+import com.tapledger.core.database.dao.SavingsTransferPlanDao
 import com.tapledger.core.database.dao.StatementImportDao
 import com.tapledger.core.database.dao.StatementLineDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
@@ -39,6 +40,7 @@ import com.tapledger.core.database.entity.RecurringCommitmentEntity
 import com.tapledger.core.database.entity.SavingsContributionEntity
 import com.tapledger.core.database.entity.SavingsGoalEntity
 import com.tapledger.core.database.entity.SavingsPlanEntryEntity
+import com.tapledger.core.database.entity.SavingsTransferPlanEntity
 import com.tapledger.core.database.entity.StatementImportEntity
 import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
@@ -66,7 +68,8 @@ import com.tapledger.core.database.entity.UnparsedAlertEntity
         SavingsPlanEntryEntity::class,
         RecurringCommitmentEntity::class,
         CommitmentPaymentEntity::class,
-        FixedDepositEntity::class
+        FixedDepositEntity::class,
+        SavingsTransferPlanEntity::class
     ],
     version = TapLedgerDatabase.DATABASE_VERSION,
     exportSchema = true
@@ -94,10 +97,11 @@ abstract class TapLedgerDatabase : RoomDatabase() {
     abstract fun recurringCommitmentDao(): RecurringCommitmentDao
     abstract fun commitmentPaymentDao(): CommitmentPaymentDao
     abstract fun fixedDepositDao(): FixedDepositDao
+    abstract fun savingsTransferPlanDao(): SavingsTransferPlanDao
 
     companion object {
         const val DATABASE_NAME = "tapledger.db"
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
     }
 }
 
