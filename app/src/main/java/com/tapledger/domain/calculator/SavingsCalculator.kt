@@ -155,7 +155,10 @@ object SavingsCalculator {
         goal: SavingsGoalEntity,
         balancePaise: Long,
         asOfEpochMs: Long = DateTimeUtils.nowEpochMillis(),
-        isOverEarmarked: Boolean = false
+        isOverEarmarked: Boolean = false,
+        backedPaise: Long = balancePaise,
+        backedBp: Int = 10000,
+        backingAccountName: String? = null
     ): SavingsGoalSummary {
         val progressBp = calculateProgressBp(balancePaise, goal.targetPaise)
         val remainingPaise = calculateRemainingPaise(balancePaise, goal.targetPaise)
@@ -173,7 +176,10 @@ object SavingsCalculator {
             requiredMonthlyPaise = requiredMonthlyPaise,
             trackStatus = trackStatus,
             paceSummary = paceSummary,
-            isOverEarmarked = isOverEarmarked
+            isOverEarmarked = isOverEarmarked,
+            backedPaise = backedPaise,
+            backedBp = backedBp,
+            backingAccountName = backingAccountName
         )
     }
 
@@ -186,15 +192,17 @@ object SavingsCalculator {
         activeGoals: List<SavingsGoalEntity>,
         goalBalances: Map<Long, Long>,
         accountsMap: Map<Long, AccountEntity>,
-        accountBalances: Map<Long, Long>
+        accountBalances: Map<Long, Long>,
+        defaultSavingsAccountId: Long? = null
     ): List<AccountEarmarkWarning> {
         val warnings = mutableListOf<AccountEarmarkWarning>()
 
         val goalsByAccount = activeGoals
-            .filter { it.status == SavingsGoalStatus.ACTIVE && it.linkedAccountId != null }
-            .groupBy { it.linkedAccountId!! }
+            .filter { it.status == SavingsGoalStatus.ACTIVE }
+            .groupBy { it.linkedAccountId ?: defaultSavingsAccountId }
 
         for ((accountId, goals) in goalsByAccount) {
+            if (accountId == null) continue
             val account = accountsMap[accountId] ?: continue
             val accountBalance = accountBalances[accountId] ?: 0L
             val totalEarmarked = goals.sumOf { goalBalances[it.id] ?: 0L }

@@ -79,7 +79,10 @@ data class SavingsGoalSummary(
     val requiredMonthlyPaise: Long,
     val trackStatus: com.tapledger.core.model.GoalTrackStatus,
     val paceSummary: String,
-    val isOverEarmarked: Boolean = false
+    val isOverEarmarked: Boolean = false,
+    val backedPaise: Long = 0L,
+    val backedBp: Int = 10000,
+    val backingAccountName: String? = null
 )
 
 data class AccountEarmarkWarning(

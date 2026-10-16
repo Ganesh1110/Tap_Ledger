@@ -9,6 +9,7 @@ import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.MonthCloseDao
+import com.tapledger.core.database.dao.SavingsTransferPlanDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.AccountEntity
@@ -18,6 +19,7 @@ import com.tapledger.core.database.entity.BudgetAllocationEntity
 import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
+import com.tapledger.core.database.entity.SavingsTransferPlanEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.AccountType
@@ -30,6 +32,8 @@ import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
+import com.tapledger.core.model.TransferPlanKind
+import com.tapledger.core.model.TransferPlanStatus
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.BudgetRepository
 import com.tapledger.domain.validator.DataIntegrityChecker
@@ -264,6 +268,47 @@ class MonthCloseEngineTest {
         override suspend fun getAllTransactionAllocationsSync(): List<TransactionAllocationEntity> = storage.values.toList()
     }
 
+    private class FakeSavingsTransferPlanDao : SavingsTransferPlanDao {
+        val plans = mutableMapOf<Long, SavingsTransferPlanEntity>()
+        private var nextId = 1L
+
+        override suspend fun insert(plan: SavingsTransferPlanEntity): Long {
+            val id = if (plan.id == 0L) nextId++ else plan.id
+            plans[id] = plan.copy(id = id)
+            return id
+        }
+        override suspend fun insertOrUpdate(plan: SavingsTransferPlanEntity): Long {
+            val id = if (plan.id == 0L) nextId++ else plan.id
+            plans[id] = plan.copy(id = id)
+            return id
+        }
+        override suspend fun update(plan: SavingsTransferPlanEntity) { plans[plan.id] = plan }
+        override suspend fun delete(plan: SavingsTransferPlanEntity) { plans.remove(plan.id) }
+        override suspend fun getById(id: Long): SavingsTransferPlanEntity? = plans[id]
+        override fun getByIdFlow(id: Long): Flow<SavingsTransferPlanEntity?> = emptyFlow()
+        override suspend fun getByPeriodAndKind(periodId: Long, kind: TransferPlanKind): SavingsTransferPlanEntity? =
+            plans.values.find { it.periodId == periodId && it.kind == kind }
+        override fun getByPeriodAndKindFlow(periodId: Long, kind: TransferPlanKind): Flow<SavingsTransferPlanEntity?> = emptyFlow()
+        override suspend fun getPlansForPeriod(periodId: Long): List<SavingsTransferPlanEntity> =
+            plans.values.filter { it.periodId == periodId }
+        override fun getPlansForPeriodFlow(periodId: Long): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override fun getActivePlansForPeriodFlow(periodId: Long): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override suspend fun getPlansByStatus(status: TransferPlanStatus): List<SavingsTransferPlanEntity> =
+            plans.values.filter { it.status == status }
+        override fun getPlansByStatusFlow(status: TransferPlanStatus): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override suspend fun getByTransferGroupId(transferGroupId: String): SavingsTransferPlanEntity? =
+            plans.values.find { it.transferGroupId == transferGroupId }
+        override suspend fun findMarkedMovedPlans(): List<SavingsTransferPlanEntity> =
+            plans.values.filter { it.status == TransferPlanStatus.MARKED_MOVED }
+        override fun findMarkedMovedPlansFlow(): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override suspend fun expireSuggestedPlansForPeriod(periodId: Long) {
+            plans.values.filter { it.periodId == periodId && it.status == TransferPlanStatus.SUGGESTED }.forEach {
+                plans[it.id] = it.copy(status = TransferPlanStatus.EXPIRED)
+            }
+        }
+        override suspend fun getAllPlansSync(): List<SavingsTransferPlanEntity> = plans.values.toList()
+    }
+
     private lateinit var accountDao: FakeAccountDao
     private lateinit var categoryDao: FakeCategoryDao
     private lateinit var budgetPeriodDao: FakeBudgetPeriodDao
@@ -273,6 +318,7 @@ class MonthCloseEngineTest {
     private lateinit var monthCloseDao: FakeMonthCloseDao
     private lateinit var transactionDao: FakeTransactionDao
     private lateinit var transactionAllocationDao: FakeTransactionAllocationDao
+    private lateinit var savingsTransferPlanDao: FakeSavingsTransferPlanDao
     private lateinit var budgetRepository: BudgetRepository
     private lateinit var monthCloseEngine: MonthCloseEngine
 
@@ -287,6 +333,7 @@ class MonthCloseEngineTest {
         monthCloseDao = FakeMonthCloseDao()
         transactionDao = FakeTransactionDao()
         transactionAllocationDao = FakeTransactionAllocationDao()
+        savingsTransferPlanDao = FakeSavingsTransferPlanDao()
 
         budgetRepository = BudgetRepository(
             transactionRunner = DirectTransactionRunner(),
@@ -308,7 +355,8 @@ class MonthCloseEngineTest {
             accountDao = accountDao,
             categoryDao = categoryDao,
             budgetRepository = budgetRepository,
-            dataIntegrityChecker = DataIntegrityChecker()
+            dataIntegrityChecker = DataIntegrityChecker(),
+            savingsTransferPlanDao = savingsTransferPlanDao
         )
     }
 
@@ -775,5 +823,83 @@ class MonthCloseEngineTest {
         val reopenedP1 = budgetPeriodDao.getById(p1)!!
         assertThat(reopenedP1.status).isEqualTo(BudgetPeriodStatus.OPEN)
         assertThat(monthCloseDao.getByPeriodId(p1)).isNull()
+    }
+
+    @Test
+    fun testMonthClose_expiresOpenSuggestedSavingsTransferPlans() = runBlocking {
+        accountDao.insert(
+            AccountEntity(
+                id = 1,
+                name = "Checking",
+                type = AccountType.BANK,
+                identifierLast4 = "1234",
+                openingBalancePaise = 50_000_00L,
+                openingBalanceDate = 1000L,
+                createdAt = 1000L,
+                updatedAt = 1000L
+            )
+        )
+        categoryDao.insert(CategoryEntity(id = 1, name = "Groceries", defaultBucket = BudgetBucket.NEEDS, defaultSortOrder = 1))
+
+        val periodId = budgetPeriodDao.insert(
+            BudgetPeriodEntity(
+                id = 10,
+                year = 2020,
+                month = 1,
+                startAt = 1577836800000L,
+                endAt = 1580515200000L,
+                incomePaise = 50_000_00L,
+                isReviewed = true,
+                status = BudgetPeriodStatus.OPEN,
+                createdAt = 1000L,
+                updatedAt = 1000L
+            )
+        )
+
+        val planSuggested = SavingsTransferPlanEntity(
+            id = 1L,
+            periodId = periodId,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1L,
+            destAccountId = 2L,
+            suggestedPaise = 10_000_00L,
+            status = TransferPlanStatus.SUGGESTED,
+            createdAt = 1000L
+        )
+        val planMoved = SavingsTransferPlanEntity(
+            id = 2L,
+            periodId = periodId,
+            kind = TransferPlanKind.SWEEP,
+            sourceAccountId = 1L,
+            destAccountId = 2L,
+            suggestedPaise = 5_000_00L,
+            movedPaise = 5_000_00L,
+            status = TransferPlanStatus.MARKED_MOVED,
+            transferGroupId = "xfer-2",
+            createdAt = 1000L
+        )
+        val planVerified = SavingsTransferPlanEntity(
+            id = 3L,
+            periodId = periodId,
+            kind = TransferPlanKind.MANUAL,
+            sourceAccountId = 1L,
+            destAccountId = 2L,
+            suggestedPaise = 2_000_00L,
+            movedPaise = 2_000_00L,
+            status = TransferPlanStatus.VERIFIED,
+            transferGroupId = "xfer-3",
+            createdAt = 1000L
+        )
+        savingsTransferPlanDao.insert(planSuggested)
+        savingsTransferPlanDao.insert(planMoved)
+        savingsTransferPlanDao.insert(planVerified)
+
+        monthCloseEngine.closeMonth(periodId)
+
+        // SUGGESTED plan must transition to EXPIRED
+        assertThat(savingsTransferPlanDao.getById(1L)?.status).isEqualTo(TransferPlanStatus.EXPIRED)
+        // MARKED_MOVED and VERIFIED plans remain intact
+        assertThat(savingsTransferPlanDao.getById(2L)?.status).isEqualTo(TransferPlanStatus.MARKED_MOVED)
+        assertThat(savingsTransferPlanDao.getById(3L)?.status).isEqualTo(TransferPlanStatus.VERIFIED)
     }
 }

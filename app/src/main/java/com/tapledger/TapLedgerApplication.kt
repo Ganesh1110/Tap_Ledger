@@ -2,6 +2,7 @@ package com.tapledger
 
 import android.app.Application
 import com.tapledger.service.NotificationListenerLivenessWorker
+import com.tapledger.service.SavingsGuideWorker
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import dagger.hilt.android.HiltAndroidApp
 
@@ -11,5 +12,6 @@ class TapLedgerApplication : Application() {
         super.onCreate()
         PDFBoxResourceLoader.init(applicationContext)
         NotificationListenerLivenessWorker.enqueuePeriodicCheck(this)
+        SavingsGuideWorker.enqueueDailyCheck(this)
     }
 }

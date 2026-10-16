@@ -34,7 +34,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SavingsRepository @Inject constructor(
+class SavingsRepository(
     private val savingsGoalDao: SavingsGoalDao,
     private val savingsContributionDao: SavingsContributionDao,
     private val savingsPlanEntryDao: SavingsPlanEntryDao,
@@ -48,6 +48,39 @@ class SavingsRepository @Inject constructor(
     private val transactionRunner: DatabaseTransactionRunner,
     private val savingsMilestoneEvaluator: com.tapledger.domain.calculator.SavingsMilestoneEvaluator
 ) {
+    private var savingsGuidePreferences: com.tapledger.core.preferences.SavingsGuidePreferences? = null
+
+    @Inject
+    constructor(
+        savingsGoalDao: SavingsGoalDao,
+        savingsContributionDao: SavingsContributionDao,
+        savingsPlanEntryDao: SavingsPlanEntryDao,
+        recurringCommitmentDao: RecurringCommitmentDao,
+        commitmentPaymentDao: CommitmentPaymentDao,
+        fixedDepositDao: FixedDepositDao,
+        monthCloseDao: MonthCloseDao,
+        emergencyFundCalculator: EmergencyFundCalculator,
+        accountDao: AccountDao,
+        transactionDao: TransactionDao,
+        transactionRunner: DatabaseTransactionRunner,
+        savingsMilestoneEvaluator: com.tapledger.domain.calculator.SavingsMilestoneEvaluator,
+        savingsGuidePreferences: com.tapledger.core.preferences.SavingsGuidePreferences
+    ) : this(
+        savingsGoalDao,
+        savingsContributionDao,
+        savingsPlanEntryDao,
+        recurringCommitmentDao,
+        commitmentPaymentDao,
+        fixedDepositDao,
+        monthCloseDao,
+        emergencyFundCalculator,
+        accountDao,
+        transactionDao,
+        transactionRunner,
+        savingsMilestoneEvaluator
+    ) {
+        this.savingsGuidePreferences = savingsGuidePreferences
+    }
 
     fun getAllGoalsFlow(): Flow<List<SavingsGoalEntity>> = savingsGoalDao.getAllNonArchivedGoals()
 
@@ -221,22 +254,32 @@ class SavingsRepository @Inject constructor(
         ) { goal, balance, accounts ->
             if (goal == null) return@combine null
 
-            val isOverEarmarked = if (goal.linkedAccountId != null) {
-                val account = accounts.find { it.id == goal.linkedAccountId }
-                if (account != null) {
-                    val allGoalsForAccount = savingsGoalDao.getGoalsByAccount(account.id)
-                    val totalEarmarked = allGoalsForAccount.sumOf { savingsContributionDao.getGoalBalance(it.id) }
-                    val accountTxs = transactionDao.getAllTransactionsSync()
-                    val accountBalance = AccountBalanceCalculator.calculateAccountBalance(account, accountTxs).currentBalancePaise
-                    totalEarmarked > accountBalance
-                } else false
-            } else false
+            val defaultSavingsAccountId = savingsGuidePreferences?.getConfig()?.savingsAccountId
+                ?: accounts.find { it.isSavings }?.id
+            val backingAccountId = goal.linkedAccountId ?: defaultSavingsAccountId
+            val backingAccount = backingAccountId?.let { id -> accounts.find { it.id == id } }
+
+            val (isOverEarmarked, backedPaise, backedBp) = if (backingAccount != null) {
+                val allGoalsForAccount = savingsGoalDao.getGoalsByAccount(backingAccount.id)
+                val totalEarmarked = allGoalsForAccount.sumOf { savingsContributionDao.getGoalBalance(it.id) }
+                val accountTxs = transactionDao.getAllTransactionsSync()
+                val accountBalance = AccountBalanceCalculator.calculateAccountBalance(backingAccount, accountTxs).currentBalancePaise
+                val over = totalEarmarked > accountBalance
+                val backed = minOf(balance, maxOf(0L, accountBalance))
+                val bp = if (balance > 0L) ((backed * 10_000L) / balance).toInt().coerceIn(0, 10_000) else 10_000
+                Triple(over, backed, bp)
+            } else {
+                Triple(false, balance, 10000)
+            }
 
             SavingsCalculator.calculateGoalSummary(
                 goal = goal,
                 balancePaise = balance,
                 asOfEpochMs = DateTimeUtils.nowEpochMillis(),
-                isOverEarmarked = isOverEarmarked
+                isOverEarmarked = isOverEarmarked,
+                backedPaise = backedPaise,
+                backedBp = backedBp,
+                backingAccountName = backingAccount?.name
             )
         }
     }
@@ -268,23 +311,51 @@ class SavingsRepository @Inject constructor(
                 if (goal.status == SavingsGoalStatus.DONE) completedCount++
             }
 
+            val defaultSavingsAccountId = savingsGuidePreferences?.getConfig()?.savingsAccountId
+                ?: accounts.find { it.isSavings }?.id
+
             val earmarkWarnings = SavingsCalculator.evaluateAccountEarmarks(
                 activeGoals = goals,
                 goalBalances = goalBalances,
                 accountsMap = accountsMap,
-                accountBalances = accountBalances
+                accountBalances = accountBalances,
+                defaultSavingsAccountId = defaultSavingsAccountId
             )
             val overEarmarkedAccountIds = earmarkWarnings.map { it.accountId }.toSet()
 
+            // Calculate backed amounts by grouping goals by backing account
+            val backedAmounts = mutableMapOf<Long, Pair<Long, Int>>() // goalId -> (backedPaise, backedBp)
+            val goalsByBackingAccount = goals
+                .filter { it.status == SavingsGoalStatus.ACTIVE }
+                .groupBy { it.linkedAccountId ?: defaultSavingsAccountId }
+
+            for ((accountId, acctGoals) in goalsByBackingAccount) {
+                var remaining = if (accountId != null) accountBalances[accountId] ?: 0L else 0L
+                val sortedGoals = acctGoals.sortedWith(compareBy({ it.priority }, { it.createdAt }))
+                for (g in sortedGoals) {
+                    val balance = goalBalances[g.id] ?: 0L
+                    val backed = minOf(balance, maxOf(0L, remaining))
+                    remaining = maxOf(0L, remaining - backed)
+                    val bp = if (balance > 0L) ((backed * 10_000L) / balance).toInt().coerceIn(0, 10_000) else 10_000
+                    backedAmounts[g.id] = backed to bp
+                }
+            }
+
             for (goal in goals) {
                 val balance = goalBalances[goal.id] ?: 0L
-                val isOverEarmarked = goal.linkedAccountId != null && overEarmarkedAccountIds.contains(goal.linkedAccountId)
+                val backingAccountId = goal.linkedAccountId ?: defaultSavingsAccountId
+                val backingAccountName = backingAccountId?.let { accountsMap[it]?.name }
+                val (backed, bp) = backedAmounts[goal.id] ?: (balance to 10000)
+                val isOverEarmarked = backingAccountId != null && overEarmarkedAccountIds.contains(backingAccountId)
                 goalSummaries.add(
                     SavingsCalculator.calculateGoalSummary(
                         goal = goal,
                         balancePaise = balance,
                         asOfEpochMs = now,
-                        isOverEarmarked = isOverEarmarked
+                        isOverEarmarked = isOverEarmarked,
+                        backedPaise = backed,
+                        backedBp = bp,
+                        backingAccountName = backingAccountName
                     )
                 )
             }

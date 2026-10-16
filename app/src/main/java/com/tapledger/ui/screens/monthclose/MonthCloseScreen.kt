@@ -272,6 +272,15 @@ fun MonthCloseScreen(
                                 subtitle = "Zero invariant errors found in ledger",
                                 isChecked = true
                             )
+                            state.savingsSummary?.let { savings ->
+                                val targetStr = com.tapledger.core.model.MoneyFormatter.formatPaiseToRupees(savings.targetPaise)
+                                val movedStr = com.tapledger.core.model.MoneyFormatter.formatPaiseToRupees(savings.movedPaise)
+                                ChecklistRow(
+                                    title = "Savings Transfer Guide",
+                                    subtitle = "Target $targetStr, moved $movedStr (${savings.verifiedCount} verified)",
+                                    isChecked = true
+                                )
+                            }
                         }
                     }
                 }

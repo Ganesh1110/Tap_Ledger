@@ -20,6 +20,7 @@ import javax.inject.Inject
 class MonthCloseViewModel @Inject constructor(
     private val monthCloseRepository: MonthCloseRepository,
     private val monthCloseEngine: MonthCloseEngine,
+    private val savingsTransferPlanDao: com.tapledger.core.database.dao.SavingsTransferPlanDao,
     val mpinManager: com.tapledger.core.security.MpinManager
 ) : ViewModel() {
 
@@ -51,6 +52,20 @@ class MonthCloseViewModel @Inject constructor(
                     ChartState.Empty("No active budget period")
                 }
 
+                val savingsSummary = if (periodId > 0L) {
+                    val plans = savingsTransferPlanDao.getPlansForPeriod(periodId)
+                    val targetPaise = summary?.categorySummaries
+                        ?.filter { it.allocation.bucketSnapshot == com.tapledger.core.model.BudgetBucket.SAVINGS }
+                        ?.sumOf { it.adjustedBudgetPaise } ?: 0L
+                    val movedPaise = plans.sumOf { it.movedPaise ?: 0L }
+                    val verifiedCount = plans.count { it.status == com.tapledger.core.model.TransferPlanStatus.VERIFIED }
+                    SavingsChecklistSummary(
+                        targetPaise = targetPaise,
+                        movedPaise = movedPaise,
+                        verifiedCount = verifiedCount
+                    )
+                } else null
+
                 if (periodId > 0L) {
                     monthCloseRepository.observeMonthCloseForPeriod(periodId).collect { monthClose ->
                         _uiState.update {
@@ -61,6 +76,7 @@ class MonthCloseViewModel @Inject constructor(
                                 summary = summary,
                                 monthCloseRecord = monthClose,
                                 advanceRolloverState = rolloverState,
+                                savingsSummary = savingsSummary,
                                 errorMessage = null
                             )
                         }
@@ -73,6 +89,7 @@ class MonthCloseViewModel @Inject constructor(
                             currentMonth = currentMonth,
                             summary = summary,
                             advanceRolloverState = rolloverState,
+                            savingsSummary = savingsSummary,
                             errorMessage = null
                         )
                     }

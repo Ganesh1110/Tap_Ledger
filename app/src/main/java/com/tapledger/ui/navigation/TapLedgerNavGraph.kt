@@ -48,6 +48,7 @@ sealed class Screen(val route: String) {
     object GoalDetail : Screen("goal_detail/{goalId}") {
         fun createRoute(goalId: Long) = "goal_detail/$goalId"
     }
+    object SavingsGuideSettings : Screen("savings_guide_settings")
 }
 
 
@@ -198,6 +199,7 @@ fun TapLedgerNavGraph(
         composable(Screen.SavingHome.route) {
             com.tapledger.ui.screens.saving.SavingHomeScreen(
                 onNavigateBack = { navController.popBackStack() },
+                onNavigateToSettings = { navController.navigate(Screen.SavingsGuideSettings.route) },
                 onNavigateToGoalDetail = { goalId ->
                     navController.navigate(Screen.GoalDetail.createRoute(goalId))
                 }
@@ -214,6 +216,11 @@ fun TapLedgerNavGraph(
             val goalId = backStackEntry.arguments?.getLong("goalId") ?: 0L
             com.tapledger.ui.screens.saving.GoalDetailScreen(
                 goalId = goalId,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.SavingsGuideSettings.route) {
+            com.tapledger.ui.screens.saving.SavingsGuideSettingsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

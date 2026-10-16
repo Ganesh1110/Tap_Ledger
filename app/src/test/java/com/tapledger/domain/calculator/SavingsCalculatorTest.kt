@@ -241,4 +241,76 @@ class SavingsCalculatorTest {
         assertThat(warnings[0].accountBalancePaise).isEqualTo(50_000_00L)
         assertThat(warnings[0].deficitPaise).isEqualTo(5_000_00L)
     }
+
+    @Test
+    fun evaluateAccountEarmarks_withDefaultSavingsAccountId_assignsUnlinkedGoals() {
+        val sbiAccount = AccountEntity(
+            id = 200,
+            name = "SBI Savings",
+            type = AccountType.BANK,
+            isSavings = true,
+            openingBalancePaise = 20_000_00L,
+            openingBalanceDate = 1000L,
+            identifierLast4 = "1234",
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+
+        // Goal without explicit linkedAccountId
+        val unlinkedGoal = SavingsGoalEntity(
+            id = 10,
+            name = "General Emergency Fund",
+            targetPaise = 50_000_00L,
+            status = SavingsGoalStatus.ACTIVE,
+            linkedAccountId = null,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+
+        val activeGoals = listOf(unlinkedGoal)
+        val goalBalances = mapOf(10L to 30_000_00L) // 30,000 earmarked
+        val accountsMap = mapOf(200L to sbiAccount)
+        val accountBalances = mapOf(200L to 20_000_00L) // 20,000 real balance -> 10,000 deficit
+
+        val warnings = SavingsCalculator.evaluateAccountEarmarks(
+            activeGoals = activeGoals,
+            goalBalances = goalBalances,
+            accountsMap = accountsMap,
+            accountBalances = accountBalances,
+            defaultSavingsAccountId = 200L
+        )
+
+        assertThat(warnings).hasSize(1)
+        assertThat(warnings[0].accountId).isEqualTo(200L)
+        assertThat(warnings[0].accountName).isEqualTo("SBI Savings")
+        assertThat(warnings[0].totalEarmarkedPaise).isEqualTo(30_000_00L)
+        assertThat(warnings[0].deficitPaise).isEqualTo(10_000_00L)
+    }
+
+    @Test
+    fun calculateGoalSummary_withBacking_calculatesCorrectBackedBpAndAmount() {
+        val goal = SavingsGoalEntity(
+            id = 1,
+            name = "Vacation",
+            targetPaise = 50_000_00L,
+            status = SavingsGoalStatus.ACTIVE,
+            linkedAccountId = 200L,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+
+        val summary = SavingsCalculator.calculateGoalSummary(
+            goal = goal,
+            balancePaise = 20_000_00L,
+            asOfEpochMs = 2000L,
+            isOverEarmarked = false,
+            backedPaise = 12_000_00L,
+            backedBp = 6000,
+            backingAccountName = "SBI"
+        )
+
+        assertThat(summary.backedPaise).isEqualTo(12_000_00L)
+        assertThat(summary.backedBp).isEqualTo(6000) // 60%
+        assertThat(summary.backingAccountName).isEqualTo("SBI")
+    }
 }

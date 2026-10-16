@@ -20,7 +20,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -34,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import com.tapledger.core.database.entity.FixedDepositEntity
 import com.tapledger.core.database.entity.RecurringCommitmentEntity
+import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.domain.calculator.FdCalculator
 import com.tapledger.ui.charts.render.ProgressBarRender
 import androidx.compose.material3.Scaffold
@@ -77,6 +81,7 @@ fun SavingHomeScreen(
     canNavigateBack: Boolean = true,
     onNavigateBack: () -> Unit = {},
     onSwitchToManager: (() -> Unit)? = null,
+    onNavigateToSettings: () -> Unit = {},
     onNavigateToGoalDetail: (goalId: Long) -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -84,6 +89,7 @@ fun SavingHomeScreen(
     val scope = rememberCoroutineScope()
 
     var showCreateSheet by remember { mutableStateOf(false) }
+    var selectedDipDebit by remember { mutableStateOf<TransactionEntity?>(null) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -106,6 +112,12 @@ fun SavingHomeScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Savings Guide Settings"
+                        )
+                    }
                     if (onSwitchToManager != null) {
                         AssistChip(
                             onClick = onSwitchToManager,
@@ -154,6 +166,117 @@ fun SavingHomeScreen(
                 contentPadding = PaddingValues(top = Spacing.sm, bottom = Spacing.listBottomPadding),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
+                // 0. Monthly Savings Transfer Status (Milestone M22, §7, D015)
+                if (state.transferSummary != null) {
+                    item(key = "monthly_transfer_status") {
+                        val summary = state.transferSummary!!
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (summary.isVerified) IncomeGreenContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceContainerHigh
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(Spacing.md),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                    modifier = Modifier.weight(1f, fill = false)
+                                ) {
+                                    Icon(
+                                        imageVector = if (summary.isVerified) Icons.Default.CheckCircle else Icons.Default.Sync,
+                                        contentDescription = null,
+                                        tint = if (summary.isVerified) IncomeGreen else WarningAmber,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Column {
+                                        Text(
+                                            text = "This month moved ${MoneyFormatter.formatPaiseToRupees(summary.movedPaise)}",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = if (summary.isVerified) "Verified by bank alert" else "Self-reported (Unverified by bank)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = if (summary.isVerified) IncomeGreen.copy(alpha = 0.15f) else WarningAmber.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = if (summary.isVerified) "✓ Verified" else "Pending Alert",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (summary.isVerified) IncomeGreen else WarningAmber,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 0b. Dip Guard: Pending Savings Debits (Milestone M22, §7 Dip Guard)
+                if (state.pendingSavingsDebits.isNotEmpty()) {
+                    item(key = "dip_guard_alert") {
+                        val debit = state.pendingSavingsDebits.first()
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(Spacing.md),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = WarningAmber,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(Spacing.xs))
+                                    Text(
+                                        text = "Spending from Savings Detected",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "A debit of ${MoneyFormatter.formatPaiseToRupees(debit.amountPaise)} occurred on savings. Which goal was this for?",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(Spacing.xs))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { selectedDipDebit = debit }
+                                    ) {
+                                        Text("Attribute to Goal")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 1. Total Saved Hero Card
                 item(key = "total_saved_hero") {
                     Card(
@@ -372,6 +495,29 @@ fun SavingHomeScreen(
             }
         )
     }
+
+    selectedDipDebit?.let { debit ->
+        DipGuardAttributionSheet(
+            transaction = debit,
+            goals = state.goals.filter { it.goal.status == SavingsGoalStatus.ACTIVE },
+            onDismiss = { selectedDipDebit = null },
+            onConfirmAttribution = { goalId, note ->
+                viewModel.attributeDebitToGoal(
+                    transactionId = debit.id,
+                    goalId = goalId,
+                    amountPaise = debit.amountPaise,
+                    note = note,
+                    onSuccess = {
+                        selectedDipDebit = null
+                        scope.launch { snackbarHostState.showSnackbar("Attributed to goal!") }
+                    },
+                    onError = { err ->
+                        scope.launch { snackbarHostState.showSnackbar(err) }
+                    }
+                )
+            }
+        )
+    }
 }
 
 @Composable
@@ -475,6 +621,35 @@ private fun GoalCard(
                     )
                 }
 
+                if (summary.balancePaise > 0L) {
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    val accountName = summary.backingAccountName ?: "SBI"
+                    val isFullBacked = summary.backedBp >= 10000
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isFullBacked) "Backed by $accountName ✓" else "Backed by $accountName: ${summary.backedBp / 100}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isFullBacked) IncomeGreen else WarningAmber
+                        )
+                        Text(
+                            text = "${MoneyFormatter.formatPaiseToRupees(summary.backedPaise)} / ${MoneyFormatter.formatPaiseToRupees(summary.balancePaise)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    ProgressBarRender(
+                        percentageBp = summary.backedBp,
+                        color = if (isFullBacked) IncomeGreen else WarningAmber,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        height = 4.dp
+                    )
+                }
             }
         }
     }

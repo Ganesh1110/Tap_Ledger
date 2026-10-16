@@ -64,7 +64,8 @@ class MonthCloseEngine @Inject constructor(
     private val savingsGoalDao: SavingsGoalDao? = null,
     private val savingsPlanEntryDao: SavingsPlanEntryDao? = null,
     private val savingsContributionDao: SavingsContributionDao? = null,
-    private val savingsPlanner: SavingsPlanner? = null
+    private val savingsPlanner: SavingsPlanner? = null,
+    private val savingsTransferPlanDao: com.tapledger.core.database.dao.SavingsTransferPlanDao? = null
 ) {
 
     data class PreCloseChecklistResult(
@@ -246,6 +247,9 @@ class MonthCloseEngine @Inject constructor(
                     updatedAt = now
                 )
             )
+
+            // Flow §18 / Milestone M21: Open suggested savings transfer plans become EXPIRED at month close
+            savingsTransferPlanDao?.expireSuggestedPlansForPeriod(period.id)
 
             // Closing balances snapshot
             val activeAccounts = accountDao.getAllAccountsSync().filter { it.isActive }

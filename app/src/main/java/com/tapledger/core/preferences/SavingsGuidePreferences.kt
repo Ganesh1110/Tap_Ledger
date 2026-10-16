@@ -42,6 +42,9 @@ class SavingsGuidePreferences(
         private const val KEY_PREFERRED_PAY_APP = "preferred_pay_app"
         private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
 
+        const val KEY_PREFIX_PLAN_NOTIF_COUNT = "plan_notif_count_"
+        const val KEY_PREFIX_UNVERIFIED_NUDGE = "plan_unverified_nudge_"
+
         const val DEFAULT_BUFFER_PAISE = 0L
         const val DEFAULT_PAYDAY_THRESHOLD_PCT = 50
         const val DEFAULT_SWEEP_WINDOW_DAYS = 3
@@ -149,5 +152,23 @@ class SavingsGuidePreferences(
 
     fun setNotificationsEnabled(enabled: Boolean) {
         updateConfig(getConfig().copy(notificationsEnabled = enabled))
+    }
+
+    fun getPlanNotificationCount(planId: Long): Int {
+        return prefs.getInt("${KEY_PREFIX_PLAN_NOTIF_COUNT}$planId", 0)
+    }
+
+    fun incrementPlanNotificationCount(planId: Long): Int {
+        val newCount = getPlanNotificationCount(planId) + 1
+        prefs.edit().putInt("${KEY_PREFIX_PLAN_NOTIF_COUNT}$planId", newCount).apply()
+        return newCount
+    }
+
+    fun hasSentUnverifiedNudge(planId: Long): Boolean {
+        return prefs.getBoolean("${KEY_PREFIX_UNVERIFIED_NUDGE}$planId", false)
+    }
+
+    fun setSentUnverifiedNudge(planId: Long, sent: Boolean) {
+        prefs.edit().putBoolean("${KEY_PREFIX_UNVERIFIED_NUDGE}$planId", sent).apply()
     }
 }
