@@ -38,4 +38,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (com.tapledger.core.util.PermissionUtils.isNotificationListenerGranted(this)) {
+            com.tapledger.service.FinancialNotificationListenerService.requestRebindService(this)
+        }
+    }
 }
