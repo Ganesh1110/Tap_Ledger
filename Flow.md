@@ -974,22 +974,42 @@ The Visual Analytics Layer is a strictly READ-ONLY presentation layer operating 
 - `commitment_payments`: id, commitment_id, period_id, paid_transaction_id, status (`PENDING`, `PAID`, `SKIPPED`), created_at.
 - `fixed_deposits`: id, name, principal_paise, rate_bp, start_ms, maturity_ms, compounding (`SIMPLE`, `QUARTERLY`, `MONTHLY`, `ANNUAL`), goal_id, created_at.
 
-### 18.3 Phase Roadmap
-- **Phase 1 (M13): Goals and Contributions:**
-  - `SavingsCalculator`: balance, progress in bp, remaining, required monthly allocation (ceiling division over remaining months), on-track status (`ON_TRACK`, `BEHIND`, `DONE`, `OVERDUE`).
-  - `SavingsRepository`: atomic operations for goal creation, editing, deposit, withdrawal, status transitions, and account earmark evaluation.
-  - UI screens: `SavingHomeScreen` (summary hero, goal list with progress rings, earmark warning banner), `GoalDetailScreen` (ring, contribution timeline, deposit/withdrawal sheets), and `GoalEditSheet`.
-- **Phase 2 (M14): Monthly Plan, Month Close & Emergency Fund:**
-  - `SavingsPlanner` monthly target allocations snapshotted in `savings_plan_entries`.
-  - Month close surplus allocation proposal hook in `MonthCloseEngine`.
-  - Emergency fund ratio: savings balance divided by average monthly spend over last 3–6 closed periods (stored as tenths of a month in a `Long`).
-- **Phase 3 (M15): Recurring Commitments & Fixed Deposits:**
-  - `CommitmentScheduler` local reminder worker.
-  - Notification parsing auto-matching for SIP/auto-debits with confirm-first flow.
-  - `FdCalculator` integer math maturity accrued interest calculator.
-- **Phase 4 (M16): Habits & Micro-rules (Optional):**
-  - Virtual round-ups and income allocation rules generating `savings_contributions` with `source = RULE`.
-- **Phase 5 (M17): Manager/Saving Mode & Security Separation (D012):**
-  - Lock screen mode selection, `AppMode` session state, dedicated `SavingNavGraph`, and biometric/PIN isolation.
+### 18.3 Phase Architecture & Implementation (M13–M17)
+
+1. **Phase 1 (M13): Goals & Contributions:**
+   - **Data Model:** `savings_goals` and `savings_contributions` tables in Room Database Schema v3.
+   - **Calculator (`SavingsCalculator`):** Computes goal balance, progress in basis points ($10{,}000 = 100\%$), remaining amount, required monthly allocation (via ceiling division over months remaining), and on-track status (`ON_TRACK`, `BEHIND`, `DONE`, `OVERDUE`).
+   - **Repository (`SavingsRepository`):** Atomic operations for goal lifecycle (create, edit, pause, resume, complete, archive), deposits and withdrawals. Evaluates account balance earmark constraints (D011) to surface soft warnings when earmarked funds exceed physical bank balances.
+   - **UI Experience:** `SavingHomeScreen` with total earmarked hero, active/completed counts, ring progress cards, and soft warning banners; `GoalDetailScreen` with timeline contributions, progress ring, and deposit/withdrawal sheets.
+
+2. **Phase 2 (M14): Monthly Plan, Month Close Surplus & Emergency Fund:**
+   - **Monthly Plan:** Target allocation splitting across active goals snapshotted into `savings_plan_entries`.
+   - **Month-Close Surplus Hook:** `MonthCloseEngine` provides an optional post-close step to sweep residual monthly surplus directly into a savings goal.
+   - **Emergency Fund Ratio (`EmergencyFundCalculator`):** Computes months covered as:
+     $$\text{MonthsCoveredTenths} = \frac{\text{TotalSavedPaise} \times 10}{\text{AverageMonthlyExpensePaise}}$$
+     Lookback spans 3–6 closed budget periods. Rendered via `ProgressBarRender` against a 6.0-month target.
+
+3. **Phase 3 (M15): Recurring Commitments & Fixed Deposits:**
+   - **Recurring Commitments:** Manages SIP, RD, Chit, and Gold investments in `recurring_commitments` with due-day tracking, linked accounts, and monthly payment statuses in `commitment_payments`.
+   - **Fixed Deposit Engine (`FdCalculator`):** Integer math calculating accrued interest and maturity values for `SIMPLE` and `QUARTERLY` compounding from integer basis point rates (`rate_bp`):
+     $$\text{Simple: } M = P + \frac{P \times r \times t}{10{,}000 \times 365} \quad (\text{half-up rounded integer division})$$
+     $$\text{Quarterly: } M = P \times \prod_{k=1}^{N} \left(1 + \frac{r}{40{,}000}\right) \quad (\text{pure 64-bit integer iterative math})$$
+   - **Notifications & Scheduling:** Offline WorkManager reminders scheduled a day prior to commitment due dates.
+
+4. **Phase 4 (M16): Habits, Micro-Rules & Milestone Badges:**
+   - **Habits Engine (`HabitCalculator`):**
+     - Virtual Round-Ups: Computes round-up paise to the nearest ₹10, ₹50, or ₹100 on expenses.
+     - Income Rules: Calculates percentage allocations (in basis points) for income exceeding a minimum threshold.
+     - All habit contributions are tagged with `source = SavingsContributionSource.RULE`, ensuring complete traceability and auditability.
+   - **Milestones & Badges (`SavingsMilestoneEvaluator`):**
+     - Evaluates 8 distinct milestones: First Goal Created, First Deposit, 3-Month Emergency Fund, 6-Month Emergency Fund, ₹10K Club, ₹50K Milestone, ₹1 Lakh Silver Saver, and Goal Crusher.
+     - Computes unlock status and integer basis point progress for visual display on `SavingHomeScreen`.
+
+5. **Phase 5 (M17): Manager/Saving Mode & Security Separation (D012):**
+   - **Mode State (`AppMode`):** Application operates in either `MANAGER` (full financial administration) or `SAVING` (focused savings tracking).
+   - **Lock Screen Tabs:** `MpinLockScreen` features top tabs allowing the user to select their desired mode prior to MPIN entry.
+   - **Dedicated `SavingNavGraph`:** In `SAVING` mode, the Manager bottom bar and all Manager screens (Dashboard, Transactions, Budget Envelopes, Accounts, Month Close, Backup/Restore) are excluded from the composition tree. Zero financial management data is reachable.
+   - **Step-Up Authentication:** Elevating from Saving mode to Manager mode triggers `MainViewModel.lockForModeSwitch(AppMode.MANAGER)`, requiring full MPIN re-verification. Auto-lock remembers the active mode while returning to the secure lock screen.
+
 
 

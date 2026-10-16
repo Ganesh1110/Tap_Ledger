@@ -102,6 +102,16 @@ It automatically captures bank and UPI payment notifications, classifies spendin
 - **Safe Encrypted Backups**: Uses SQLite `VACUUM INTO` snapshots with `PRAGMA integrity_check`.
 - **Restore Notification Buffer**: Spools incoming notifications during backup restores to prevent data loss.
 
+### 9. Dedicated Savings & Goals Module (M13–M17)
+
+- **Earmark-Not-Transaction Model (D011)**: Goals represent virtual allocations on existing accounts, strictly preserving account balances and Net Worth ("Transaction = Financial Fact").
+- **Savings Goals & Progress Rings**: Target amounts, deadlines, priority levels, and monthly required allocation pacing using pure integer ceiling division.
+- **Emergency Fund Gauge**: Live calculation of months of expenses covered based on trailing 3–6 closed period spending.
+- **Recurring Commitments & Fixed Deposits**: Track SIPs, RDs, Chits, and Gold investments with local due-date reminders; offline FD maturity and accrued interest calculator (`FdCalculator`).
+- **Habits & Micro-Rules**: Virtual expense round-ups (nearest ₹10, ₹50, ₹100) and income allocation rules generating audited rule contributions (`source = RULE`).
+- **Milestones & Badges Engine**: Dynamic badge evaluation (`SavingsMilestoneEvaluator`) celebrating saving debuts, emergency fund shields, and cumulative savings milestones.
+- **Manager/Saving Dual-Mode Security (D012)**: Lock screen mode tabs (`Manager` vs `Saving`), dedicated `SavingNavGraph` completely isolating administrative/budget features, and step-up MPIN gating for Manager elevation.
+
 ---
 
 ## Directory Structure
@@ -132,15 +142,15 @@ TapLedger/
 │   │   │   └── ui/
 │   │   │       ├── charts/       # Canvas Chart Builders, Renders, Tooltips, Pattern Legends
 │   │   │       ├── components/   # Shared UI Cards, Money Text, Status Badges, Skeletons
-│   │   │       ├── navigation/   # TapLedgerNavGraph, MainScaffold, MainViewModel
+│   │   │       ├── navigation/   # TapLedgerNavGraph, SavingNavGraph, MainScaffold, MainViewModel
 │   │   │       ├── screens/      # Dashboard, Pending Inbox, Transactions, Accounts,
 │   │   │       │                 # Categories, Statement Reconciliation, Month Close,
-│   │   │       │                 # MPIN Lock, Backup/Restore, Data Diagnostics, Insights
+│   │   │       │                 # MPIN Lock, Backup/Restore, Data Diagnostics, Insights, Saving
 │   │   │       └── theme/        # Color, Type, Spacing, Motion, Chart Palette
 │   └── src/test/
 │       └── java/com/tapledger/   # Unit test suite (Money, Dates, Calculators, Parsers,
-│                                 # Reconciliation, MPIN Security, Backup/Restore)
-├── decisions.md                  # Architectural decision log (D001-D010)
+│                                 # Reconciliation, MPIN Security, Backup/Restore, Savings)
+├── decisions.md                  # Architectural decision log (D001-D012)
 └── build.gradle.kts / settings.gradle.kts
 ```
 
@@ -162,6 +172,11 @@ TapLedger/
 - [x] **M10 — App Security & Lock**: Argon2id password hashing via BouncyCastle, KeyStore salt management, MPIN setup, keypad lock screen, step-up auth.
 - [x] **M11 — Category & Budget Management**: Bucket allocations, advance rules, intra-month budget transfers, envelope progress bars.
 - [x] **M12 — Xiaomi 15 / HyperOS Reliability**: Setup checklist, autostart/battery optimization guidance, universal settings fallbacks.
+- [x] **M13 — Savings Goals & Contributions**: Database schema v3 migration, `SavingsCalculator`, atomic repository boundaries, progress rings, deposit/withdraw sheets, soft earmark warnings.
+- [x] **M14 — Monthly Plan, Month Close & Emergency Fund**: `SavingsPlanner`, month close surplus hook, emergency fund coverage calculator.
+- [x] **M15 — Commitments (SIP/RD) & Fixed Deposits**: Recurring commitment tracking, `FdCalculator` integer maturity calculator, local notification reminders.
+- [x] **M16 — Habits, Micro-Rules & Milestones**: Virtual round-ups, income allocation rules, `SavingsMilestoneEvaluator` badge engine.
+- [x] **M17 — Manager/Saving Mode & Security Separation**: Lock screen mode tabs, `AppMode` session state, dedicated `SavingNavGraph`, step-up MPIN gating for administrative actions.
 
 ---
 
