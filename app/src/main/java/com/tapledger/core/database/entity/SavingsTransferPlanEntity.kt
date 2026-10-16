@@ -73,3 +73,21 @@ data class SavingsTransferPlanEntity(
     @ColumnInfo(name = "verified_at")
     val verifiedAt: Long? = null
 )
+
+fun SavingsTransferPlanEntity.toJsonSnapshot(): String = buildString {
+    append("{")
+    append("\"id\":$id,")
+    append("\"periodId\":$periodId,")
+    append("\"kind\":\"${kind.name}\",")
+    append("\"sourceAccountId\":$sourceAccountId,")
+    append("\"destAccountId\":$destAccountId,")
+    append("\"suggestedPaise\":$suggestedPaise,")
+    append("\"movedPaise\":$movedPaise,")
+    append("\"status\":\"${status.name}\",")
+    append("\"transferGroupId\":\"$transferGroupId\",")
+    append("\"triggerTransactionId\":$triggerTransactionId,")
+    append("\"createdAt\":$createdAt,")
+    append("\"movedAt\":$movedAt,")
+    append("\"verifiedAt\":$verifiedAt")
+    append("}")
+}

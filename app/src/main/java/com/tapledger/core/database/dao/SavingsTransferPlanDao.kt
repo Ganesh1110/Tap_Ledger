@@ -64,4 +64,7 @@ interface SavingsTransferPlanDao {
 
     @Query("UPDATE savings_transfer_plans SET status = 'EXPIRED' WHERE period_id = :periodId AND status = 'SUGGESTED'")
     suspend fun expireSuggestedPlansForPeriod(periodId: Long)
+
+    @Query("SELECT * FROM savings_transfer_plans ORDER BY created_at DESC")
+    suspend fun getAllPlansSync(): List<SavingsTransferPlanEntity>
 }

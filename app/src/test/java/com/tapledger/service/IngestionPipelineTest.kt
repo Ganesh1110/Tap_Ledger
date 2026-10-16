@@ -8,6 +8,7 @@ import com.tapledger.core.database.dao.BudgetAdjustmentDao
 import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
+import com.tapledger.core.database.dao.SavingsTransferPlanDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.dao.UnparsedAlertDao
 import com.tapledger.core.database.entity.AccountEntity
@@ -17,6 +18,7 @@ import com.tapledger.core.database.entity.BudgetAdjustmentEntity
 import com.tapledger.core.database.entity.BudgetAllocationEntity
 import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.CategoryEntity
+import com.tapledger.core.database.entity.SavingsTransferPlanEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.database.entity.UnparsedAlertEntity
 import com.tapledger.core.model.AccountType
@@ -27,6 +29,8 @@ import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
+import com.tapledger.core.model.TransferPlanKind
+import com.tapledger.core.model.TransferPlanStatus
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.BudgetRepository
 import com.tapledger.parser.NotificationEvent
@@ -132,10 +136,67 @@ class IngestionPipelineTest {
             endWindow: Long
         ): List<TransactionEntity> = emptyList()
 
-        override suspend fun getTransferLegs(transferGroupId: String): List<TransactionEntity> = emptyList()
+        override suspend fun getTransferLegs(transferGroupId: String): List<TransactionEntity> =
+            storage.values.filter { it.transferGroupId == transferGroupId }
         override suspend fun getRefundsForTransaction(originalTransactionId: Long): List<TransactionEntity> = emptyList()
         override suspend fun getTransactionsForAccountSync(accountId: Long): List<TransactionEntity> =
             storage.values.filter { it.accountId == accountId }
+    }
+
+    private class FakeSavingsTransferPlanDao : SavingsTransferPlanDao {
+        val plans = mutableListOf<SavingsTransferPlanEntity>()
+        private var nextId = 1L
+
+        override suspend fun insertOrUpdate(plan: SavingsTransferPlanEntity): Long {
+            val existingIdx = plans.indexOfFirst { it.periodId == plan.periodId && it.kind == plan.kind }
+            return if (existingIdx >= 0) {
+                plans[existingIdx] = plan.copy(id = plans[existingIdx].id)
+                plans[existingIdx].id
+            } else {
+                insert(plan)
+            }
+        }
+
+        override suspend fun insert(plan: SavingsTransferPlanEntity): Long {
+            val id = if (plan.id == 0L) nextId++ else plan.id
+            plans.add(plan.copy(id = id))
+            return id
+        }
+
+        override suspend fun update(plan: SavingsTransferPlanEntity) {
+            val idx = plans.indexOfFirst { it.id == plan.id }
+            if (idx >= 0) plans[idx] = plan
+        }
+
+        override suspend fun delete(plan: SavingsTransferPlanEntity) {
+            plans.removeAll { it.id == plan.id }
+        }
+
+        override suspend fun getById(id: Long): SavingsTransferPlanEntity? = plans.find { it.id == id }
+        override fun getByIdFlow(id: Long): Flow<SavingsTransferPlanEntity?> = emptyFlow()
+        override suspend fun getByPeriodAndKind(periodId: Long, kind: TransferPlanKind): SavingsTransferPlanEntity? =
+            plans.find { it.periodId == periodId && it.kind == kind }
+        override fun getByPeriodAndKindFlow(periodId: Long, kind: TransferPlanKind): Flow<SavingsTransferPlanEntity?> = emptyFlow()
+        override suspend fun getPlansForPeriod(periodId: Long): List<SavingsTransferPlanEntity> =
+            plans.filter { it.periodId == periodId }.sortedByDescending { it.createdAt }
+        override fun getPlansForPeriodFlow(periodId: Long): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override fun getActivePlansForPeriodFlow(periodId: Long): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override suspend fun getPlansByStatus(status: TransferPlanStatus): List<SavingsTransferPlanEntity> =
+            plans.filter { it.status == status }.sortedByDescending { it.createdAt }
+        override fun getPlansByStatusFlow(status: TransferPlanStatus): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override suspend fun getByTransferGroupId(transferGroupId: String): SavingsTransferPlanEntity? =
+            plans.find { it.transferGroupId == transferGroupId }
+        override suspend fun findMarkedMovedPlans(): List<SavingsTransferPlanEntity> =
+            plans.filter { it.status == TransferPlanStatus.MARKED_MOVED }
+        override fun findMarkedMovedPlansFlow(): Flow<List<SavingsTransferPlanEntity>> = emptyFlow()
+        override suspend fun expireSuggestedPlansForPeriod(periodId: Long) {
+            for (i in plans.indices) {
+                if (plans[i].periodId == periodId && plans[i].status == TransferPlanStatus.SUGGESTED) {
+                    plans[i] = plans[i].copy(status = TransferPlanStatus.EXPIRED)
+                }
+            }
+        }
+        override suspend fun getAllPlansSync(): List<SavingsTransferPlanEntity> = plans
     }
 
     private class FakeAccountDao : AccountDao {
@@ -308,6 +369,7 @@ class IngestionPipelineTest {
     private lateinit var budgetAdjustmentDao: FakeBudgetAdjustmentDao
     private lateinit var unparsedAlertDao: FakeUnparsedAlertDao
     private lateinit var auditLogDao: FakeAuditLogDao
+    private lateinit var savingsTransferPlanDao: FakeSavingsTransferPlanDao
     private lateinit var budgetRepository: BudgetRepository
     private lateinit var pipeline: FinancialIngestionPipeline
 
@@ -322,6 +384,7 @@ class IngestionPipelineTest {
             budgetAdjustmentDao = FakeBudgetAdjustmentDao()
             unparsedAlertDao = FakeUnparsedAlertDao()
             auditLogDao = FakeAuditLogDao()
+            savingsTransferPlanDao = FakeSavingsTransferPlanDao()
 
             budgetRepository = BudgetRepository(
                 transactionRunner = DirectTransactionRunner(),
@@ -338,16 +401,32 @@ class IngestionPipelineTest {
                 budgetPeriodDao = budgetPeriodDao,
                 budgetRepository = budgetRepository,
                 unparsedAlertDao = unparsedAlertDao,
-                auditLogDao = auditLogDao
+                auditLogDao = auditLogDao,
+                savingsTransferPlanDao = savingsTransferPlanDao
             )
 
-            // Seed default active account
+            // Seed default active account (HDFC)
             accountDao.insert(
                 AccountEntity(
                     id = 1L,
                     name = "HDFC Salary",
                     type = AccountType.BANK,
                     identifierLast4 = "1234",
+                    openingBalancePaise = 0L,
+                    openingBalanceDate = 1700000000000L,
+                    isActive = true,
+                    createdAt = 1700000000000L,
+                    updatedAt = 1700000000000L
+                )
+            )
+
+            // Seed destination savings account (SBI)
+            accountDao.insert(
+                AccountEntity(
+                    id = 2L,
+                    name = "SBI Savings",
+                    type = AccountType.BANK,
+                    identifierLast4 = "5678",
                     openingBalancePaise = 0L,
                     openingBalanceDate = 1700000000000L,
                     isActive = true,
@@ -658,5 +737,157 @@ class IngestionPipelineTest {
 
         // Must NOT pollute unparsed_alerts
         assertThat(unparsedAlertDao.alerts).isEmpty()
+    }
+
+    @Test
+    fun testAlertAdoption_markedMovedPlanAdoptedByIncomingAlert() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        val plan = SavingsTransferPlanEntity(
+            id = 1L,
+            periodId = 1L,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1L, // HDFC (1234)
+            destAccountId = 2L,   // SBI (5678)
+            suggestedPaise = 10_000_00L,
+            movedPaise = 10_000_00L,
+            status = TransferPlanStatus.MARKED_MOVED,
+            transferGroupId = "xfer-101",
+            movedAt = now - 60_000L,
+            createdAt = now - 120_000L
+        )
+        savingsTransferPlanDao.insert(plan)
+
+        // Seed the 2 transfer legs in transactionDao
+        val outLeg = TransactionEntity(
+            id = 101L,
+            accountId = 1L,
+            kind = TransactionKind.TRANSFER,
+            direction = TransactionDirection.OUT,
+            amountPaise = 10_000_00L,
+            status = TransactionStatus.CATEGORIZED,
+            source = TransactionSource.MANUAL,
+            transferGroupId = "xfer-101",
+            occurredAt = now - 60_000L,
+            createdAt = now - 60_000L,
+            updatedAt = now - 60_000L
+        )
+        val inLeg = TransactionEntity(
+            id = 102L,
+            accountId = 2L,
+            kind = TransactionKind.TRANSFER,
+            direction = TransactionDirection.IN,
+            amountPaise = 10_000_00L,
+            status = TransactionStatus.CONFIRMED,
+            source = TransactionSource.MANUAL,
+            transferGroupId = "xfer-101",
+            occurredAt = now - 60_000L,
+            createdAt = now - 60_000L,
+            updatedAt = now - 60_000L
+        )
+        transactionDao.insert(outLeg)
+        transactionDao.insert(inLeg)
+
+        // Incoming bank alert on SBI credit
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "SBI",
+            text = "Dear UPI user A/C 5678 credited by Rs. 10,000.00 on 08Oct26 via UPI Ref 429182374928. Avl Bal: Rs 50,000.00",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        assertThat(result).isInstanceOf(IngestionResult.AdoptedPlanVerification::class.java)
+
+        val adopted = result as IngestionResult.AdoptedPlanVerification
+        assertThat(adopted.planId).isEqualTo(1L)
+        assertThat(adopted.legTransactionId).isEqualTo(102L)
+        assertThat(adopted.upiReference).isEqualTo("429182374928")
+
+        // Verify plan is updated to VERIFIED
+        val updatedPlan = savingsTransferPlanDao.getById(1L)
+        assertThat(updatedPlan?.status).isEqualTo(TransferPlanStatus.VERIFIED)
+        assertThat(updatedPlan?.verifiedAt).isNotNull()
+
+        // Verify IN leg updated with upiReference and checkpoint balance
+        val updatedInLeg = transactionDao.getById(102L)
+        assertThat(updatedInLeg?.upiReference).isEqualTo("429182374928")
+        assertThat(updatedInLeg?.checkpointBalancePaise).isEqualTo(50_000_00L)
+
+        // Verify audit log has PLAN_ADOPTED
+        val audits = auditLogDao.getForTransactionSync(102L)
+        assertThat(audits.any { it.action == AuditAction.PLAN_ADOPTED }).isTrue()
+
+        // Zero duplicate transactions created
+        assertThat(transactionDao.getAllTransactionsSync()).hasSize(2)
+    }
+
+    @Test
+    fun testAlertAdoption_amountMismatch_fallsThroughToRegularDedupe() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        val plan = SavingsTransferPlanEntity(
+            id = 2L,
+            periodId = 1L,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1L,
+            destAccountId = 2L,
+            suggestedPaise = 10_000_00L,
+            movedPaise = 10_000_00L,
+            status = TransferPlanStatus.MARKED_MOVED,
+            transferGroupId = "xfer-102",
+            movedAt = now - 60_000L,
+            createdAt = now - 120_000L
+        )
+        savingsTransferPlanDao.insert(plan)
+
+        // Alert arrives with different amount (Rs. 8,000.00 instead of 10,000.00)
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "SBI",
+            text = "Dear UPI user A/C 5678 credited by Rs. 8,000.00 on 08Oct26 via UPI Ref 999988887777. Avl Bal: Rs 48,000.00",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        // Must NOT be adopted into plan; falls through to normal ingestion
+        assertThat(result).isNotInstanceOf(IngestionResult.AdoptedPlanVerification::class.java)
+
+        // Plan remains MARKED_MOVED
+        val currentPlan = savingsTransferPlanDao.getById(2L)
+        assertThat(currentPlan?.status).isEqualTo(TransferPlanStatus.MARKED_MOVED)
+    }
+
+    @Test
+    fun testAlertAdoption_outsideWindow_fallsThrough() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        val eightDaysAgo = now - (8L * 86_400_000L)
+        val plan = SavingsTransferPlanEntity(
+            id = 3L,
+            periodId = 1L,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1L,
+            destAccountId = 2L,
+            suggestedPaise = 10_000_00L,
+            movedPaise = 10_000_00L,
+            status = TransferPlanStatus.MARKED_MOVED,
+            transferGroupId = "xfer-103",
+            movedAt = eightDaysAgo,
+            createdAt = eightDaysAgo
+        )
+        savingsTransferPlanDao.insert(plan)
+
+        // Alert arrives now (> 7 days after movedAt)
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "SBI",
+            text = "Dear UPI user A/C 5678 credited by Rs. 10,000.00 on 08Oct26 via UPI Ref 111122223333. Avl Bal: Rs 50,000.00",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        // Outside 7-day window must NOT be adopted silently
+        assertThat(result).isNotInstanceOf(IngestionResult.AdoptedPlanVerification::class.java)
+
+        val currentPlan = savingsTransferPlanDao.getById(3L)
+        assertThat(currentPlan?.status).isEqualTo(TransferPlanStatus.MARKED_MOVED)
     }
 }

@@ -19,6 +19,10 @@ import com.tapledger.data.repository.BudgetRepository
 import com.tapledger.parser.FinancialNotificationParser
 import com.tapledger.parser.NotificationEvent
 import com.tapledger.parser.ParsedFinancialEvent
+import com.tapledger.core.database.dao.SavingsTransferPlanDao
+import com.tapledger.core.database.entity.toJsonSnapshot
+import com.tapledger.core.model.TransactionDirection
+import com.tapledger.core.model.TransferPlanStatus
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -31,6 +35,12 @@ sealed interface IngestionResult {
         val possibleDuplicateOfId: Long?,
         val resolvedAccountId: Long?,
         val parsedEvent: ParsedFinancialEvent
+    ) : IngestionResult
+
+    data class AdoptedPlanVerification(
+        val planId: Long,
+        val legTransactionId: Long,
+        val upiReference: String?
     ) : IngestionResult
 
     data class DroppedSystemDuplicate(val hash: String) : IngestionResult
@@ -48,7 +58,8 @@ class FinancialIngestionPipeline @Inject constructor(
     private val budgetPeriodDao: BudgetPeriodDao,
     private val budgetRepository: BudgetRepository,
     private val unparsedAlertDao: UnparsedAlertDao,
-    private val auditLogDao: AuditLogDao
+    private val auditLogDao: AuditLogDao,
+    private val savingsTransferPlanDao: SavingsTransferPlanDao
 ) {
 
     // 60-second in-memory circular/TTL cache for raw system events
@@ -98,6 +109,59 @@ class FinancialIngestionPipeline @Inject constructor(
 
         // 3. Step 1: Resolve Account Attribution (Flow.md §3.1)
         val resolvedAccountId = resolveAccount(parsed)
+
+        // 3.5 Alert Adoption Intercept (Flow.md §18, D014, Milestone M20)
+        // Adopts matching bank alert into an active MARKED_MOVED savings transfer plan
+        if (resolvedAccountId != null) {
+            val markedMovedPlans = savingsTransferPlanDao.findMarkedMovedPlans()
+            val matchedPlan = markedMovedPlans.firstOrNull { plan ->
+                plan.movedPaise == parsed.amountPaise &&
+                ((plan.sourceAccountId == resolvedAccountId && parsed.direction == TransactionDirection.OUT) ||
+                 (plan.destAccountId == resolvedAccountId && parsed.direction == TransactionDirection.IN)) &&
+                kotlin.math.abs(parsed.occurredAt - (plan.movedAt ?: plan.createdAt)) <= 7L * 86_400_000L
+            }
+
+            if (matchedPlan != null && matchedPlan.transferGroupId != null) {
+                val legs = transactionDao.getTransferLegs(matchedPlan.transferGroupId)
+                val matchingLeg = legs.firstOrNull { it.accountId == resolvedAccountId && it.direction == parsed.direction }
+
+                if (matchingLeg != null) {
+                    val updatedLeg = matchingLeg.copy(
+                        upiReference = parsed.upiReference ?: matchingLeg.upiReference,
+                        checkpointBalancePaise = parsed.reportedAvailableBalancePaise ?: matchingLeg.checkpointBalancePaise,
+                        checkpointType = parsed.checkpointType ?: matchingLeg.checkpointType,
+                        sourceFingerprint = matchingLeg.sourceFingerprint ?: parsed.sourceFingerprint,
+                        updatedAt = now
+                    )
+                    transactionDao.update(updatedLeg)
+
+                    val updatedPlan = matchedPlan.copy(
+                        status = TransferPlanStatus.VERIFIED,
+                        verifiedAt = now
+                    )
+                    savingsTransferPlanDao.update(updatedPlan)
+
+                    val accountName = accountDao.getById(resolvedAccountId)?.name ?: "bank"
+                    val alertType = if (parsed.direction == TransactionDirection.IN) "SBI credit alert" else "HDFC debit alert"
+                    auditLogDao.insert(
+                        AuditLogEntity(
+                            transactionId = matchingLeg.id,
+                            action = AuditAction.PLAN_ADOPTED,
+                            beforeSnapshotJson = matchedPlan.toJsonSnapshot(),
+                            afterSnapshotJson = updatedPlan.toJsonSnapshot(),
+                            reason = "Verified by $alertType ($accountName)",
+                            createdAt = now
+                        )
+                    )
+
+                    return IngestionResult.AdoptedPlanVerification(
+                        planId = matchedPlan.id,
+                        legTransactionId = matchingLeg.id,
+                        upiReference = parsed.upiReference
+                    )
+                }
+            }
+        }
 
         // 4. Step 2: Deduplication Check (Flow.md §3.1, §3.2)
         // Check 2.0: Exact match with source_fingerprint (Exact notification redelivery / duplicate)

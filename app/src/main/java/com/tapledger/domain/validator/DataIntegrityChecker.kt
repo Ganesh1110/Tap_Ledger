@@ -11,6 +11,7 @@ import com.tapledger.core.database.entity.StatementImportEntity
 import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
+import com.tapledger.core.model.AccountType
 import com.tapledger.core.model.AdvanceDirection
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.BudgetPeriodStatus
@@ -47,39 +48,11 @@ open class DataIntegrityChecker @Inject constructor() {
         adjustments: List<BudgetAdjustmentEntity> = emptyList(),
         advances: List<AdvanceLedgerEntity> = emptyList(),
         statementImports: List<StatementImportEntity> = emptyList(),
-        statementLines: List<StatementLineEntity> = emptyList()
-    ): List<IntegrityIssue> {
-        return verifyIntegrity(
-            accounts = accounts,
-            categories = categories,
-            periods = periods,
-            allocations = allocations,
-            transactions = transactions,
-            transactionAllocations = transactionAllocations,
-            monthCloses = monthCloses,
-            adjustments = adjustments,
-            advances = advances,
-            statementImports = statementImports,
-            statementLines = statementLines,
-            savingsGoals = emptyList(),
-            savingsContributions = emptyList()
-        )
-    }
-
-    open fun verifyIntegrity(
-        accounts: List<AccountEntity>,
-        categories: List<CategoryEntity>,
-        periods: List<BudgetPeriodEntity>,
-        allocations: List<BudgetAllocationEntity>,
-        transactions: List<TransactionEntity>,
-        transactionAllocations: List<TransactionAllocationEntity>,
-        monthCloses: List<MonthCloseEntity>,
-        adjustments: List<BudgetAdjustmentEntity>,
-        advances: List<AdvanceLedgerEntity>,
-        statementImports: List<StatementImportEntity>,
-        statementLines: List<StatementLineEntity>,
-        savingsGoals: List<com.tapledger.core.database.entity.SavingsGoalEntity>,
-        savingsContributions: List<com.tapledger.core.database.entity.SavingsContributionEntity>
+        statementLines: List<StatementLineEntity> = emptyList(),
+        savingsGoals: List<com.tapledger.core.database.entity.SavingsGoalEntity> = emptyList(),
+        savingsContributions: List<com.tapledger.core.database.entity.SavingsContributionEntity> = emptyList(),
+        savingsTransferPlans: List<com.tapledger.core.database.entity.SavingsTransferPlanEntity> = emptyList(),
+        nowEpochMs: Long = com.tapledger.core.util.DateTimeUtils.nowEpochMillis()
     ): List<IntegrityIssue> {
         val issues = mutableListOf<IntegrityIssue>()
 
@@ -665,6 +638,120 @@ open class DataIntegrityChecker @Inject constructor() {
                         severity = IntegritySeverity.ERROR
                     )
                 )
+            }
+        }
+
+        // =============================================================
+        // 12. Savings Transfer Plan Rules (Flow.md §18, D013, D014, Milestone M20)
+        // =============================================================
+        for (plan in savingsTransferPlans) {
+            // Rule SP1_TRANSFER_LEGS_MISMATCH (CRITICAL):
+            // A marked or verified plan's transfer legs must match moved_paise
+            if (plan.status == com.tapledger.core.model.TransferPlanStatus.MARKED_MOVED ||
+                plan.status == com.tapledger.core.model.TransferPlanStatus.VERIFIED
+            ) {
+                val movedPaise = plan.movedPaise
+                if (movedPaise == null) {
+                    issues.add(
+                        IntegrityIssue(
+                            ruleId = "SP1_TRANSFER_LEGS_MISMATCH",
+                            message = "Savings transfer plan #${plan.id} in status ${plan.status} has no movedPaise",
+                            entityType = "SavingsTransferPlan",
+                            entityId = plan.id.toString(),
+                            severity = IntegritySeverity.CRITICAL
+                        )
+                    )
+                } else if (plan.transferGroupId == null) {
+                    issues.add(
+                        IntegrityIssue(
+                            ruleId = "SP1_TRANSFER_LEGS_MISMATCH",
+                            message = "Savings transfer plan #${plan.id} has movedPaise ($movedPaise) but no transferGroupId",
+                            entityType = "SavingsTransferPlan",
+                            entityId = plan.id.toString(),
+                            severity = IntegritySeverity.CRITICAL
+                        )
+                    )
+                } else {
+                    val legs = transactions.filter { it.transferGroupId == plan.transferGroupId }
+                    if (legs.isEmpty()) {
+                        issues.add(
+                            IntegrityIssue(
+                                ruleId = "SP1_TRANSFER_LEGS_MISMATCH",
+                                message = "Savings transfer plan #${plan.id} transfer legs not found for transferGroupId ${plan.transferGroupId}",
+                                entityType = "SavingsTransferPlan",
+                                entityId = plan.id.toString(),
+                                severity = IntegritySeverity.CRITICAL
+                            )
+                        )
+                    } else {
+                        for (leg in legs) {
+                            if (leg.amountPaise != movedPaise) {
+                                issues.add(
+                                    IntegrityIssue(
+                                        ruleId = "SP1_TRANSFER_LEGS_MISMATCH",
+                                        message = "Savings transfer plan #${plan.id} transfer leg #${leg.id} amount (${leg.amountPaise} paise) does not match movedPaise ($movedPaise paise)",
+                                        entityType = "Transaction",
+                                        entityId = leg.id.toString(),
+                                        severity = IntegritySeverity.CRITICAL
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Rule SP2_INVALID_SAVINGS_TRANSFER_ACCOUNTS (ERROR):
+            // source != destination, and destination must be a valid bank/savings account
+            if (plan.sourceAccountId == plan.destAccountId) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "SP2_INVALID_SAVINGS_TRANSFER_ACCOUNTS",
+                        message = "Savings transfer plan #${plan.id} has identical source and destination account #${plan.sourceAccountId}",
+                        entityType = "SavingsTransferPlan",
+                        entityId = plan.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+            val destAccount = accounts.find { it.id == plan.destAccountId }
+            if (destAccount == null) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "SP2_INVALID_SAVINGS_TRANSFER_ACCOUNTS",
+                        message = "Savings transfer plan #${plan.id} destination account #${plan.destAccountId} does not exist",
+                        entityType = "SavingsTransferPlan",
+                        entityId = plan.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            } else if (destAccount.type == AccountType.CREDIT_CARD || destAccount.type == AccountType.LOAN) {
+                issues.add(
+                    IntegrityIssue(
+                        ruleId = "SP2_INVALID_SAVINGS_TRANSFER_ACCOUNTS",
+                        message = "Savings transfer plan #${plan.id} destination account #${plan.destAccountId} is invalid type (${destAccount.type})",
+                        entityType = "SavingsTransferPlan",
+                        entityId = plan.id.toString(),
+                        severity = IntegritySeverity.ERROR
+                    )
+                )
+            }
+
+            // Rule SP3_UNVERIFIED_PLAN_STALE (WARNING):
+            // Plan unverified for more than 7 days
+            if (plan.status == com.tapledger.core.model.TransferPlanStatus.MARKED_MOVED) {
+                val timestamp = plan.movedAt ?: plan.createdAt
+                if (nowEpochMs - timestamp > 7L * 86_400_000L) {
+                    issues.add(
+                        IntegrityIssue(
+                            ruleId = "SP3_UNVERIFIED_PLAN_STALE",
+                            message = "Savings transfer plan #${plan.id} marked moved over 7 days ago without bank verification",
+                            entityType = "SavingsTransferPlan",
+                            entityId = plan.id.toString(),
+                            severity = IntegritySeverity.WARNING
+                        )
+                    )
+                }
             }
         }
 

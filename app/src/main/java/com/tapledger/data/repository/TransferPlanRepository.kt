@@ -7,6 +7,7 @@ import com.tapledger.core.database.dao.SavingsTransferPlanDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.AuditLogEntity
 import com.tapledger.core.database.entity.SavingsTransferPlanEntity
+import com.tapledger.core.database.entity.toJsonSnapshot
 import com.tapledger.core.model.AuditAction
 import com.tapledger.core.model.BudgetPeriodStatus
 import com.tapledger.core.model.TransferPlanKind
@@ -250,21 +251,39 @@ class TransferPlanRepository @Inject constructor(
     fun findMarkedMovedPlansFlow(): Flow<List<SavingsTransferPlanEntity>> =
         savingsTransferPlanDao.findMarkedMovedPlansFlow()
 
-    private fun SavingsTransferPlanEntity.toJsonSnapshot(): String = buildString {
-        append("{")
-        append("\"id\":$id,")
-        append("\"periodId\":$periodId,")
-        append("\"kind\":\"${kind.name}\",")
-        append("\"sourceAccountId\":$sourceAccountId,")
-        append("\"destAccountId\":$destAccountId,")
-        append("\"suggestedPaise\":$suggestedPaise,")
-        append("\"movedPaise\":$movedPaise,")
-        append("\"status\":\"${status.name}\",")
-        append("\"transferGroupId\":\"$transferGroupId\",")
-        append("\"triggerTransactionId\":$triggerTransactionId,")
-        append("\"createdAt\":$createdAt,")
-        append("\"movedAt\":$movedAt,")
-        append("\"verifiedAt\":$verifiedAt")
-        append("}")
+    /**
+     * Confirms a matching two-legged transfer detected by the user or system (Alerts-First Path, Flow.md §18, D014).
+     * Upgrades the plan from SUGGESTED to VERIFIED, links transferGroupId and records audit trail.
+     */
+    suspend fun confirmPlanFromMatchingTransfer(
+        planId: Long,
+        transferGroupId: String,
+        amountPaise: Long,
+        nowEpochMs: Long = DateTimeUtils.nowEpochMillis()
+    ) {
+        transactionRunner.run {
+            val plan = savingsTransferPlanDao.getById(planId)
+                ?: throw IllegalArgumentException("Savings transfer plan #$planId not found")
+
+            val updatedPlan = plan.copy(
+                status = TransferPlanStatus.VERIFIED,
+                movedPaise = amountPaise,
+                transferGroupId = transferGroupId,
+                movedAt = nowEpochMs,
+                verifiedAt = nowEpochMs
+            )
+            savingsTransferPlanDao.update(updatedPlan)
+
+            auditLogDao.insert(
+                AuditLogEntity(
+                    transactionId = null,
+                    action = AuditAction.PLAN_ADOPTED,
+                    beforeSnapshotJson = plan.toJsonSnapshot(),
+                    afterSnapshotJson = updatedPlan.toJsonSnapshot(),
+                    reason = "Plan confirmed from matching transfer group $transferGroupId",
+                    createdAt = nowEpochMs
+                )
+            )
+        }
     }
 }

@@ -240,6 +240,27 @@ class DashboardViewModel @Inject constructor(
                 val existingPlans = savingsTransferPlanDao.getPlansForPeriod(period.id)
                 val activePlan = existingPlans.firstOrNull { it.status != TransferPlanStatus.DISMISSED && it.status != TransferPlanStatus.EXPIRED }
 
+                // Alerts-first match detection (Flow.md §18, D014, Milestone M20)
+                val detectedMatch = if (activePlan?.status != TransferPlanStatus.VERIFIED) {
+                    val unlinkedOutTxs = periodTxs.filter { tx ->
+                        tx.transferGroupId != null &&
+                        tx.accountId == spendingAccount.id &&
+                        tx.direction == com.tapledger.core.model.TransactionDirection.OUT &&
+                        existingPlans.none { it.transferGroupId == tx.transferGroupId }
+                    }
+                    unlinkedOutTxs.firstNotNullOfOrNull { outTx ->
+                        val matchingIn = periodTxs.find { inTx ->
+                            inTx.transferGroupId == outTx.transferGroupId &&
+                            inTx.accountId == savingsAccount.id &&
+                            inTx.direction == com.tapledger.core.model.TransactionDirection.IN &&
+                            inTx.amountPaise == outTx.amountPaise
+                        }
+                        if (matchingIn != null && outTx.transferGroupId != null) {
+                            Pair(outTx.transferGroupId, outTx.amountPaise)
+                        } else null
+                    }
+                } else null
+
                 if (activePlan != null) {
                     TransferPlanDashboardState(
                         hasPlan = true,
@@ -252,7 +273,9 @@ class DashboardViewModel @Inject constructor(
                         movedPaise = activePlan.movedPaise,
                         spareCalculation = spareResult,
                         isSafetyGateActive = spareResult.isSafetyGateTriggered,
-                        safetyGateReason = spareResult.safetyGateReason
+                        safetyGateReason = spareResult.safetyGateReason,
+                        detectedMatchingTransferGroupId = detectedMatch?.first,
+                        detectedMatchingAmountPaise = detectedMatch?.second
                     )
                 } else {
                     val suggestedPaise = spareResult.paydaySuggestionPaise
@@ -277,7 +300,9 @@ class DashboardViewModel @Inject constructor(
                         movedPaise = null,
                         spareCalculation = spareResult,
                         isSafetyGateActive = spareResult.isSafetyGateTriggered,
-                        safetyGateReason = spareResult.safetyGateReason
+                        safetyGateReason = spareResult.safetyGateReason,
+                        detectedMatchingTransferGroupId = detectedMatch?.first,
+                        detectedMatchingAmountPaise = detectedMatch?.second
                     )
                 }
             } else null
@@ -388,6 +413,56 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             transferPlanRepository.dismissPlan(planId)
             loadDashboard()
+        }
+    }
+
+    fun confirmMatchingTransfer(
+        planId: Long,
+        transferGroupId: String,
+        amountPaise: Long,
+        onSuccess: (outTransactionId: Long, periodId: Long) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            try {
+                val targetPlan = if (planId > 0L) {
+                    savingsTransferPlanDao.getById(planId)
+                } else null
+
+                val currentPeriod = budgetRepository.getOrCreateBudgetPeriod(_uiState.value.currentYear, _uiState.value.currentMonth)
+                val effectivePlanId = if (targetPlan != null) {
+                    targetPlan.id
+                } else {
+                    val spendingId = savingsGuidePreferences.getConfig().spendingAccountId
+                        ?: _uiState.value.accountSummaries.find { it.account.type == AccountType.BANK }?.account?.id
+                        ?: 1L
+                    val savingsId = savingsGuidePreferences.getConfig().savingsAccountId
+                        ?: _uiState.value.accountSummaries.find { it.account.type == AccountType.BANK && it.account.id != spendingId }?.account?.id
+                        ?: 2L
+                    transferPlanRepository.createOrUpdateSuggestedPlan(
+                        periodId = currentPeriod.id,
+                        kind = TransferPlanKind.PAYDAY,
+                        sourceAccountId = spendingId,
+                        destAccountId = savingsId,
+                        suggestedPaise = amountPaise
+                    )
+                }
+
+                transferPlanRepository.confirmPlanFromMatchingTransfer(
+                    planId = effectivePlanId,
+                    transferGroupId = transferGroupId,
+                    amountPaise = amountPaise
+                )
+
+                val legs = transactionDao.getTransferLegs(transferGroupId)
+                val outLeg = legs.find { it.direction == com.tapledger.core.model.TransactionDirection.OUT }
+                val outLegId = outLeg?.id ?: 0L
+                val periodId = targetPlan?.periodId ?: currentPeriod.id
+
+                loadDashboard()
+                onSuccess(outLegId, periodId)
+            } catch (e: Exception) {
+                // handle error
+            }
         }
     }
 

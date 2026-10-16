@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.model.TransferPlanKind
 import com.tapledger.core.model.TransferPlanStatus
 import com.tapledger.domain.calculator.SpareCalculationResult
@@ -53,7 +54,9 @@ data class TransferPlanDashboardState(
     val movedPaise: Long? = null,
     val spareCalculation: SpareCalculationResult? = null,
     val isSafetyGateActive: Boolean = false,
-    val safetyGateReason: String? = null
+    val safetyGateReason: String? = null,
+    val detectedMatchingTransferGroupId: String? = null,
+    val detectedMatchingAmountPaise: Long? = null
 )
 
 @Composable
@@ -62,6 +65,7 @@ fun TransferPlanCard(
     onMoveNowClick: () -> Unit,
     onReviewClick: () -> Unit,
     onAllocateGoalsClick: () -> Unit,
+    onConfirmMatchingTransfer: (transferGroupId: String, amountPaise: Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -209,6 +213,50 @@ fun TransferPlanCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = Spacing.xs)
                     )
+                }
+            }
+
+            // Plan Match Detected Banner (Alerts-First Path, Flow.md §18, D014)
+            if (state.detectedMatchingTransferGroupId != null && state.detectedMatchingAmountPaise != null && state.status == TransferPlanStatus.SUGGESTED) {
+                Spacer(modifier = Modifier.height(Spacing.xs))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Transfer Match Detected",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "${MoneyFormatter.formatRupees(state.detectedMatchingAmountPaise)} ${state.sourceAccountName} → ${state.destAccountName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                onConfirmMatchingTransfer(
+                                    state.detectedMatchingTransferGroupId,
+                                    state.detectedMatchingAmountPaise
+                                )
+                            },
+                            contentPadding = ButtonDefaults.TextButtonContentPadding
+                        ) {
+                            Text("Confirm Match", fontSize = 12.sp)
+                        }
+                    }
                 }
             }
 

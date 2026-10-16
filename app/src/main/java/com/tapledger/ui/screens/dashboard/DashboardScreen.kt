@@ -596,6 +596,17 @@ fun DashboardScreen(
                                     showGoalAllocationSheet = true
                                 }
                             },
+                            onConfirmMatchingTransfer = { transferGroupId, amountPaise ->
+                                val planId = planState.planId ?: 0L
+                                viewModel.confirmMatchingTransfer(planId, transferGroupId, amountPaise) { outTxId, periodId ->
+                                    lastMovedInfo = MovedTransferInfo(
+                                        movedPaise = amountPaise,
+                                        outTransactionId = outTxId,
+                                        periodId = periodId
+                                    )
+                                    showGoalAllocationSheet = true
+                                }
+                            },
                             modifier = Modifier.padding(bottom = Spacing.xs)
                         )
                     }

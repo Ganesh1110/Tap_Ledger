@@ -115,6 +115,9 @@ class TransferPlanRepositoryTest {
                 storage[it.id] = it.copy(status = TransferPlanStatus.EXPIRED)
             }
         }
+
+        override suspend fun getAllPlansSync(): List<SavingsTransferPlanEntity> =
+            storage.values.toList()
     }
 
     private class FakeAuditLogDao : AuditLogDao {

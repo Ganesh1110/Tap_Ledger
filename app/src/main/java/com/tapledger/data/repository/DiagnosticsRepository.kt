@@ -34,9 +34,9 @@ class DiagnosticsRepository @Inject constructor(
     private val statementLineDao: StatementLineDao,
     private val auditLogDao: AuditLogDao,
     private val savingsGoalDao: com.tapledger.core.database.dao.SavingsGoalDao,
-    private val savingsContributionDao: com.tapledger.core.database.dao.SavingsContributionDao
+    private val savingsContributionDao: com.tapledger.core.database.dao.SavingsContributionDao,
+    private val savingsTransferPlanDao: com.tapledger.core.database.dao.SavingsTransferPlanDao
 ) {
-
 
     fun observeAuditLogs(limit: Int = 100): Flow<List<AuditLogEntity>> =
         auditLogDao.observeRecentAudits(limit)
@@ -55,6 +55,7 @@ class DiagnosticsRepository @Inject constructor(
         val statementLines = statementLineDao.getAllLinesSync()
         val savingsGoals = savingsGoalDao.getAllGoalsSync()
         val savingsContributions = savingsContributionDao.getAllContributionsSync()
+        val savingsTransferPlans = savingsTransferPlanDao.getAllPlansSync()
 
         val checker = DataIntegrityChecker()
         return checker.verifyIntegrity(
@@ -70,7 +71,8 @@ class DiagnosticsRepository @Inject constructor(
             statementImports = statementImports,
             statementLines = statementLines,
             savingsGoals = savingsGoals,
-            savingsContributions = savingsContributions
+            savingsContributions = savingsContributions,
+            savingsTransferPlans = savingsTransferPlans
         )
     }
 }

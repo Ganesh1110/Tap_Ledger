@@ -22,6 +22,9 @@ import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
+import com.tapledger.core.database.entity.SavingsTransferPlanEntity
+import com.tapledger.core.model.TransferPlanKind
+import com.tapledger.core.model.TransferPlanStatus
 import com.tapledger.domain.model.IntegritySeverity
 import org.junit.Test
 
@@ -767,6 +770,192 @@ class DataIntegrityCheckerTest {
         val sg3 = issues.find { it.ruleId == "SG3_ORPHANED_SAVINGS_CONTRIBUTION" }
         assertThat(sg3).isNotNull()
         assertThat(sg3!!.entityId).isEqualTo("12")
+    }
+
+    @Test
+    fun testSavingsTransferPlanIntegrity_SP1_SP2_SP3() {
+        val now = 10_000_000L
+
+        val sourceAccount = AccountEntity(
+            id = 1,
+            name = "HDFC",
+            type = AccountType.BANK,
+            identifierLast4 = "1234",
+            openingBalancePaise = 50_000_00L,
+            openingBalanceDate = 1000L,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+        val destAccount = AccountEntity(
+            id = 2,
+            name = "SBI",
+            type = AccountType.BANK,
+            identifierLast4 = "5678",
+            openingBalancePaise = 10_000_00L,
+            openingBalanceDate = 1000L,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+        val creditCardAccount = AccountEntity(
+            id = 3,
+            name = "Credit Card",
+            type = AccountType.CREDIT_CARD,
+            identifierLast4 = "9999",
+            openingBalancePaise = 0L,
+            openingBalanceDate = 1000L,
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+
+        // 1. SP1 - Plan marked moved but no transferGroupId or missing legs or leg amount mismatch
+        val planMissingMovedPaise = SavingsTransferPlanEntity(
+            id = 101,
+            periodId = 100,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1,
+            destAccountId = 2,
+            suggestedPaise = 10_000_00L,
+            movedPaise = null,
+            status = TransferPlanStatus.MARKED_MOVED,
+            transferGroupId = null,
+            createdAt = now - 1000L
+        )
+        val planMissingGroupId = SavingsTransferPlanEntity(
+            id = 102,
+            periodId = 100,
+            kind = TransferPlanKind.SWEEP,
+            sourceAccountId = 1,
+            destAccountId = 2,
+            suggestedPaise = 10_000_00L,
+            movedPaise = 10_000_00L,
+            status = TransferPlanStatus.MARKED_MOVED,
+            transferGroupId = null,
+            createdAt = now - 1000L
+        )
+        val planLegsMismatch = SavingsTransferPlanEntity(
+            id = 103,
+            periodId = 100,
+            kind = TransferPlanKind.MANUAL,
+            sourceAccountId = 1,
+            destAccountId = 2,
+            suggestedPaise = 10_000_00L,
+            movedPaise = 10_000_00L,
+            status = TransferPlanStatus.VERIFIED,
+            transferGroupId = "xfer-103",
+            createdAt = now - 1000L
+        )
+        val legWithWrongAmount = TransactionEntity(
+            id = 201,
+            accountId = 1,
+            kind = TransactionKind.TRANSFER,
+            direction = TransactionDirection.OUT,
+            amountPaise = 8_000_00L, // Mismatches 10,000.00
+            status = TransactionStatus.CATEGORIZED,
+            source = TransactionSource.MANUAL,
+            transferGroupId = "xfer-103",
+            occurredAt = now - 1000L,
+            createdAt = now - 1000L,
+            updatedAt = now - 1000L
+        )
+
+        // 2. SP2 - Identical accounts, non-existent dest, or credit card dest
+        val planSameAccount = SavingsTransferPlanEntity(
+            id = 104,
+            periodId = 100,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1,
+            destAccountId = 1, // Same!
+            suggestedPaise = 5_000_00L,
+            status = TransferPlanStatus.SUGGESTED,
+            createdAt = now - 1000L
+        )
+        val planNonExistentDest = SavingsTransferPlanEntity(
+            id = 105,
+            periodId = 100,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1,
+            destAccountId = 999, // Does not exist
+            suggestedPaise = 5_000_00L,
+            status = TransferPlanStatus.SUGGESTED,
+            createdAt = now - 1000L
+        )
+        val planCreditCardDest = SavingsTransferPlanEntity(
+            id = 106,
+            periodId = 100,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1,
+            destAccountId = 3, // Credit Card!
+            suggestedPaise = 5_000_00L,
+            status = TransferPlanStatus.SUGGESTED,
+            createdAt = now - 1000L
+        )
+
+        // 3. SP3 - Unverified plan stale for > 7 days
+        val stalePlan = SavingsTransferPlanEntity(
+            id = 107,
+            periodId = 100,
+            kind = TransferPlanKind.PAYDAY,
+            sourceAccountId = 1,
+            destAccountId = 2,
+            suggestedPaise = 5_000_00L,
+            movedPaise = 5_000_00L,
+            status = TransferPlanStatus.MARKED_MOVED,
+            transferGroupId = "xfer-107",
+            movedAt = now - (8L * 86_400_000L),
+            createdAt = now - (8L * 86_400_000L)
+        )
+        val leg107 = TransactionEntity(
+            id = 207,
+            accountId = 1,
+            kind = TransactionKind.TRANSFER,
+            direction = TransactionDirection.OUT,
+            amountPaise = 5_000_00L,
+            status = TransactionStatus.CATEGORIZED,
+            source = TransactionSource.MANUAL,
+            transferGroupId = "xfer-107",
+            occurredAt = now - (8L * 86_400_000L),
+            createdAt = now - (8L * 86_400_000L),
+            updatedAt = now - (8L * 86_400_000L)
+        )
+
+        val issues = checker.verifyIntegrity(
+            accounts = listOf(sourceAccount, destAccount, creditCardAccount),
+            categories = listOf(category1),
+            periods = listOf(period1),
+            allocations = emptyList(),
+            transactions = listOf(legWithWrongAmount, leg107),
+            transactionAllocations = emptyList(),
+            monthCloses = emptyList(),
+            savingsTransferPlans = listOf(
+                planMissingMovedPaise,
+                planMissingGroupId,
+                planLegsMismatch,
+                planSameAccount,
+                planNonExistentDest,
+                planCreditCardDest,
+                stalePlan
+            ),
+            nowEpochMs = now
+        )
+
+        // SP1 assertions
+        val sp1Issues = issues.filter { it.ruleId == "SP1_TRANSFER_LEGS_MISMATCH" }
+        assertThat(sp1Issues).isNotEmpty()
+        assertThat(sp1Issues.any { it.entityId == "101" }).isTrue()
+        assertThat(sp1Issues.any { it.entityId == "102" }).isTrue()
+        assertThat(sp1Issues.any { it.entityId == "201" }).isTrue()
+
+        // SP2 assertions
+        val sp2Issues = issues.filter { it.ruleId == "SP2_INVALID_SAVINGS_TRANSFER_ACCOUNTS" }
+        assertThat(sp2Issues.any { it.entityId == "104" }).isTrue()
+        assertThat(sp2Issues.any { it.entityId == "105" }).isTrue()
+        assertThat(sp2Issues.any { it.entityId == "106" }).isTrue()
+
+        // SP3 assertions
+        val sp3Issues = issues.filter { it.ruleId == "SP3_UNVERIFIED_PLAN_STALE" }
+        assertThat(sp3Issues).hasSize(1)
+        assertThat(sp3Issues[0].entityId).isEqualTo("107")
+        assertThat(sp3Issues[0].severity).isEqualTo(IntegritySeverity.WARNING)
     }
 }
 
