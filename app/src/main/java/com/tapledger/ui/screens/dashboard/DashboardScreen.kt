@@ -143,6 +143,7 @@ fun DashboardScreen(
     onNavigateToDiagnostics: () -> Unit,
     onNavigateToInsights: () -> Unit = {},
     onNavigateToAppLockSettings: () -> Unit = {},
+    onNavigateToSavingsGuideSettings: () -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onShowWhatsNew: () -> Unit = {}
 ) {
@@ -335,6 +336,14 @@ fun DashboardScreen(
                                                 onNavigateToAppLockSettings()
                                             },
                                             leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Savings Guide Settings") },
+                                            onClick = {
+                                                showSettingsMenu = false
+                                                onNavigateToSavingsGuideSettings()
+                                            },
+                                            leadingIcon = { Icon(Icons.Default.Savings, contentDescription = null) }
                                         )
                                         DropdownMenuItem(
                                             text = { Text("Reliability Setup") },

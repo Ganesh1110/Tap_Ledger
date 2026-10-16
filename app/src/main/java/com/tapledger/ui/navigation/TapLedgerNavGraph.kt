@@ -95,6 +95,7 @@ fun TapLedgerNavGraph(
                 onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToAppLockSettings = { navController.navigate(Screen.AppLockSettings.route) },
+                onNavigateToSavingsGuideSettings = { navController.navigate(Screen.SavingsGuideSettings.route) },
                 onNavigateToSavings = { navController.navigate(Screen.SavingHome.route) },
                 onShowWhatsNew = onShowWhatsNew
             )
