@@ -1,6 +1,6 @@
 # TapLedger: Complete System Flows & Mathematical Specification
 
-> **Version:** 2.8 (Formal Specification & Production Engine Architecture)  
+> **Version:** 3.0 (Formal Specification & Production Engine Architecture)  
 > **Target OS:** Android 10+ (API 29–36, Android 16 Ready), Optimized for Xiaomi/HyperOS, Samsung OneUI, and Pixel  
 > **Core Architectural Principles:** Single-user, 100% offline-first, Zero floating-point arithmetic (`Long` paise only), Transfer-level double-entry and envelope integrity, Asia/Kolkata (`IST`) timezone.
 
@@ -20,13 +20,15 @@
 9. [Multi-Split Category Allocation & Capacity-Capped Refund Math](#9-multi-split-category-allocation--capacity-capped-refund-math)
 10. [Budget Period Lifecycle & Ordered Month-Close Engine](#10-budget-period-lifecycle--ordered-month-close-engine)
 11. [Bank Statement Reconciliation Engine & Mathematical Proof](#11-bank-statement-reconciliation-engine--mathematical-proof)
-12. [Data Integrity & Invariant Auditor (19 Formal Rules)](#12-data-integrity--invariant-auditor-19-formal-rules)
+12. [Data Integrity & Invariant Auditor (22 Formal Rules)](#12-data-integrity--invariant-auditor-22-formal-rules)
 13. [Atomic Backup, Manifest Bundling & Safe Restore Protocol](#13-atomic-backup-manifest-bundling--safe-restore-protocol)
 14. [Security, Privacy, and System Health Architecture](#14-security-privacy-and-system-health-architecture)
 15. [End-to-End Application Screen Flow](#15-end-to-end-application-screen-flow)
    - [15.1 First-Run Onboarding Specification](#151-first-run-onboarding-specification)
 16. [Engineering Guarantees & Non-Claims](#16-engineering-guarantees--non-claims)
 17. [Visual Analytics Layer](#17-visual-analytics-layer)
+18. [Saving Module (M13–M17)](#18-saving-module)
+19. [Savings Transfer Guide & Automated Sweeps (Milestones M18–M22)](#19-savings-transfer-guide--automated-sweeps-milestones-m18m22)
 
 ---
 
@@ -661,9 +663,9 @@ $$s(x) = \begin{cases} +x.\text{amount\_paise}, & \text{if credit / income} \\ -
 
 ---
 
-## 12. Data Integrity & Invariant Auditor (19 Formal Rules)
+## 12. Data Integrity & Invariant Auditor (22 Formal Rules)
 
-The `DataIntegrityChecker` audits the Room database against 19 formal rules:
+The `DataIntegrityChecker` audits the Room database against 22 formal rules:
 
 | Rule Code                            | Invariant Condition                                                                                                                                |   Severity   | Description                                                                                          |
 | :----------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- | :----------: | :--------------------------------------------------------------------------------------------------- |
@@ -686,6 +688,9 @@ The `DataIntegrityChecker` audits the Room database against 19 formal rules:
 | **`S1_STATEMENT_MISMATCH`**          | Internal statement arithmetic equals reported closing                                                                                              | **WARNING**  | Bank CSV arithmetic mismatch                                                                         |
 | **`R1_CUMULATIVE_REFUND_EXCEEDED`**  | $\sum \text{Refunds}(T) \le T.\text{amount\_paise}$                                                                                                |  **ERROR**   | Refunds exceed original charge                                                                       |
 | **`R2_REFUND_EXCEEDS_CATEGORY_CAP`** | $\forall \text{refund splits } i, \text{Refund}_i \le \text{cap}_i$                                                                                |  **ERROR**   | Refund allocated to category exceeds original spend capacity                                         |
+| **`SP1_PLAN_LEGS_MISMATCH`**         | For marked/verified plans with `transfer_group_id`: linked transfer legs must strictly sum to `moved_paise`                                        | **CRITICAL** | Transfer plan moved amount diverges from double-entry transfer legs                                  |
+| **`SP2_INVALID_PLAN_ACCOUNT`**       | $p.\text{source\_account\_id} \ne p.\text{dest\_account\_id}$ and destination account must be a savings account                                    |  **ERROR**   | Plan references identical or non-savings destination account                                         |
+| **`SP3_STALLED_PLAN_VERIFICATION`**  | Plan remaining in `MARKED_MOVED` without bank alert verification for $> 7$ days                                                                     | **WARNING**  | Unverified transfer plan pending bank alert confirmation                                             |
 
 ---
 
@@ -1010,6 +1015,104 @@ The Visual Analytics Layer is a strictly READ-ONLY presentation layer operating 
    - **Lock Screen Tabs:** `MpinLockScreen` features top tabs allowing the user to select their desired mode prior to MPIN entry.
    - **Dedicated `SavingNavGraph`:** In `SAVING` mode, the Manager bottom bar and all Manager screens (Dashboard, Transactions, Budget Envelopes, Accounts, Month Close, Backup/Restore) are excluded from the composition tree. Zero financial management data is reachable.
    - **Step-Up Authentication:** Elevating from Saving mode to Manager mode triggers `MainViewModel.lockForModeSwitch(AppMode.MANAGER)`, requiring full MPIN re-verification. Auto-lock remembers the active mode while returning to the secure lock screen.
+
+---
+
+## 19. Savings Transfer Guide & Automated Sweeps (Milestones M18–M22)
+
+### 19.1 Architectural Principles & Decision Log Alignment
+1. **The Guide is Guidance, the Transfer Pair is the Ledger Fact (D013):**
+   The transfer plan (`savings_transfer_plans`) tracks suggestions, user confirmations, and verification status. Actual wealth movements are exclusively represented by the two-legged transfer system (§7) in `transactions`. Modifying, dismissing, or expiring a plan never alters historical ledger balances.
+2. **Self-Report First, Bank Alert Verifies (D014):**
+   Users can mark transfers as moved immediately via "I've moved it" to keep budgets and balances instantly up to date. Incoming bank SMS/UPI alerts later upgrade the plan status to `VERIFIED` via adoption.
+3. **Saving Mode Data Isolation (D015):**
+   Saving mode only observes savings account (e.g. SBI) balances, goal backings, and verified transfer totals. Spending account balances (e.g. HDFC), card dues, envelope math, and liabilities are completely sequestered in Manager mode.
+4. **Strictly Offline & No Permissions:**
+   All triggers, background checks, and reminders execute locally via Android WorkManager. Zero network permission (`android.permission.INTERNET`) is declared.
+
+### 19.2 Calculation & Reserve Mathematics (`SpareCalculator`)
+All computations are strictly executed as 64-bit signed `Long` paise with zero floating-point arithmetic.
+
+$$\text{CardDues} = \sum_{\text{cards paid from source}} \max(-\text{Balance}(\text{card}), 0)$$
+$$\text{RemainingNW} = \sum_{c \in \text{Needs} \cup \text{Wants}} \max(\text{AdjustedBudget}(c) - \text{NetSpent}(c), 0)$$
+$$\text{Commitments} = \sum \text{unpaid SIP/RD/Chit due in current period from source account}$$
+$$\text{Spare} = \max(0, \text{Balance}(\text{Source}) - \text{RemainingNW} - \text{CardDues} - \text{Commitments} - \text{Buffer})$$
+$$\text{SavingsGap} = \text{SavingsAdjustedBudget} - \text{ActualSavings}$$
+
+- **Payday Suggestion:**
+  $$\text{PaydaySuggestion} = \min(\text{SavingsGap}, \text{Spare})$$
+- **Month-End Sweep:**
+  Leftovers from categories whose advance policy is `EXPIRE` or `SWEEP_TO_SAVINGS`, bounded by `Spare`:
+  $$\text{SweepSuggestion} = \min(\text{SweepableLeftovers}, \text{Spare})$$
+  Categories with `CARRY_TO_ADVANCE` remain reserved for the next month's envelope budget.
+- **Safety Gate Invariant:**
+  If the source account drift banner is active or unassigned `PENDING` transactions exist, transfer plan suggestions are gated with a warning: *"Balance may be out of date. Correct Balance first."*
+
+### 19.3 Data Model & Schema (Database Version 4)
+New table `savings_transfer_plans`:
+- `id`: Primary key (`Long`).
+- `period_id`: Budget period foreign key.
+- `kind`: `PAYDAY`, `SWEEP`, or `MANUAL`.
+- `source_account_id`: Source spending account (e.g., HDFC).
+- `dest_account_id`: Destination savings account (e.g., SBI).
+- `suggested_paise`: Computed suggestion amount (`Long`).
+- `moved_paise`: Self-reported moved amount (`Long`, nullable).
+- `status`: `SUGGESTED`, `MARKED_MOVED`, `VERIFIED`, `DISMISSED`, `EXPIRED`.
+- `transfer_group_id`: UUID linking the two-legged transfer in `transactions`.
+- `trigger_transaction_id`: Transaction ID that triggered the plan (nullable).
+- `created_at`, `moved_at`, `verified_at`: Epoch milliseconds.
+- **Idempotency Constraint:** Unique index on `(period_id, kind)`.
+
+### 19.4 Verification & Alert Adoption Engine
+1. **Mark as Moved (Atomic Room Transaction):**
+   - Creates HDFC `OUT` transfer leg with status `CATEGORIZED` against a `SAVINGS` category.
+   - Creates SBI `IN` transfer leg with status `CONFIRMED` (§7.1 savings exemption).
+   - Links both legs with `transfer_group_id` and updates plan to `MARKED_MOVED`.
+   - Preserves Net Worth ($NW \equiv Assets - Liabilities$).
+2. **Fast-Path Ingestion Intercept:**
+   - Incoming alerts are checked against active `MARKED_MOVED` plans before standard deduplication.
+   - Adoption conditions:
+     $$\text{Amount} == \text{plan.moved\_paise} \land \text{Account} \in \{\text{source}, \text{dest}\} \land \Delta t \le 3 \text{ days}$$
+   - On match: Copies `upi_reference` and checkpoint balance onto existing leg, transitions plan to `VERIFIED`, and records `AuditAction.PLAN_ADOPTED`. No duplicate transaction is created.
+   - Amount mismatch falls through to standard Pending Inbox candidate pairing.
+
+### 19.5 Triggers & Automation Architecture
+1. **Payday Trigger:**
+   Detects confirmed `INCOME` transaction where:
+   $$\text{amount\_paise} \times 100 \ge \text{planned\_income} \times \text{threshold\_pct} \quad (\text{default 50\%})$$
+   Creates `PAYDAY` plan and dispatches local notification.
+2. **Month-End Sweep Worker (`SavingsGuideWorker`):**
+   Daily WorkManager job executing at ~09:00 IST during the last $N$ days of the budget period (default last 3 days). Evaluates sweepable leftover and creates `SWEEP` plan if $\ge \text{₹}500$.
+3. **Re-Nudge Reminders:**
+   - Re-nudge if plan remains `SUGGESTED` for $> 2$ days.
+   - Unverified nudge if plan remains `MARKED_MOVED` for $> 3$ days without bank alert verification.
+   - Maximum 2 notifications per plan lifecycle.
+4. **Month-Close Expiration:**
+   `MonthCloseEngine` transitions all open `SUGGESTED` plans to `EXPIRED` at period close, and displays a non-blocking checklist summary: *"Savings: target ₹X, moved ₹Y (Z verified)"*.
+
+### 19.6 Manager UI & Handoff
+- **`TransferPlanCard`:** Surfaces status chip, suggested amount, breakdown math, and "Move now" CTA. Displays *"Nothing safe to move this month. You're on track."* when spare is zero.
+- **`TransferPlanBottomSheet`:** Displays mathematical breakdown (balance, reserved envelope funds, card dues, commitments, buffer), editable amount field, copy-amount action, and payment app launcher.
+- **Package-Targeted Payment App Launch:** Uses Android `<queries>` declaration to open user's preferred UPI app (GPay, PhonePe, Paytm, BHIM, etc.) without requiring network permissions.
+- **`GoalAllocationBottomSheet`:** Splits moved amount across active goals in priority order using the D2 largest-remainder algorithm. Leftover funds default to unallocated savings.
+
+### 19.7 Saving-Mode Status, Goal Backing & Dip Guard
+1. **Transfer Status Card:**
+   Displays *"This month moved ₹X ✓ Verified"* or *"Pending Alert"* badge in Saving mode, strictly isolated from spending account balance details.
+2. **"Backed by SBI" Goal Progress:**
+   Apportions actual savings account balance across active goals by priority (`P1`, `P2`, ...) and creation timestamp. Renders backing percentage and mini `ProgressBarRender`. Soft earmark warnings compare total allocated goals directly against real savings balance.
+3. **Dip Guard:**
+   Detects outbound debits from savings accounts that are not transfers back to the spending account. Dispatches an immediate local notification and surfaces `DipGuardAttributionSheet` prompting the user to attribute the withdrawal to an active goal (`SavingsContributionSource.TRANSACTION`).
+
+### 19.8 Settings Screen (`SavingsGuideSettingsScreen`)
+Configures:
+- Spending Account (e.g., HDFC) and Savings Account (e.g., SBI).
+- Safety Buffer in Rupees (default ₹0).
+- Payday Trigger Threshold (default 50%, 10%–100% integer stepper and chips).
+- Month-End Sweep Window (default 3 days, 1–14 days integer stepper and chips).
+- Local Notifications toggle and preferred UPI application selector.
+- 100% compliant with the Zero-Float Invariant (pure integer controls).
+
 
 
 

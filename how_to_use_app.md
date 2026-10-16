@@ -104,11 +104,47 @@ When October ends and November begins, Rahul wants to lock his October accounts.
      - [x] All pending transactions categorized.
      - [x] Bank statement reconciled.
      - [x] Zero data integrity errors.
+     - [x] Savings transfer checklist: target vs. moved vs. verified.
 3. **Advance Carry-Forward Impact**:
    - Rahul spent **₹12,000** out of **₹16,000** allocated for Groceries.
    - Since Groceries has the rule **`Rollover Surplus`**, the remaining **₹4,000.00** surplus is automatically rolled over to next month's advance ledger!
 4. **Locking the Books**:
-   - Rahul taps **Lock Books & Close Month**. October becomes read-only, preventing accidental changes to historical data.
+   - Rahul taps **Lock Books & Close Month**. October becomes read-only, preventing accidental changes to historical data. Open suggested plans become expired.
+
+---
+
+### 🛡️ Example 6: Moving Savings to SBI with the Savings Transfer Guide & Dip Guard
+
+Rahul wants to ensure he saves at least 20% of his salary each month without accidentally moving money he needs for rent, credit card bills, or SIPs.
+
+1. **Payday Suggestion (Conservative Spare Math)**:
+   - On salary day, TapLedger detects his income and computes his safe **Spare** funds:
+     - HDFC Balance: ₹70,000
+     - Remaining Needs & Wants Envelopes: -₹40,000
+     - Outstanding Credit Card Liability: -₹8,000
+     - Unpaid SIP Commitments: -₹5,000
+     - Safety Buffer: -₹2,000
+     - **Safe Spare**: **₹15,000.00**
+   - Since Rahul's monthly savings target gap is **₹12,000.00**, the Manager Dashboard displays a **Transfer Plan Card**:
+     > **Transfer Suggestion: Move ₹12,000 from HDFC to SBI**
+2. **Payment App Handoff & "I've Moved It"**:
+   - Rahul taps **`Move Now`**. The bottom sheet displays the exact math breakdown.
+   - Rahul taps **`Open Payment App`** to launch Google Pay, transfers ₹12,000 from HDFC to SBI, and returns to TapLedger.
+   - He taps **`I've Moved It`**. TapLedger immediately creates the HDFC OUT and SBI IN transfer legs in the ledger.
+3. **Goal Allocation**:
+   - TapLedger opens the **Goal Allocation Sheet** and splits the ₹12,000 across Rahul's active goals in priority order (e.g. ₹8,000 to Emergency Fund, ₹4,000 to Goa Trip).
+4. **Bank Alert Auto-Verification**:
+   - 10 minutes later, SBI sends an incoming SMS: *"A/C 5678 credited by Rs. 12,000.00 on 08Oct26 via UPI Ref 99887766"*.
+   - TapLedger's alert adoption engine automatically matches the alert and upgrades the transfer plan to **`✓ Verified`** without creating duplicate entries.
+5. **Switching to Saving Mode (D015 Privacy Isolation)**:
+   - Rahul switches to **Saving Mode**. He sees:
+     > **This month moved ₹12,000 ✓ Verified**
+     > **Backed by SBI: 100%**
+   - Saving Mode shows zero credit card debt, zero HDFC spending numbers, and zero envelope math—only his real savings progress.
+6. **Dip Guard (Spending From Savings)**:
+   - Mid-month, Rahul unexpectedly withdraws ₹3,000 from his SBI savings account.
+   - TapLedger immediately notifies him: *"Spending from savings detected. Which goal should this reduce?"*
+   - Rahul opens the attribution card and selects **`Goa Trip`**. The withdrawal is recorded accurately against that goal.
 
 ---
 
@@ -116,13 +152,15 @@ When October ends and November begins, Rahul wants to lock his October accounts.
 
 | Destination | Icon | Primary Use Case |
 | :--- | :--- | :--- |
-| **Home** | `account_balance_wallet` | High-level Dashboard, Donut charts, Net Worth, Budget buckets. |
+| **Home (Manager)** | `account_balance_wallet` | High-level Dashboard, Donut charts, Net Worth, Transfer Plan card, Budget buckets. |
+| **Saving Mode** | `savings` | Focused savings vault, goal progress rings, "Backed by SBI" bars, and milestone badges. |
 | **Transactions** | `receipt_long` | Full chronological ledger history grouped by date with timeline connectors (`● ────────`). |
 | **`+` FAB** | `add` | Quick manual entry for Expense, Income, Transfer, or Refund. |
 | **Budget** | `pie_chart` | Manage bucket allocations (*Needs*, *Wants*, *Savings*), advance rules, and intra-month budget transfers. |
 | **Accounts** | `account_balance` | Real-time balances for Bank Accounts, Cash Wallets, and Credit Card Liabilities. |
 | **Pending Inbox** | `schedule` | Review and classify newly captured bank notifications with 1-tap suggestions. |
-| **Diagnostics** | `health_and_safety` | Run live 6-invariant database integrity scans and inspect system audit logs. |
+| **Savings Settings** | `settings` | Configure spending/savings account roles, safety buffer, payday threshold %, and sweep window. |
+| **Diagnostics** | `health_and_safety` | Run live 22-rule database integrity scans and inspect system audit logs. |
 | **Backup** | `backup` | Export offline database snapshots (`SQLite VACUUM INTO`) and verify database integrity. |
 
 ---
@@ -132,3 +170,4 @@ When October ends and November begins, Rahul wants to lock his October accounts.
 TapLedger **never** requests the `INTERNET` permission. Your financial data, bank account numbers, SMS alerts, and budget records **never leave your phone**. Backups are saved locally on your device and can be exported at any time.
 
 *Enjoy full financial control and peace of mind with TapLedger!*
+

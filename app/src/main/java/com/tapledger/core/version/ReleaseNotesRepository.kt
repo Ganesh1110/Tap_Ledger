@@ -2,10 +2,13 @@ package com.tapledger.core.version
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
 import javax.inject.Inject
@@ -21,6 +24,51 @@ interface ReleaseNotesRepository {
 class ReleaseNotesRepositoryImpl @Inject constructor() : ReleaseNotesRepository {
 
     private val releases: List<AppVersionInfo> = listOf(
+        AppVersionInfo(
+            versionCode = 2L,
+            versionName = "1.1.0",
+            releaseDate = "October 2026",
+            title = "Savings Transfer Guide & Dip Guard",
+            summary = "Intelligent savings guidance with conservative spare math, automated payday and month-end sweep triggers, bank alert verification, and Dip Guard protection.",
+            highlights = listOf(
+                ReleaseHighlight(
+                    title = "Savings Transfer Guide",
+                    description = "Smart transfer guidance calculating conservative spare funds without risking budget needs, card dues, commitments, or buffer. 1-tap UPI app launch.",
+                    category = ReleaseCategory.NEW_FEATURE,
+                    icon = Icons.Default.Savings
+                ),
+                ReleaseHighlight(
+                    title = "Bank Alert Auto-Verification",
+                    description = "Mark a transfer as moved instantly. When the matching bank debit or credit arrives, TapLedger auto-adopts the alert and upgrades status to Verified.",
+                    category = ReleaseCategory.NEW_FEATURE,
+                    icon = Icons.Default.CheckCircle
+                ),
+                ReleaseHighlight(
+                    title = "Dip Guard Protection",
+                    description = "Detects outbound debits from your savings account and prompts you to attribute the spending to an active goal or record an audited withdrawal.",
+                    category = ReleaseCategory.SECURITY,
+                    icon = Icons.Default.Security
+                ),
+                ReleaseHighlight(
+                    title = "Backed by Savings Goal Bars",
+                    description = "Visual progress bars displaying real bank balance backing for each goal in strict priority order, with soft earmark warnings.",
+                    category = ReleaseCategory.IMPROVEMENT,
+                    icon = Icons.Default.AccountBalance
+                ),
+                ReleaseHighlight(
+                    title = "Automated Payday & Sweep Triggers",
+                    description = "Background WorkManager worker evaluates month-end sweeps in the last N days of the period and reminds you of unverified transfers.",
+                    category = ReleaseCategory.NEW_FEATURE,
+                    icon = Icons.Default.NotificationsActive
+                ),
+                ReleaseHighlight(
+                    title = "D015 Saving Mode Isolation",
+                    description = "Strict separation ensuring saving mode displays only savings account balances and verified totals, with zero leakage of spending math or card dues.",
+                    category = ReleaseCategory.SECURITY,
+                    icon = Icons.Default.Lock
+                )
+            )
+        ),
         AppVersionInfo(
             versionCode = 1L,
             versionName = "1.0.0",

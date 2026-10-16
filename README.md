@@ -112,6 +112,15 @@ It automatically captures bank and UPI payment notifications, classifies spendin
 - **Milestones & Badges Engine**: Dynamic badge evaluation (`SavingsMilestoneEvaluator`) celebrating saving debuts, emergency fund shields, and cumulative savings milestones.
 - **Manager/Saving Dual-Mode Security (D012)**: Lock screen mode tabs (`Manager` vs `Saving`), dedicated `SavingNavGraph` completely isolating administrative/budget features, and step-up MPIN gating for Manager elevation.
 
+### 10. Savings Transfer Guide & Automated Sweeps (M18–M22)
+
+- **Guidance vs. Ledger Fact (D013)**: The guide provides intelligent transfer suggestions without acting as a ledger; double-entry transfer legs (`OUT` from spending / `IN` to savings) represent the actual financial fact.
+- **Conservative Spare Math (`SpareCalculator`)**: Computes safe transfer amounts by subtracting reserved envelope funds, credit card dues, commitments, and safety buffers from physical spending account balances. Zero risk of overspending.
+- **Self-Report First, Bank Alert Verifies (D014)**: Tap "I've moved it" to instantly update budgets and balances. When the bank debit/credit alert arrives, TapLedger auto-adopts the alert and upgrades the plan to `Verified`.
+- **Automated Payday & Month-End Sweeps**: Triggers a transfer suggestion when income is confirmed ($\ge 50\%$ threshold) and sweeps unspent envelope leftovers at month-end via background `SavingsGuideWorker`.
+- **Saving-Mode Isolation & Backed Bars (D015)**: Complete privacy isolation—Saving mode displays only savings account balances, "Backed by Savings" priority progress bars, and verified transfer totals.
+- **Dip Guard Protection**: Automatically detects unexpected debits from the savings account and prompts the user to attribute the withdrawal to an active goal.
+
 ---
 
 ## Directory Structure
@@ -150,7 +159,7 @@ TapLedger/
 │   └── src/test/
 │       └── java/com/tapledger/   # Unit test suite (Money, Dates, Calculators, Parsers,
 │                                 # Reconciliation, MPIN Security, Backup/Restore, Savings)
-├── decisions.md                  # Architectural decision log (D001-D012)
+├── decisions.md                  # Architectural decision log (D001-D015)
 └── build.gradle.kts / settings.gradle.kts
 ```
 
@@ -177,6 +186,11 @@ TapLedger/
 - [x] **M15 — Commitments (SIP/RD) & Fixed Deposits**: Recurring commitment tracking, `FdCalculator` integer maturity calculator, local notification reminders.
 - [x] **M16 — Habits, Micro-Rules & Milestones**: Virtual round-ups, income allocation rules, `SavingsMilestoneEvaluator` badge engine.
 - [x] **M17 — Manager/Saving Mode & Security Separation**: Lock screen mode tabs, `AppMode` session state, dedicated `SavingNavGraph`, step-up MPIN gating for administrative actions.
+- [x] **M18 — Foundation (Savings Guide)**: Room Schema v4, migration `3 -> 4`, `SpareCalculator`, `TransferPlanRepository`, settings storage, unit tests.
+- [x] **M19 — Manager UI (Savings Guide)**: Manager Dashboard "Transfer Plan" card, `TransferPlanBottomSheet`, payment app launcher intent, copy-amount action, goal allocation sheet (D2 largest-remainder).
+- [x] **M20 — Verification (Alert Adoption)**: Ingestion pipeline alert adoption intercept before deduplication, plan-match card, integrity rules `SP1`–`SP3` (total: 22 rules).
+- [x] **M21 — Triggers & Automation**: Payday detection hook, `SavingsGuideWorker` daily IST background worker, reminder re-nudges, Month-Close hook and checklist line.
+- [x] **M22 — Saving Mode & Polish**: Saving-mode status chip, "Backed by SBI" bars, Dip Guard spending detection & attribution sheet, Savings Guide Settings screen, Zero-Float verification.
 
 ---
 
