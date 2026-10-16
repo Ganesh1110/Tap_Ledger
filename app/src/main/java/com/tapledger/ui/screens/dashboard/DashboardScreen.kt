@@ -108,14 +108,24 @@ import com.tapledger.ui.components.SkeletonCard
 import com.tapledger.ui.components.SkeletonList
 import com.tapledger.ui.components.StatBlock
 import com.tapledger.ui.components.TransactionRow
+import com.tapledger.domain.calculator.GoalApportionmentCalculator
 import com.tapledger.ui.screens.dashboard.components.DashboardBucketRingsCard
 import com.tapledger.ui.screens.dashboard.components.DashboardBurnUpCard
 import com.tapledger.ui.screens.dashboard.components.DashboardHeroRingCard
 import com.tapledger.ui.screens.dashboard.components.DashboardSixPeriodTrendCard
+import com.tapledger.ui.screens.dashboard.components.GoalAllocationBottomSheet
+import com.tapledger.ui.screens.dashboard.components.TransferPlanBottomSheet
+import com.tapledger.ui.screens.dashboard.components.TransferPlanCard
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
+
+private data class MovedTransferInfo(
+    val movedPaise: Long,
+    val outTransactionId: Long,
+    val periodId: Long
+)
 
 @Composable
 fun DashboardScreen(
@@ -192,6 +202,9 @@ fun DashboardScreen(
             }
         } else {
             var showSettingsMenu by remember { mutableStateOf(false) }
+            var showTransferPlanSheet by remember { mutableStateOf(false) }
+            var showGoalAllocationSheet by remember { mutableStateOf(false) }
+            var lastMovedInfo by remember { mutableStateOf<MovedTransferInfo?>(null) }
 
             LazyColumn(
                 state = listState,
@@ -566,6 +579,28 @@ fun DashboardScreen(
                     }
                 }
 
+                // 1.5. Transfer Plan Card (Savings Transfer Guide - Flow.md §18, D013)
+                state.transferPlanState?.let { planState ->
+                    item(key = "transfer_plan_card") {
+                        TransferPlanCard(
+                            state = planState,
+                            onMoveNowClick = { showTransferPlanSheet = true },
+                            onReviewClick = { showTransferPlanSheet = true },
+                            onAllocateGoalsClick = {
+                                if (planState.movedPaise != null && planState.planId != null) {
+                                    lastMovedInfo = MovedTransferInfo(
+                                        movedPaise = planState.movedPaise,
+                                        outTransactionId = 0L,
+                                        periodId = 0L
+                                    )
+                                    showGoalAllocationSheet = true
+                                }
+                            },
+                            modifier = Modifier.padding(bottom = Spacing.xs)
+                        )
+                    }
+                }
+
                 // 2. V1: Hero Ring Card (Total budget, spent, remaining, net worth)
                 item(key = "budget_hero_ring") {
                     DashboardHeroRingCard(
@@ -659,6 +694,53 @@ fun DashboardScreen(
                         initiallyExpanded = false
                     )
                 }
+            }
+
+            val currentPlanState = state.transferPlanState
+            if (showTransferPlanSheet && currentPlanState != null) {
+                TransferPlanBottomSheet(
+                    state = currentPlanState,
+                    onDismissRequest = { showTransferPlanSheet = false },
+                    onMarkAsMoved = { movedPaise ->
+                        val planId = currentPlanState.planId ?: 0L
+                        viewModel.markPlanAsMoved(planId, movedPaise) { outTxId, periodId ->
+                            showTransferPlanSheet = false
+                            lastMovedInfo = MovedTransferInfo(
+                                movedPaise = movedPaise,
+                                outTransactionId = outTxId,
+                                periodId = periodId
+                            )
+                            showGoalAllocationSheet = true
+                        }
+                    },
+                    onDismissPlan = {
+                        currentPlanState.planId?.let { viewModel.dismissPlan(it) }
+                        showTransferPlanSheet = false
+                    },
+                    preferredPayAppPackage = state.preferredPayApp
+                )
+            }
+
+            val currentMovedInfo = lastMovedInfo
+            if (showGoalAllocationSheet && currentMovedInfo != null) {
+                GoalAllocationBottomSheet(
+                    movedPaise = currentMovedInfo.movedPaise,
+                    goals = state.activeGoals,
+                    calculator = remember { GoalApportionmentCalculator() },
+                    onConfirmAllocation = { allocations ->
+                        viewModel.allocateToGoals(
+                            allocations = allocations,
+                            transactionId = currentMovedInfo.outTransactionId,
+                            periodId = currentMovedInfo.periodId
+                        )
+                        showGoalAllocationSheet = false
+                        lastMovedInfo = null
+                    },
+                    onDismissRequest = {
+                        showGoalAllocationSheet = false
+                        lastMovedInfo = null
+                    }
+                )
             }
         }
     }
