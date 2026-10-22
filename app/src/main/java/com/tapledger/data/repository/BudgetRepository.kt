@@ -277,7 +277,8 @@ class BudgetRepository @Inject constructor(
         defaultAdvancePolicy: com.tapledger.core.model.AdvancePolicy,
         initialAllocationPaise: Long,
         periodId: Long?,
-        rebalanceAdjustments: Map<Long, Long> = emptyMap()
+        rebalanceAdjustments: Map<Long, Long> = emptyMap(),
+        isPinned: Boolean = false
     ): Long {
         val now = DateTimeUtils.nowEpochMillis()
         val nextSortOrder = (categoryDao.getMaxSortOrder() ?: 0) + 1
@@ -289,7 +290,8 @@ class BudgetRepository @Inject constructor(
                 defaultAdvancePolicy = defaultAdvancePolicy,
                 isActive = true,
                 createdAt = now,
-                updatedAt = now
+                updatedAt = now,
+                isPinned = isPinned
             )
             val categoryId = categoryDao.insert(category)
 
@@ -391,6 +393,28 @@ class BudgetRepository @Inject constructor(
         val openPeriods = budgetPeriodDao.getAllPeriodsSync().filter { it.status == com.tapledger.core.model.BudgetPeriodStatus.OPEN }
         for (openPeriod in openPeriods) {
             budgetAllocationDao.deleteAllocation(openPeriod.id, categoryId)
+        }
+    }
+
+    suspend fun toggleCategoryPinned(categoryId: Long): Boolean {
+        val category = categoryDao.getById(categoryId) ?: return false
+        val newPinned = !category.isPinned
+        val updated = category.copy(
+            isPinned = newPinned,
+            updatedAt = DateTimeUtils.nowEpochMillis()
+        )
+        categoryDao.update(updated)
+        return newPinned
+    }
+
+    suspend fun updateCategoryPinned(categoryId: Long, isPinned: Boolean) {
+        val category = categoryDao.getById(categoryId) ?: return
+        if (category.isPinned != isPinned) {
+            val updated = category.copy(
+                isPinned = isPinned,
+                updatedAt = DateTimeUtils.nowEpochMillis()
+            )
+            categoryDao.update(updated)
         }
     }
 

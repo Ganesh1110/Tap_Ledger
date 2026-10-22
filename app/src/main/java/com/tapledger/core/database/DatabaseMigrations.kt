@@ -591,4 +591,24 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/**
+ * Migration from Database Version 4 to Version 5.
+ * - Adds `is_pinned` column (INTEGER NOT NULL DEFAULT 0) to `categories` table.
+ * - Runs PRAGMA integrity_check.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `categories` ADD COLUMN `is_pinned` INTEGER NOT NULL DEFAULT 0")
+
+        val cursor = db.query("PRAGMA integrity_check")
+        cursor.use {
+            if (it.moveToFirst()) {
+                val result = it.getString(0)
+                check(result == "ok") { "Database integrity check failed after migration 4 -> 5: $result" }
+            }
+        }
+    }
+}
+
+
 

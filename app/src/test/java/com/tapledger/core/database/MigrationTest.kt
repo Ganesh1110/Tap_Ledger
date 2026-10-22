@@ -437,6 +437,38 @@ class MigrationTest {
             assertThat(e.message).contains("UNIQUE constraint failed")
         }
     }
+
+    @Test
+    fun migration_4_to_5_addsIsPinnedColumnToCategories() {
+        // Migrate 1 -> 2 -> 3 -> 4 -> 5
+        MIGRATION_1_2.migrate(dbAdapter)
+        MIGRATION_2_3.migrate(dbAdapter)
+        MIGRATION_3_4.migrate(dbAdapter)
+        MIGRATION_4_5.migrate(dbAdapter)
+
+        conn.createStatement().use { stmt ->
+            // Verify existing categories from populateV1Data now have is_pinned = 0 default
+            val rs = stmt.executeQuery("SELECT id, name, is_pinned FROM categories WHERE id = 10")
+            assertThat(rs.next()).isTrue()
+            assertThat(rs.getInt("is_pinned")).isEqualTo(0)
+
+            // Update category 10 to be pinned
+            stmt.execute("UPDATE categories SET is_pinned = 1 WHERE id = 10")
+            val rsUpdated = stmt.executeQuery("SELECT is_pinned FROM categories WHERE id = 10")
+            assertThat(rsUpdated.next()).isTrue()
+            assertThat(rsUpdated.getInt("is_pinned")).isEqualTo(1)
+
+            // Insert new category with is_pinned = 1
+            stmt.execute("""
+                INSERT INTO categories (id, name, default_bucket, default_sort_order, default_advance_policy, is_active, is_pinned, created_at, updated_at)
+                VALUES (99, 'House Rent', 'NEEDS', 0, 'EXPIRE', 1, 1, 1000, 1000)
+            """)
+            val rsNew = stmt.executeQuery("SELECT name, is_pinned FROM categories WHERE id = 99")
+            assertThat(rsNew.next()).isTrue()
+            assertThat(rsNew.getString("name")).isEqualTo("House Rent")
+            assertThat(rsNew.getInt("is_pinned")).isEqualTo(1)
+        }
+    }
 }
 
 

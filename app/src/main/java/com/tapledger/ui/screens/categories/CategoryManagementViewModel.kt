@@ -139,7 +139,8 @@ class CategoryManagementViewModel @Inject constructor(
         bucket: BudgetBucket,
         advancePolicy: AdvancePolicy,
         initialBudgetRupees: String,
-        autoAdjustOthers: Boolean = false
+        autoAdjustOthers: Boolean = false,
+        isPinned: Boolean = false
     ) {
         viewModelScope.launch {
             try {
@@ -170,7 +171,8 @@ class CategoryManagementViewModel @Inject constructor(
                         CategoryRebalanceInput(
                             categoryId = it.category.id,
                             currentAllocationPaise = it.currentAllocationPaise,
-                            spentPaise = it.spentPaise
+                            spentPaise = it.spentPaise,
+                            isPinned = it.category.isPinned
                         )
                     }
 
@@ -195,7 +197,8 @@ class CategoryManagementViewModel @Inject constructor(
                     defaultAdvancePolicy = advancePolicy,
                     initialAllocationPaise = amountPaise,
                     periodId = if (periodId > 0L) periodId else null,
-                    rebalanceAdjustments = rebalanceAdjustments
+                    rebalanceAdjustments = rebalanceAdjustments,
+                    isPinned = isPinned
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Failed to add category") }
@@ -209,7 +212,8 @@ class CategoryManagementViewModel @Inject constructor(
         bucket: BudgetBucket,
         advancePolicy: AdvancePolicy,
         newBudgetRupees: String,
-        autoAdjustOthers: Boolean = false
+        autoAdjustOthers: Boolean = false,
+        isPinned: Boolean? = null
     ) {
         viewModelScope.launch {
             try {
@@ -217,7 +221,8 @@ class CategoryManagementViewModel @Inject constructor(
                 val updated = existing.copy(
                     name = name.trim(),
                     defaultBucket = bucket,
-                    defaultAdvancePolicy = advancePolicy
+                    defaultAdvancePolicy = advancePolicy,
+                    isPinned = isPinned ?: existing.isPinned
                 )
                 val amountPaise = try {
                     if (newBudgetRupees.isBlank()) 0L else MoneyFormatter.toPaise(newBudgetRupees)
@@ -242,7 +247,8 @@ class CategoryManagementViewModel @Inject constructor(
                         CategoryRebalanceInput(
                             categoryId = it.category.id,
                             currentAllocationPaise = it.currentAllocationPaise,
-                            spentPaise = it.spentPaise
+                            spentPaise = it.spentPaise,
+                            isPinned = it.category.isPinned
                         )
                     }
 
@@ -269,6 +275,16 @@ class CategoryManagementViewModel @Inject constructor(
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Failed to update category") }
+            }
+        }
+    }
+
+    fun togglePinCategory(categoryId: Long) {
+        viewModelScope.launch {
+            try {
+                budgetRepository.toggleCategoryPinned(categoryId)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "Failed to toggle pin: ${e.message}") }
             }
         }
     }

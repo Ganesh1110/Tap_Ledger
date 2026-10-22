@@ -27,7 +27,9 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -288,11 +290,14 @@ fun CategoryManagementScreen(
                                 if (bulletItem != null) {
                                     EnvelopeBulletBarRow(
                                         item = bulletItem,
+                                        isPinned = itemState.category.isPinned,
+                                        onTogglePin = { viewModel.togglePinCategory(itemState.category.id) },
                                         onClick = { editingCategoryItem = itemState }
                                     )
                                 } else {
                                     CategoryManageRow(
                                         itemState = itemState,
+                                        onTogglePin = { viewModel.togglePinCategory(itemState.category.id) },
                                         onEdit = { editingCategoryItem = itemState }
                                     )
                                 }
@@ -319,11 +324,12 @@ fun CategoryManagementScreen(
             initialBucket = BudgetBucket.NEEDS,
             initialAdvancePolicy = AdvancePolicy.CARRY_TO_ADVANCE,
             initialBudgetRupees = "",
+            initialIsPinned = false,
             plannedIncomePaise = state.plannedIncomePaise,
             existingCategories = state.categories,
             onDismiss = { showAddDialog = false },
-            onSave = { name, bucket, advancePolicy, budgetRupees, autoAdjust ->
-                viewModel.addCategory(name, bucket, advancePolicy, budgetRupees, autoAdjust)
+            onSave = { name, bucket, advancePolicy, budgetRupees, autoAdjust, isPinned ->
+                viewModel.addCategory(name, bucket, advancePolicy, budgetRupees, autoAdjust, isPinned)
                 showAddDialog = false
             }
         )
@@ -337,6 +343,7 @@ fun CategoryManagementScreen(
             initialBucket = itemState.category.defaultBucket,
             initialAdvancePolicy = itemState.category.defaultAdvancePolicy,
             initialBudgetRupees = (itemState.currentAllocationPaise / 100).toString(),
+            initialIsPinned = itemState.category.isPinned,
             editingCategoryId = itemState.category.id,
             plannedIncomePaise = state.plannedIncomePaise,
             existingCategories = state.categories,
@@ -347,14 +354,15 @@ fun CategoryManagementScreen(
                     editingCategoryItem = null
                 }
             } else null,
-            onSave = { name, bucket, advancePolicy, budgetRupees, autoAdjust ->
+            onSave = { name, bucket, advancePolicy, budgetRupees, autoAdjust, isPinned ->
                 viewModel.updateCategory(
                     categoryId = itemState.category.id,
                     name = name,
                     bucket = bucket,
                     advancePolicy = advancePolicy,
                     newBudgetRupees = budgetRupees,
-                    autoAdjustOthers = autoAdjust
+                    autoAdjustOthers = autoAdjust,
+                    isPinned = isPinned
                 )
                 editingCategoryItem = null
             }
@@ -448,7 +456,8 @@ private fun BucketSectionHeader(
 @Composable
 private fun CategoryManageRow(
     itemState: CategoryItemState,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onTogglePin: (() -> Unit)? = null
 ) {
     val totalBudget = itemState.currentAllocationPaise
     val spent = itemState.spentPaise
@@ -502,6 +511,22 @@ private fun CategoryManageRow(
                         fontWeight = FontWeight.SemiBold
                     )
 
+                    if (itemState.category.isPinned) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "📌 Fixed",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
                     // Show Policy badge ONLY when it differs from bucket default
                     if (hasCustomPolicy) {
                         val policyLabel = when (itemState.category.defaultAdvancePolicy) {
@@ -524,11 +549,27 @@ private fun CategoryManageRow(
                     }
                 }
 
-                MoneyText(
-                    amountPaise = totalBudget,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    semantic = MoneySemantic.Neutral
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onTogglePin != null) {
+                        IconButton(
+                            onClick = onTogglePin,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (itemState.category.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                contentDescription = if (itemState.category.isPinned) "Unpin category" else "Pin category as fixed bill",
+                                tint = if (itemState.category.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    MoneyText(
+                        amountPaise = totalBudget,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        semantic = MoneySemantic.Neutral
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(Spacing.xs))
@@ -588,18 +629,20 @@ fun AddEditCategoryDialog(
     initialBucket: BudgetBucket,
     initialAdvancePolicy: AdvancePolicy,
     initialBudgetRupees: String,
+    initialIsPinned: Boolean = false,
     editingCategoryId: Long? = null,
     plannedIncomePaise: Long = 0L,
     existingCategories: List<CategoryItemState> = emptyList(),
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
-    onSave: (String, BudgetBucket, AdvancePolicy, String, Boolean) -> Unit
+    onSave: (String, BudgetBucket, AdvancePolicy, String, Boolean, Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
     var selectedBucket by remember { mutableStateOf(initialBucket) }
     var selectedAdvancePolicy by remember { mutableStateOf(initialAdvancePolicy) }
     var budgetRupees by remember { mutableStateOf(initialBudgetRupees) }
     var autoAdjustOthers by remember { mutableStateOf(false) }
+    var isPinned by remember { mutableStateOf(initialIsPinned) }
 
     val otherCategoriesCount = remember(selectedBucket, existingCategories, editingCategoryId) {
         existingCategories.count {
@@ -722,6 +765,46 @@ fun AddEditCategoryDialog(
                     }
                 }
 
+                // 📌 Pin / Lock Fixed Category
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPinned) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        }
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isPinned = !isPinned }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "📌 Fixed / Pinned Bill",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Never auto-reduce this allocation (e.g., Rent, EMI) during bucket rebalancing",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = isPinned,
+                            onCheckedChange = { isPinned = it }
+                        )
+                    }
+                }
+
                 Text("Advance Carry Rule:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Column {
                     Row(
@@ -759,7 +842,7 @@ fun AddEditCategoryDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(name, selectedBucket, selectedAdvancePolicy, budgetRupees, autoAdjustOthers) }
+                onClick = { onSave(name, selectedBucket, selectedAdvancePolicy, budgetRupees, autoAdjustOthers, isPinned) }
             ) {
                 Text("Save")
             }

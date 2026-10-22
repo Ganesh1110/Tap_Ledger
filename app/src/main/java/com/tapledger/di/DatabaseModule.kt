@@ -39,7 +39,8 @@ object DatabaseModule {
             .addMigrations(
                 com.tapledger.core.database.MIGRATION_1_2,
                 com.tapledger.core.database.MIGRATION_2_3,
-                com.tapledger.core.database.MIGRATION_3_4
+                com.tapledger.core.database.MIGRATION_3_4,
+                com.tapledger.core.database.MIGRATION_4_5
             )
             .addCallback(com.tapledger.core.database.DatabaseTriggers.Callback)
             .build()

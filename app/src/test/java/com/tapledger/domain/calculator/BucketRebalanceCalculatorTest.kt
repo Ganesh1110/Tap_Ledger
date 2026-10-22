@@ -44,6 +44,61 @@ class BucketRebalanceCalculatorTest {
     }
 
     @Test
+    fun rebalance_pinnedCategories_strictlyPreservedAndNeverTrimmed() {
+        // Needs 50% = ₹25,000. Rent ₹15,000 (Pinned!), Groceries ₹7,000, Utilities ₹3,000
+        // New category: Maid ₹2,000.
+        // Available for flexible = 25,000 - 2,000 - 15,000 = ₹8,000
+        val targetBucketLimit = 25_000_00L
+        val newBudget = 2_000_00L
+
+        val existing = listOf(
+            CategoryRebalanceInput(categoryId = 1, currentAllocationPaise = 15_000_00L, spentPaise = 0L, isPinned = true), // Rent (PINNED)
+            CategoryRebalanceInput(categoryId = 2, currentAllocationPaise = 7_000_00L, spentPaise = 0L, isPinned = false), // Groceries
+            CategoryRebalanceInput(categoryId = 3, currentAllocationPaise = 3_000_00L, spentPaise = 0L, isPinned = false)  // Utilities
+        )
+
+        val result = BucketRebalanceCalculator.calculateRebalance(
+            targetBucketLimitPaise = targetBucketLimit,
+            targetCategoryAllocationPaise = newBudget,
+            existingCategories = existing
+        )
+
+        assertThat(result.success).isTrue()
+        // Rent (id=1) MUST be untouched at exactly ₹15,000
+        assertThat(result.adjustments[1]).isEqualTo(15_000_00L)
+
+        val flexibleSum = (result.adjustments[2] ?: 0L) + (result.adjustments[3] ?: 0L)
+        assertThat(flexibleSum).isEqualTo(8_000_00L)
+
+        // Total bucket sum = 15k (Rent) + 8k (Groceries+Utilities) + 2k (Maid) = 25k (exact 50%)
+        val totalBucket = result.adjustments.values.sum() + newBudget
+        assertThat(totalBucket).isEqualTo(targetBucketLimit)
+    }
+
+    @Test
+    fun rebalance_rejectsWhenPinnedCategoriesExceedAvailablePool() {
+        // Target: ₹20,000. New category: ₹6,000.
+        // Pinned Rent: ₹15,000.
+        // Pinned (15k) + New (6k) = 21k > 20k target limit!
+        val targetLimit = 20_000_00L
+        val newBudget = 6_000_00L
+
+        val existing = listOf(
+            CategoryRebalanceInput(categoryId = 1, currentAllocationPaise = 15_000_00L, spentPaise = 0L, isPinned = true),
+            CategoryRebalanceInput(categoryId = 2, currentAllocationPaise = 5_000_00L, spentPaise = 0L, isPinned = false)
+        )
+
+        val result = BucketRebalanceCalculator.calculateRebalance(
+            targetBucketLimitPaise = targetLimit,
+            targetCategoryAllocationPaise = newBudget,
+            existingCategories = existing
+        )
+
+        assertThat(result.success).isFalse()
+        assertThat(result.errorMessage).contains("Fixed/pinned bills")
+    }
+
+    @Test
     fun rebalance_respectsSpentFloor() {
         // Target: ₹10,000. New category: ₹2,000. Available: ₹8,000.
         // Cat 1 has spent ₹5,000. Cat 2 has spent ₹0.

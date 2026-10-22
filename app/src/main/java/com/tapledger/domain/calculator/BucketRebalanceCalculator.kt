@@ -3,7 +3,8 @@ package com.tapledger.domain.calculator
 data class CategoryRebalanceInput(
     val categoryId: Long,
     val currentAllocationPaise: Long,
-    val spentPaise: Long = 0L
+    val spentPaise: Long = 0L,
+    val isPinned: Boolean = false
 )
 
 data class RebalanceResult(
@@ -14,8 +15,9 @@ data class RebalanceResult(
 
 /**
  * Calculates proportional rebalancing of existing category allocations within a budget bucket
- * when a new category is added or an existing category is updated, ensuring the total bucket
- * allocation exactly matches the target 50/30/20 limit without rounding drift.
+ * when a new category is added, an existing category is updated, or a bucket is 1-tap rebalanced.
+ * Ensures the total bucket allocation exactly matches the target 50/30/20 limit without rounding drift.
+ * Pinned categories (Rent, EMI, fixed bills) are strictly protected and never trimmed.
  */
 object BucketRebalanceCalculator {
 
@@ -23,7 +25,7 @@ object BucketRebalanceCalculator {
      * Rebalances allocations of existing categories in a bucket.
      *
      * @param targetBucketLimitPaise Total target pool for this bucket (e.g. 50% of monthly planned income).
-     * @param targetCategoryAllocationPaise The desired allocation for the new/edited category.
+     * @param targetCategoryAllocationPaise The desired allocation for the new/edited category (0L if rebalancing whole bucket).
      * @param existingCategories Other categories in this bucket to be adjusted proportionally.
      * @param roundToRupees When true (default), apportionments are computed in units of 1 Rupee (100 paise),
      *                      yielding clean integer rupee budgets with zero drift.
@@ -51,26 +53,51 @@ object BucketRebalanceCalculator {
             )
         }
 
-        val availableForExistingPaise = targetBucketLimitPaise - targetCategoryAllocationPaise
+        // Pinned vs Flexible separation
+        val pinnedCategories = existingCategories.filter { it.isPinned }
+        val flexibleCategories = existingCategories.filter { !it.isPinned }
 
-        // Safety invariant: Allocation cannot drop below spent paise
-        val totalCommittedSpentPaise = existingCategories.sumOf { maxOf(0L, it.spentPaise) }
-        if (availableForExistingPaise < totalCommittedSpentPaise) {
-            val spentRupees = (totalCommittedSpentPaise + 99L) / 100L
-            val availRupees = availableForExistingPaise / 100L
+        val totalPinnedPaise = pinnedCategories.sumOf { it.currentAllocationPaise }
+        val availableForFlexiblePaise = targetBucketLimitPaise - targetCategoryAllocationPaise - totalPinnedPaise
+
+        if (availableForFlexiblePaise < 0L) {
+            val pinnedRupees = totalPinnedPaise / 100L
+            val catRupees = targetCategoryAllocationPaise / 100L
+            val limitRupees = targetBucketLimitPaise / 100L
             return RebalanceResult(
                 adjustments = emptyMap(),
                 success = false,
-                errorMessage = "Cannot auto-align: categories have already spent ₹$spentRupees, exceeding available ₹$availRupees."
+                errorMessage = "Cannot auto-align: Fixed/pinned bills (₹$pinnedRupees) and target budget (₹$catRupees) exceed bucket limit (₹$limitRupees)."
+            )
+        }
+
+        val pinnedAdjustments = pinnedCategories.associate { it.categoryId to it.currentAllocationPaise }
+
+        if (flexibleCategories.isEmpty()) {
+            return RebalanceResult(
+                adjustments = pinnedAdjustments,
+                success = true
+            )
+        }
+
+        // Safety invariant: Flexible allocation cannot drop below spent paise
+        val totalCommittedSpentPaise = flexibleCategories.sumOf { maxOf(0L, it.spentPaise) }
+        if (availableForFlexiblePaise < totalCommittedSpentPaise) {
+            val spentRupees = (totalCommittedSpentPaise + 99L) / 100L
+            val availRupees = availableForFlexiblePaise / 100L
+            return RebalanceResult(
+                adjustments = emptyMap(),
+                success = false,
+                errorMessage = "Cannot auto-align: flexible categories have already spent ₹$spentRupees, exceeding available ₹$availRupees."
             )
         }
 
         // Apportionment unit: 1 Rupee (100 paise) or 1 Paisa
         val unit = if (roundToRupees) 100L else 1L
-        val totalUnits = availableForExistingPaise / unit
+        val totalUnits = availableForFlexiblePaise / unit
 
-        // Minimum floor in units per category (guaranteeing newAllocation >= spentPaise)
-        val floorUnits = existingCategories.associate { cat ->
+        // Minimum floor in units per flexible category (guaranteeing newAllocation >= spentPaise)
+        val floorUnits = flexibleCategories.associate { cat ->
             val floorPaise = maxOf(0L, cat.spentPaise)
             val units = (floorPaise + (unit - 1)) / unit // ceil to unit
             cat.categoryId to units
@@ -90,7 +117,7 @@ object BucketRebalanceCalculator {
         val flexibleUnitsToDistribute = totalUnits - totalFloorUnits
 
         // Proportional weights: based on current allocation headroom or current allocation
-        val weights = existingCategories.associate { cat ->
+        val weights = flexibleCategories.associate { cat ->
             val curUnits = cat.currentAllocationPaise / unit
             val floor = floorUnits[cat.categoryId] ?: 0L
             val headroom = maxOf(0L, curUnits - floor)
@@ -105,7 +132,7 @@ object BucketRebalanceCalculator {
             val remainder: Long
         )
 
-        val quotas = existingCategories.map { cat ->
+        val quotas = flexibleCategories.map { cat ->
             val w = weights[cat.categoryId] ?: 1L
             val intPart = (flexibleUnitsToDistribute * w) / totalWeight
             val rem = (flexibleUnitsToDistribute * w) % totalWeight
@@ -123,6 +150,9 @@ object BucketRebalanceCalculator {
         val bonusRecipients = sortedByRemainder.take(leftoverUnits).map { it.categoryId }.toSet()
 
         val finalAdjustments = mutableMapOf<Long, Long>()
+        // Preserve pinned categories untouched
+        finalAdjustments.putAll(pinnedAdjustments)
+
         for (q in quotas) {
             val floor = floorUnits[q.categoryId] ?: 0L
             val bonus = if (q.categoryId in bonusRecipients) 1L else 0L
@@ -130,11 +160,11 @@ object BucketRebalanceCalculator {
             finalAdjustments[q.categoryId] = totalUnitsForCat * unit
         }
 
-        // Distribute any leftover sub-unit paise to top category if roundToRupees was used
-        val totalAdjustedPaise = finalAdjustments.values.sum()
-        val remainderPaise = availableForExistingPaise - totalAdjustedPaise
-        if (remainderPaise > 0L && existingCategories.isNotEmpty()) {
-            val topCatId = existingCategories.first().categoryId
+        // Distribute any leftover sub-unit paise to top flexible category if roundToRupees was used
+        val flexibleAdjustedPaise = flexibleCategories.sumOf { finalAdjustments[it.categoryId] ?: 0L }
+        val remainderPaise = availableForFlexiblePaise - flexibleAdjustedPaise
+        if (remainderPaise > 0L && flexibleCategories.isNotEmpty()) {
+            val topCatId = flexibleCategories.first().categoryId
             finalAdjustments[topCatId] = (finalAdjustments[topCatId] ?: 0L) + remainderPaise
         }
 

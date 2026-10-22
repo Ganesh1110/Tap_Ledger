@@ -42,5 +42,7 @@ data class CategoryEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = 0L,
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = 0L
+    val updatedAt: Long = 0L,
+    @ColumnInfo(name = "is_pinned", defaultValue = "0")
+    val isPinned: Boolean = false
 )

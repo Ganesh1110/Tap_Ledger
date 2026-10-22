@@ -12,15 +12,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.ui.charts.model.EnvelopeBulletBarItem
@@ -51,7 +58,9 @@ import com.tapledger.ui.charts.render.rememberIsCompactChart
 fun EnvelopeBulletBarRow(
     item: EnvelopeBulletBarItem,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPinned: Boolean = false,
+    onTogglePin: (() -> Unit)? = null
 ) {
     val isCompact = rememberIsCompactChart()
     val barColor = when {
@@ -64,6 +73,7 @@ fun EnvelopeBulletBarRow(
 
     val contentDesc = buildString {
         append(item.categoryName)
+        if (isPinned) append(" (Fixed bill)")
         append(": spent ")
         append(MoneyFormatter.formatPaiseToRupees(item.spentPaise))
         append(" of ")
@@ -109,6 +119,22 @@ fun EnvelopeBulletBarRow(
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold
                     )
+                    if (isPinned) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer)
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "📌 Fixed",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
                     if (item.bucket == BudgetBucket.SAVINGS && item.isGoalAchieved) {
                         Icon(
@@ -142,6 +168,20 @@ fun EnvelopeBulletBarRow(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onTogglePin != null) {
+                        IconButton(
+                            onClick = onTogglePin,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                contentDescription = if (isPinned) "Unpin category" else "Pin category as fixed bill",
+                                tint = if (isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     Text(
                         text = MoneyFormatter.formatPaiseToRupees(item.spentPaise),
                         style = MaterialTheme.typography.bodyMedium,
