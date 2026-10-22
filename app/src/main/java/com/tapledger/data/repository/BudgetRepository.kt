@@ -254,12 +254,30 @@ class BudgetRepository @Inject constructor(
         }
     }
 
+    suspend fun getBudgetPeriod(periodId: Long): BudgetPeriodEntity? = budgetPeriodDao.getById(periodId)
+
     suspend fun createCategory(
         name: String,
         defaultBucket: BudgetBucket,
         defaultAdvancePolicy: com.tapledger.core.model.AdvancePolicy,
         initialAllocationPaise: Long,
         periodId: Long?
+    ): Long = createCategoryWithRebalance(
+        name = name,
+        defaultBucket = defaultBucket,
+        defaultAdvancePolicy = defaultAdvancePolicy,
+        initialAllocationPaise = initialAllocationPaise,
+        periodId = periodId,
+        rebalanceAdjustments = emptyMap()
+    )
+
+    suspend fun createCategoryWithRebalance(
+        name: String,
+        defaultBucket: BudgetBucket,
+        defaultAdvancePolicy: com.tapledger.core.model.AdvancePolicy,
+        initialAllocationPaise: Long,
+        periodId: Long?,
+        rebalanceAdjustments: Map<Long, Long> = emptyMap()
     ): Long {
         val now = DateTimeUtils.nowEpochMillis()
         val nextSortOrder = (categoryDao.getMaxSortOrder() ?: 0) + 1
@@ -288,6 +306,18 @@ class BudgetRepository @Inject constructor(
                     updatedAt = now
                 )
                 budgetAllocationDao.insert(allocation)
+
+                for ((otherCatId, newAmountPaise) in rebalanceAdjustments) {
+                    val existing = budgetAllocationDao.getAllocation(periodId, otherCatId)
+                    if (existing != null) {
+                        budgetAllocationDao.update(
+                            existing.copy(
+                                amountPaise = newAmountPaise,
+                                updatedAt = now
+                            )
+                        )
+                    }
+                }
             }
 
             categoryId
@@ -298,24 +328,52 @@ class BudgetRepository @Inject constructor(
         category: CategoryEntity,
         periodId: Long? = null,
         newAmountPaise: Long? = null
+    ) = updateCategoryWithRebalance(
+        category = category,
+        periodId = periodId,
+        newAmountPaise = newAmountPaise,
+        rebalanceAdjustments = emptyMap()
+    )
+
+    suspend fun updateCategoryWithRebalance(
+        category: CategoryEntity,
+        periodId: Long? = null,
+        newAmountPaise: Long? = null,
+        rebalanceAdjustments: Map<Long, Long> = emptyMap()
     ) {
         val now = DateTimeUtils.nowEpochMillis()
         val updated = category.copy(updatedAt = now)
-        categoryDao.update(updated)
+        transactionRunner.run {
+            categoryDao.update(updated)
 
-        val openPeriods = budgetPeriodDao.getAllPeriodsSync().filter { it.status == com.tapledger.core.model.BudgetPeriodStatus.OPEN }
-        for (openPeriod in openPeriods) {
-            val alloc = budgetAllocationDao.getAllocation(openPeriod.id, category.id)
-            if (alloc != null) {
-                val amount = if (openPeriod.id == periodId && newAmountPaise != null) newAmountPaise else alloc.amountPaise
-                val updatedAlloc = alloc.copy(
-                    categoryNameSnapshot = updated.name.trim(),
-                    bucketSnapshot = updated.defaultBucket,
-                    advancePolicySnapshot = updated.defaultAdvancePolicy,
-                    amountPaise = amount,
-                    updatedAt = now
-                )
-                budgetAllocationDao.update(updatedAlloc)
+            val openPeriods = budgetPeriodDao.getAllPeriodsSync().filter { it.status == com.tapledger.core.model.BudgetPeriodStatus.OPEN }
+            for (openPeriod in openPeriods) {
+                val alloc = budgetAllocationDao.getAllocation(openPeriod.id, category.id)
+                if (alloc != null) {
+                    val amount = if (openPeriod.id == periodId && newAmountPaise != null) newAmountPaise else alloc.amountPaise
+                    val updatedAlloc = alloc.copy(
+                        categoryNameSnapshot = updated.name.trim(),
+                        bucketSnapshot = updated.defaultBucket,
+                        advancePolicySnapshot = updated.defaultAdvancePolicy,
+                        amountPaise = amount,
+                        updatedAt = now
+                    )
+                    budgetAllocationDao.update(updatedAlloc)
+                }
+
+                if (openPeriod.id == periodId) {
+                    for ((otherCatId, newAmount) in rebalanceAdjustments) {
+                        val otherAlloc = budgetAllocationDao.getAllocation(periodId, otherCatId)
+                        if (otherAlloc != null) {
+                            budgetAllocationDao.update(
+                                otherAlloc.copy(
+                                    amountPaise = newAmount,
+                                    updatedAt = now
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
     }

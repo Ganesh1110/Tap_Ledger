@@ -12,6 +12,8 @@ import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.BudgetRepository
 import com.tapledger.domain.calculator.BudgetCalculator
+import com.tapledger.domain.calculator.BucketRebalanceCalculator
+import com.tapledger.domain.calculator.CategoryRebalanceInput
 import com.tapledger.ui.charts.builder.BudgetChartBuilder
 import com.tapledger.ui.charts.model.CategoryDonutSlice
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -107,7 +109,8 @@ class CategoryManagementViewModel @Inject constructor(
                         bulletBarsState = bulletBars,
                         categoryDonutState = donut,
                         selectedDonutSlice = _uiState.value.selectedDonutSlice,
-                        viewMode = _uiState.value.viewMode
+                        viewMode = _uiState.value.viewMode,
+                        plannedIncomePaise = period.incomePaise
                     )
                 }.collect { state ->
                     _uiState.value = state
@@ -135,7 +138,8 @@ class CategoryManagementViewModel @Inject constructor(
         name: String,
         bucket: BudgetBucket,
         advancePolicy: AdvancePolicy,
-        initialBudgetRupees: String
+        initialBudgetRupees: String,
+        autoAdjustOthers: Boolean = false
     ) {
         viewModelScope.launch {
             try {
@@ -150,12 +154,48 @@ class CategoryManagementViewModel @Inject constructor(
                 }
 
                 val periodId = _uiState.value.currentPeriodId
-                budgetRepository.createCategory(
+                val rebalanceAdjustments = if (autoAdjustOthers && periodId > 0L && amountPaise > 0L) {
+                    val period = budgetRepository.getBudgetPeriod(periodId)
+                    val incomePaise = period?.incomePaise ?: _uiState.value.plannedIncomePaise
+                    val targets = BudgetCalculator.calculate503020Targets(incomePaise)
+                    val bucketTargetPaise = when (bucket) {
+                        BudgetBucket.NEEDS -> targets.needsPaise
+                        BudgetBucket.WANTS -> targets.wantsPaise
+                        BudgetBucket.SAVINGS -> targets.savingsPaise
+                    }
+
+                    val existingInBucket = _uiState.value.categories.filter {
+                        it.category.defaultBucket == bucket
+                    }.map {
+                        CategoryRebalanceInput(
+                            categoryId = it.category.id,
+                            currentAllocationPaise = it.currentAllocationPaise,
+                            spentPaise = it.spentPaise
+                        )
+                    }
+
+                    val rebalanceResult = BucketRebalanceCalculator.calculateRebalance(
+                        targetBucketLimitPaise = bucketTargetPaise,
+                        targetCategoryAllocationPaise = amountPaise,
+                        existingCategories = existingInBucket
+                    )
+
+                    if (!rebalanceResult.success) {
+                        _uiState.update { it.copy(errorMessage = rebalanceResult.errorMessage ?: "Failed to auto-align bucket") }
+                        return@launch
+                    }
+                    rebalanceResult.adjustments
+                } else {
+                    emptyMap()
+                }
+
+                budgetRepository.createCategoryWithRebalance(
                     name = name,
                     defaultBucket = bucket,
                     defaultAdvancePolicy = advancePolicy,
                     initialAllocationPaise = amountPaise,
-                    periodId = if (periodId > 0L) periodId else null
+                    periodId = if (periodId > 0L) periodId else null,
+                    rebalanceAdjustments = rebalanceAdjustments
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Failed to add category") }
@@ -168,7 +208,8 @@ class CategoryManagementViewModel @Inject constructor(
         name: String,
         bucket: BudgetBucket,
         advancePolicy: AdvancePolicy,
-        newBudgetRupees: String
+        newBudgetRupees: String,
+        autoAdjustOthers: Boolean = false
     ) {
         viewModelScope.launch {
             try {
@@ -185,10 +226,46 @@ class CategoryManagementViewModel @Inject constructor(
                 }
 
                 val periodId = _uiState.value.currentPeriodId
-                budgetRepository.updateCategory(
+                val rebalanceAdjustments = if (autoAdjustOthers && periodId > 0L) {
+                    val period = budgetRepository.getBudgetPeriod(periodId)
+                    val incomePaise = period?.incomePaise ?: _uiState.value.plannedIncomePaise
+                    val targets = BudgetCalculator.calculate503020Targets(incomePaise)
+                    val bucketTargetPaise = when (bucket) {
+                        BudgetBucket.NEEDS -> targets.needsPaise
+                        BudgetBucket.WANTS -> targets.wantsPaise
+                        BudgetBucket.SAVINGS -> targets.savingsPaise
+                    }
+
+                    val existingInBucket = _uiState.value.categories.filter {
+                        it.category.defaultBucket == bucket && it.category.id != categoryId
+                    }.map {
+                        CategoryRebalanceInput(
+                            categoryId = it.category.id,
+                            currentAllocationPaise = it.currentAllocationPaise,
+                            spentPaise = it.spentPaise
+                        )
+                    }
+
+                    val rebalanceResult = BucketRebalanceCalculator.calculateRebalance(
+                        targetBucketLimitPaise = bucketTargetPaise,
+                        targetCategoryAllocationPaise = amountPaise,
+                        existingCategories = existingInBucket
+                    )
+
+                    if (!rebalanceResult.success) {
+                        _uiState.update { it.copy(errorMessage = rebalanceResult.errorMessage ?: "Failed to auto-align bucket") }
+                        return@launch
+                    }
+                    rebalanceResult.adjustments
+                } else {
+                    emptyMap()
+                }
+
+                budgetRepository.updateCategoryWithRebalance(
                     category = updated,
                     periodId = if (periodId > 0L) periodId else null,
-                    newAmountPaise = amountPaise
+                    newAmountPaise = amountPaise,
+                    rebalanceAdjustments = rebalanceAdjustments
                 )
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Failed to update category") }

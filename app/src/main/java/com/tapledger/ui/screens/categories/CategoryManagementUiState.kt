@@ -30,5 +30,6 @@ data class CategoryManagementUiState(
     val bulletBarsState: ChartState<BulletBarsModel> = ChartState.Loading,
     val categoryDonutState: ChartState<CategoryDonutModel> = ChartState.Loading,
     val selectedDonutSlice: CategoryDonutSlice? = null,
-    val viewMode: BudgetViewMode = BudgetViewMode.ENVELOPES
+    val viewMode: BudgetViewMode = BudgetViewMode.ENVELOPES,
+    val plannedIncomePaise: Long = 0L
 )

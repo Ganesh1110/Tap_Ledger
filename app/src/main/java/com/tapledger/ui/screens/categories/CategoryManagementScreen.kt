@@ -49,6 +49,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -79,6 +80,7 @@ import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.model.AdvancePolicy
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.domain.calculator.BudgetCalculator
 import com.tapledger.ui.components.ConfirmDialog
 import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.components.MoneySemantic
@@ -317,9 +319,11 @@ fun CategoryManagementScreen(
             initialBucket = BudgetBucket.NEEDS,
             initialAdvancePolicy = AdvancePolicy.CARRY_TO_ADVANCE,
             initialBudgetRupees = "",
+            plannedIncomePaise = state.plannedIncomePaise,
+            existingCategories = state.categories,
             onDismiss = { showAddDialog = false },
-            onSave = { name, bucket, advancePolicy, budgetRupees ->
-                viewModel.addCategory(name, bucket, advancePolicy, budgetRupees)
+            onSave = { name, bucket, advancePolicy, budgetRupees, autoAdjust ->
+                viewModel.addCategory(name, bucket, advancePolicy, budgetRupees, autoAdjust)
                 showAddDialog = false
             }
         )
@@ -333,6 +337,9 @@ fun CategoryManagementScreen(
             initialBucket = itemState.category.defaultBucket,
             initialAdvancePolicy = itemState.category.defaultAdvancePolicy,
             initialBudgetRupees = (itemState.currentAllocationPaise / 100).toString(),
+            editingCategoryId = itemState.category.id,
+            plannedIncomePaise = state.plannedIncomePaise,
+            existingCategories = state.categories,
             onDismiss = { editingCategoryItem = null },
             onDelete = if (itemState.category.systemKey == null) {
                 {
@@ -340,13 +347,14 @@ fun CategoryManagementScreen(
                     editingCategoryItem = null
                 }
             } else null,
-            onSave = { name, bucket, advancePolicy, budgetRupees ->
+            onSave = { name, bucket, advancePolicy, budgetRupees, autoAdjust ->
                 viewModel.updateCategory(
                     categoryId = itemState.category.id,
                     name = name,
                     bucket = bucket,
                     advancePolicy = advancePolicy,
-                    newBudgetRupees = budgetRupees
+                    newBudgetRupees = budgetRupees,
+                    autoAdjustOthers = autoAdjust
                 )
                 editingCategoryItem = null
             }
@@ -580,14 +588,28 @@ fun AddEditCategoryDialog(
     initialBucket: BudgetBucket,
     initialAdvancePolicy: AdvancePolicy,
     initialBudgetRupees: String,
+    editingCategoryId: Long? = null,
+    plannedIncomePaise: Long = 0L,
+    existingCategories: List<CategoryItemState> = emptyList(),
     onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
-    onSave: (String, BudgetBucket, AdvancePolicy, String) -> Unit
+    onSave: (String, BudgetBucket, AdvancePolicy, String, Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
     var selectedBucket by remember { mutableStateOf(initialBucket) }
     var selectedAdvancePolicy by remember { mutableStateOf(initialAdvancePolicy) }
     var budgetRupees by remember { mutableStateOf(initialBudgetRupees) }
+    var autoAdjustOthers by remember { mutableStateOf(false) }
+
+    val otherCategoriesCount = remember(selectedBucket, existingCategories, editingCategoryId) {
+        existingCategories.count {
+            it.category.defaultBucket == selectedBucket && it.category.id != (editingCategoryId ?: -1L)
+        }
+    }
+
+    val targets = remember(plannedIncomePaise) {
+        BudgetCalculator.calculate503020Targets(plannedIncomePaise)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -656,6 +678,50 @@ fun AddEditCategoryDialog(
                     }
                 }
 
+                if (otherCategoriesCount > 0 && plannedIncomePaise > 0L) {
+                    val (bucketPercent, bucketTargetPaise) = when (selectedBucket) {
+                        BudgetBucket.NEEDS -> "50%" to targets.needsPaise
+                        BudgetBucket.WANTS -> "30%" to targets.wantsPaise
+                        BudgetBucket.SAVINGS -> "20%" to targets.savingsPaise
+                    }
+                    val formattedTarget = MoneyFormatter.formatRupees(bucketTargetPaise, includeSymbol = true)
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { autoAdjustOthers = !autoAdjustOthers }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Fit within $bucketPercent limit ($formattedTarget)",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Automatically adjust other $otherCategoriesCount categories in $bucketPercent proportionally",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Switch(
+                                checked = autoAdjustOthers,
+                                onCheckedChange = { autoAdjustOthers = it }
+                            )
+                        }
+                    }
+                }
+
                 Text("Advance Carry Rule:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Column {
                     Row(
@@ -693,7 +759,7 @@ fun AddEditCategoryDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(name, selectedBucket, selectedAdvancePolicy, budgetRupees) }
+                onClick = { onSave(name, selectedBucket, selectedAdvancePolicy, budgetRupees, autoAdjustOthers) }
             ) {
                 Text("Save")
             }
