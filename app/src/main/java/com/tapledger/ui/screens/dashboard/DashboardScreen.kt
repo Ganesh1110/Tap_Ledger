@@ -115,6 +115,7 @@ import com.tapledger.ui.screens.dashboard.components.DashboardHeroRingCard
 import com.tapledger.ui.screens.dashboard.components.DashboardSixPeriodTrendCard
 import com.tapledger.ui.screens.dashboard.components.GoalAllocationBottomSheet
 import com.tapledger.ui.screens.dashboard.components.TransferPlanBottomSheet
+import com.tapledger.ui.screens.dashboard.components.SafeDailySpendPill
 import com.tapledger.ui.screens.dashboard.components.TransferPlanCard
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
@@ -555,6 +556,15 @@ fun DashboardScreen(
                                     )
                                 }
                             }
+                        }
+
+                        // 1.25. Safe to Spend Today Pill
+                        state.safeDailySpend?.let { safeSpend ->
+                            Spacer(modifier = Modifier.height(Spacing.xs))
+                            SafeDailySpendPill(
+                                safeSpend = safeSpend,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
                 }

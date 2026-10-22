@@ -51,6 +51,8 @@ import com.tapledger.data.repository.TransferPlanRepository
 import com.tapledger.domain.calculator.CardDueItem
 import com.tapledger.domain.calculator.GoalApportionmentCalculator
 import com.tapledger.domain.calculator.GoalApportionmentItem
+import com.tapledger.domain.calculator.SafeDailySpendCalculator
+import com.tapledger.domain.calculator.SafeDailySpendResult
 import com.tapledger.domain.calculator.SpareCalculator
 import com.tapledger.domain.calculator.UnpaidCommitmentItem
 import com.tapledger.ui.screens.dashboard.components.TransferPlanDashboardState
@@ -73,7 +75,8 @@ data class DashboardUiState(
     val sixPeriodTrendState: ChartState<SixPeriodTrendModel> = ChartState.Loading,
     val transferPlanState: TransferPlanDashboardState? = null,
     val activeGoals: List<GoalApportionmentItem> = emptyList(),
-    val preferredPayApp: String? = null
+    val preferredPayApp: String? = null,
+    val safeDailySpend: SafeDailySpendResult? = null
 )
 
 @HiltViewModel
@@ -320,6 +323,44 @@ class DashboardViewModel @Inject constructor(
                     )
                 }
 
+            // Safe Daily Spend Calculation (Flow.md §8.4/§8.5)
+            val todayStartIST = DateTimeUtils.getStartOfDayEpochMillis(nowIST)
+            val todayEndIST = todayStartIST + SafeDailySpendCalculator.MILLIS_PER_IST_DAY
+            val todayTxIds = periodTxs
+                .filter { it.occurredAt in todayStartIST until todayEndIST && it.status != TransactionStatus.VOIDED && it.status != TransactionStatus.IGNORED }
+                .map { it.id }
+                .toSet()
+
+            val savingsCategoryIds = budgetSummary.categorySummaries
+                .filter { it.allocation.bucketSnapshot == BudgetBucket.SAVINGS }
+                .map { it.allocation.categoryId }
+                .toSet()
+
+            var todaySpentPaise = 0L
+            for (alloc in periodAllocations) {
+                if (alloc.transactionId in todayTxIds && alloc.categoryId !in savingsCategoryIds) {
+                    val tx = periodTxs.find { it.id == alloc.transactionId }
+                    if (tx != null) {
+                        if (tx.kind == com.tapledger.core.model.TransactionKind.EXPENSE || tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_CHARGED) {
+                            todaySpentPaise += alloc.amountPaise
+                        } else if (tx.kind == com.tapledger.core.model.TransactionKind.REFUND) {
+                            todaySpentPaise -= alloc.amountPaise
+                        }
+                    }
+                }
+            }
+            if (todaySpentPaise < 0L) todaySpentPaise = 0L
+
+            val safeDailySpend = SafeDailySpendCalculator.calculate(
+                heroBudgetPaise = budgetSummary.dashboardHeroBudgetPaise,
+                heroSpentPaise = budgetSummary.dashboardHeroSpendPaise,
+                periodStartAt = period.startAt,
+                periodEndAt = period.endAt,
+                nowIST = nowIST,
+                isClosed = isClosed,
+                todaySpentPaise = todaySpentPaise
+            )
+
             _uiState.value = DashboardUiState(
                 isLoading = false,
                 pendingCount = pendingCount,
@@ -335,7 +376,8 @@ class DashboardViewModel @Inject constructor(
                 sixPeriodTrendState = sixTrend,
                 transferPlanState = transferPlanDashboardState,
                 activeGoals = activeGoals,
-                preferredPayApp = savingsGuidePreferences.getConfig().preferredPayApp
+                preferredPayApp = savingsGuidePreferences.getConfig().preferredPayApp,
+                safeDailySpend = safeDailySpend
             )
         }
     }

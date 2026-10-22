@@ -16,7 +16,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -88,6 +92,8 @@ fun AccountsScreen(
     var showActionDialog by remember { mutableStateOf(false) }
     var showCorrectBalanceDialog by remember { mutableStateOf(false) }
     var showEditStartingDialog by remember { mutableStateOf(false) }
+    var showTransferDialog by remember { mutableStateOf(false) }
+    var preselectedFromAccountId by remember { mutableStateOf<Long?>(null) }
     var isStartingLocked by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -116,7 +122,17 @@ fun AccountsScreen(
                         )
                     }
                 },
-                actions = {},
+                actions = {
+                    IconButton(onClick = {
+                        preselectedFromAccountId = null
+                        showTransferDialog = true
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = "Transfer Money"
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -276,6 +292,20 @@ fun AccountsScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Align / Correct Balance", fontWeight = FontWeight.Bold)
                             Text("Quickly match app with your actual bank balance (Recommended)", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val fromId = summary.account.id
+                            showActionDialog = false
+                            preselectedFromAccountId = fromId
+                            showTransferDialog = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Transfer Money", fontWeight = FontWeight.Bold)
+                            Text("Move funds to or from this account", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     OutlinedButton(
@@ -465,4 +495,178 @@ fun AccountsScreen(
             }
         )
     }
+
+    // Quick Account Transfer Dialog
+    if (showTransferDialog) {
+        val allAccounts = state.accountSummaries.map { it.account }
+        QuickTransferDialog(
+            accounts = allAccounts,
+            initialFromAccountId = preselectedFromAccountId,
+            onDismiss = { showTransferDialog = false },
+            onTransfer = { fromId, toId, amountRupees, note ->
+                viewModel.recordTransfer(fromId, toId, amountRupees, note)
+                showTransferDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun QuickTransferDialog(
+    accounts: List<AccountEntity>,
+    initialFromAccountId: Long?,
+    onDismiss: () -> Unit,
+    onTransfer: (fromAccountId: Long, toAccountId: Long, amountRupees: String, note: String?) -> Unit
+) {
+    var fromAccount by remember(accounts, initialFromAccountId) {
+        val initial = if (initialFromAccountId != null) {
+            accounts.find { it.id == initialFromAccountId }
+        } else {
+            accounts.firstOrNull { it.type != AccountType.CREDIT_CARD } ?: accounts.firstOrNull()
+        }
+        mutableStateOf(initial)
+    }
+
+    var toAccount by remember(accounts, fromAccount) {
+        val dest = accounts.firstOrNull { it.id != fromAccount?.id && it.type == AccountType.CASH }
+            ?: accounts.firstOrNull { it.id != fromAccount?.id }
+        mutableStateOf(dest)
+    }
+
+    var amountInput by remember { mutableStateOf("") }
+    var noteInput by remember { mutableStateOf("") }
+    var showFromDropdown by remember { mutableStateOf(false) }
+    var showToDropdown by remember { mutableStateOf(false) }
+
+    val quickAmounts = listOf("500", "1000", "2000", "5000")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Transfer Between Accounts",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // From Account
+                Text("From Account:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { showFromDropdown = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(fromAccount?.name ?: "Select Source Account")
+                    }
+                    DropdownMenu(
+                        expanded = showFromDropdown,
+                        onDismissRequest = { showFromDropdown = false }
+                    ) {
+                        accounts.forEach { acc ->
+                            DropdownMenuItem(
+                                text = { Text(acc.name) },
+                                onClick = {
+                                    fromAccount = acc
+                                    showFromDropdown = false
+                                    if (toAccount?.id == acc.id) {
+                                        toAccount = accounts.firstOrNull { it.id != acc.id }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // To Account
+                Text("To Account:", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { showToDropdown = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(toAccount?.name ?: "Select Destination Account")
+                    }
+                    DropdownMenu(
+                        expanded = showToDropdown,
+                        onDismissRequest = { showToDropdown = false }
+                    ) {
+                        accounts.filter { it.id != fromAccount?.id }.forEach { acc ->
+                            DropdownMenuItem(
+                                text = { Text(acc.name) },
+                                onClick = {
+                                    toAccount = acc
+                                    showToDropdown = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Amount
+                OutlinedTextField(
+                    value = amountInput,
+                    onValueChange = { amountInput = it },
+                    label = { Text("Transfer Amount (₹)") },
+                    prefix = { Text("₹ ") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Quick Amount Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    quickAmounts.forEach { amt ->
+                        OutlinedButton(
+                            onClick = { amountInput = amt },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                        ) {
+                            Text("₹$amt", fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
+                }
+
+                // Note
+                OutlinedTextField(
+                    value = noteInput,
+                    onValueChange = { noteInput = it },
+                    label = { Text("Note / Reason (e.g. ATM Withdrawal)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Done
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val fromId = fromAccount?.id ?: return@Button
+                    val toId = toAccount?.id ?: return@Button
+                    onTransfer(fromId, toId, amountInput, noteInput.ifBlank { null })
+                },
+                enabled = amountInput.isNotBlank() && fromAccount != null && toAccount != null && fromAccount?.id != toAccount?.id
+            ) {
+                Text("Transfer")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }

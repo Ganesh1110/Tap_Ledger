@@ -212,6 +212,42 @@ class AccountsViewModel @Inject constructor(
         }
     }
 
+    fun recordTransfer(
+        fromAccountId: Long,
+        toAccountId: Long,
+        amountRupees: String,
+        note: String? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                if (fromAccountId == toAccountId) {
+                    _uiState.update { it.copy(errorMessage = "Source and destination accounts must be different") }
+                    return@launch
+                }
+                val amountPaise = try {
+                    MoneyFormatter.toPaise(amountRupees)
+                } catch (e: Exception) {
+                    _uiState.update { it.copy(errorMessage = "Invalid transfer amount") }
+                    return@launch
+                }
+                if (amountPaise <= 0L) {
+                    _uiState.update { it.copy(errorMessage = "Transfer amount must be greater than zero") }
+                    return@launch
+                }
+                transactionRepository.recordTransfer(
+                    fromAccountId = fromAccountId,
+                    toAccountId = toAccountId,
+                    amountPaise = amountPaise,
+                    occurredAt = DateTimeUtils.nowEpochMillis(),
+                    note = note?.trim()?.ifBlank { null }
+                )
+                loadData()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to record transfer") }
+            }
+        }
+    }
+
     fun clearErrorMessage() {
         _uiState.update { it.copy(errorMessage = null) }
     }
