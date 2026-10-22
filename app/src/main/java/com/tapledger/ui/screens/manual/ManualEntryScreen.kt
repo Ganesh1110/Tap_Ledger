@@ -68,6 +68,7 @@ import com.tapledger.core.model.TransactionKind
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.components.keyboardAware
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -223,46 +224,77 @@ fun ManualEntryScreen(
 
             var showDatePicker by remember { mutableStateOf(false) }
 
-            // 3. Date & Time Display & Selector (Asia/Kolkata)
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showDatePicker = true },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-                ),
-                shape = RoundedCornerShape(12.dp)
+            // 3. Date Selection & Quick Presets (Today, Yesterday, Custom Pick Date)
+            val selectedDate = DateTimeUtils.toLocalDate(state.selectedDateMillis)
+            val todayDate = LocalDate.now(DateTimeUtils.IST_ZONE)
+            val yesterdayDate = todayDate.minusDays(1)
+            val isToday = selectedDate == todayDate
+            val isYesterday = selectedDate == yesterdayDate
+            val isOtherDate = !isToday && !isYesterday
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.CalendarToday,
-                        contentDescription = "Choose Date",
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(Spacing.sm))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Transaction Date",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "${DateTimeUtils.formatDate(state.selectedDateMillis)} (Asia/Kolkata)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
                     Text(
-                        text = "Choose Date",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = "Transaction Date",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "${DateTimeUtils.formatDate(state.selectedDateMillis)} (IST)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    FilterChip(
+                        selected = isToday,
+                        onClick = { viewModel.onDateSelected(DateTimeUtils.nowEpochMillis()) },
+                        label = { Text("Today") },
+                        leadingIcon = if (isToday) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    FilterChip(
+                        selected = isYesterday,
+                        onClick = { viewModel.onDateSelected(DateTimeUtils.getYesterdayEpochMillis()) },
+                        label = { Text("Yesterday") },
+                        leadingIcon = if (isYesterday) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    FilterChip(
+                        selected = isOtherDate,
+                        onClick = { showDatePicker = true },
+                        label = {
+                            Text(
+                                text = if (isOtherDate) DateTimeUtils.formatDate(state.selectedDateMillis) else "Pick Date",
+                                maxLines = 1
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = "Pick Date",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.weight(1.3f)
                     )
                 }
             }

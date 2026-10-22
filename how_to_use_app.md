@@ -77,19 +77,19 @@ Before jumping into the steps, here is how TapLedger thinks about money:
 
 ---
 
-### 📊 Example 4: Bank Statement Reconciliation (End of Month)
+### 📊 Example 4: Quick Date Logging & Aligning Account Balances
 
-At the end of the month, Rahul wants to ensure he didn't miss any cash transactions or bank interest credits.
+At any point during the month, Rahul wants to log past expenses or align his app balance with his real bank balance.
 
-1. **Importing Statement**:
-   - Rahul goes to **Statement Reconciliation** (via Quick Action chip or `⋮` menu).
-   - Selects **HDFC Savings**, enters Opening Balance (`₹50,000.00`), Closing Balance (`₹1,24,150.00`), and pastes or uploads his bank CSV lines.
-2. **Automated Matching**:
-   - TapLedger's engine compares bank statement lines against recorded app transactions.
-   - Matched lines display a **Green Check Mark (`MATCHED`)**.
-3. **Handling Missing Items**:
-   - An unrecorded bank charge of **₹118.00** shows an amber **`MISSING_IN_APP`** badge.
-   - Rahul taps **`Add to App`**, selects Category **`Utilities & Fees`**, and TapLedger creates the transaction and reconciles the line in 1 tap!
+1. **Quick Date Logging for Past Purchases**:
+   - Rahul forgot to record a cash purchase of **₹350.00** from yesterday.
+   - He taps **`+ Add Transaction`**, enters **₹350.00**, and simply taps the **`Yesterday`** quick chip (or taps **`Pick Date`** for older dates).
+   - The transaction is recorded with the exact past date, keeping his daily and monthly reports completely accurate!
+
+2. **One-Tap Balance Alignment ("Align / Correct Balance")**:
+   - Rahul notices his HDFC bank app shows **₹48,800.00** while TapLedger shows **₹49,150.00** (due to a missed cash withdrawal).
+   - Instead of dealing with confusing bank statement files, Rahul goes to **Accounts** $\rightarrow$ taps **HDFC Savings** $\rightarrow$ selects **`Align / Correct Balance`**.
+   - He types in **₹48,800.00**. TapLedger immediately calculates the **-₹350.00 adjustment** and reconciles the account in 1 tap without distorting his envelope budgets!
 
 ---
 

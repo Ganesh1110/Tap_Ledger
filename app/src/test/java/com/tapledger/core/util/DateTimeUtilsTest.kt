@@ -103,4 +103,13 @@ class DateTimeUtilsTest {
         assertThat(convertedDate.dayOfMonth).isEqualTo(15)
         assertThat(DateTimeUtils.formatDate(convertedIstMillis)).isEqualTo("15 Oct 2026")
     }
+
+    @Test
+    fun testYesterdayEpochMillis_isExactlyYesterdayInIST() {
+        val yesterdayMillis = DateTimeUtils.getYesterdayEpochMillis()
+        val yesterdayDate = DateTimeUtils.toLocalDate(yesterdayMillis)
+        val todayDate = java.time.LocalDate.now(DateTimeUtils.IST_ZONE)
+
+        assertThat(yesterdayDate).isEqualTo(todayDate.minusDays(1))
+    }
 }

@@ -106,4 +106,13 @@ object DateTimeUtils {
         val istDate = toLocalDate(epochMillis)
         return istDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
     }
+
+    /**
+     * Returns the epoch millis for yesterday at the current time-of-day in Asia/Kolkata.
+     */
+    fun getYesterdayEpochMillis(): Long {
+        val yesterday = LocalDate.now(IST_ZONE).minusDays(1)
+        val nowTime = ZonedDateTime.now(IST_ZONE).toLocalTime()
+        return yesterday.atTime(nowTime).atZone(IST_ZONE).toInstant().toEpochMilli()
+    }
 }

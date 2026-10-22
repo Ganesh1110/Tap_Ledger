@@ -274,8 +274,8 @@ fun AccountsScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Correct Balance", fontWeight = FontWeight.Bold)
-                            Text("Fix today's balance via adjustment (Recommended)", style = MaterialTheme.typography.bodySmall)
+                            Text("Align / Correct Balance", fontWeight = FontWeight.Bold)
+                            Text("Quickly match app with your actual bank balance (Recommended)", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     OutlinedButton(
@@ -327,7 +327,7 @@ fun AccountsScreen(
 
         AlertDialog(
             onDismissRequest = { showCorrectBalanceDialog = false },
-            title = { Text("Correct ${summary.account.name} Balance") },
+            title = { Text("Align ${summary.account.name} Balance") },
             text = {
                 Column(
                     modifier = Modifier
@@ -384,7 +384,7 @@ fun AccountsScreen(
                     },
                     enabled = deltaPaise != 0L
                 ) {
-                    Text("Apply Correction")
+                    Text("Apply Alignment")
                 }
             },
             dismissButton = {
