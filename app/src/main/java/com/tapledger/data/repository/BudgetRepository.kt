@@ -380,6 +380,26 @@ class BudgetRepository @Inject constructor(
         }
     }
 
+    suspend fun rebalanceBucketAllocations(
+        periodId: Long,
+        rebalanceAdjustments: Map<Long, Long>
+    ) {
+        val now = DateTimeUtils.nowEpochMillis()
+        transactionRunner.run {
+            for ((catId, newAmount) in rebalanceAdjustments) {
+                val alloc = budgetAllocationDao.getAllocation(periodId, catId)
+                if (alloc != null) {
+                    budgetAllocationDao.update(
+                        alloc.copy(
+                            amountPaise = newAmount,
+                            updatedAt = now
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     suspend fun deactivateCategory(categoryId: Long) {
         val category = categoryDao.getById(categoryId) ?: return
         require(category.systemKey == null) { "System categories cannot be deleted" }

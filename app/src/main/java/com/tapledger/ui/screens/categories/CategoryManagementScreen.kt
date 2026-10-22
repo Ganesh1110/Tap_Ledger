@@ -122,11 +122,19 @@ fun CategoryManagementScreen(
     var showPatternSheet by remember { mutableStateOf(false) }
     var editingCategoryItem by remember { mutableStateOf<CategoryItemState?>(null) }
     var categoryToDelete by remember { mutableStateOf<CategoryEntity?>(null) }
+    var bucketToRebalance by remember { mutableStateOf<BudgetBucket?>(null) }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.clearErrorMessage()
+        }
+    }
+
+    LaunchedEffect(state.infoMessage) {
+        state.infoMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearInfoMessage()
         }
     }
 
@@ -188,6 +196,9 @@ fun CategoryManagementScreen(
         } else {
             val categoriesByBucket = state.categories.groupBy { it.category.defaultBucket }
             val bulletItemsMap = (state.bulletBarsState as? ChartState.Data)?.data?.envelopes?.associateBy { it.categoryId } ?: emptyMap()
+            val bucketTargets = remember(state.plannedIncomePaise) {
+                BudgetCalculator.calculate503020Targets(state.plannedIncomePaise)
+            }
 
             LazyColumn(
                 state = listState,
@@ -266,19 +277,30 @@ fun CategoryManagementScreen(
                         }
                     }
 
+                    val targets = bucketTargets
+
                     listOf(BudgetBucket.NEEDS, BudgetBucket.WANTS, BudgetBucket.SAVINGS).forEach { bucket ->
                         val bucketItems = categoriesByBucket[bucket] ?: emptyList()
                         if (bucketItems.isNotEmpty()) {
                             val totalAllocated = bucketItems.sumOf { it.currentAllocationPaise }
                             val totalSpent = bucketItems.sumOf { it.spentPaise }
                             val totalRemaining = totalAllocated - totalSpent
+                            val targetPaise = when (bucket) {
+                                BudgetBucket.NEEDS -> targets.needsPaise
+                                BudgetBucket.WANTS -> targets.wantsPaise
+                                BudgetBucket.SAVINGS -> targets.savingsPaise
+                            }
 
                             item(key = "header_${bucket.name}") {
                                 BucketSectionHeader(
                                     bucket = bucket,
                                     totalAllocated = totalAllocated,
                                     totalSpent = totalSpent,
-                                    totalRemaining = totalRemaining
+                                    totalRemaining = totalRemaining,
+                                    targetPaise = targetPaise,
+                                    onRebalance = if (state.plannedIncomePaise > 0L) {
+                                        { bucketToRebalance = bucket }
+                                    } else null
                                 )
                             }
 
@@ -383,6 +405,40 @@ fun CategoryManagementScreen(
         )
     }
 
+    // Rebalance Confirmation Dialog
+    bucketToRebalance?.let { bucket ->
+        val targets = BudgetCalculator.calculate503020Targets(state.plannedIncomePaise)
+        val (percent, targetPaise) = when (bucket) {
+            BudgetBucket.NEEDS -> "50%" to targets.needsPaise
+            BudgetBucket.WANTS -> "30%" to targets.wantsPaise
+            BudgetBucket.SAVINGS -> "20%" to targets.savingsPaise
+        }
+        val formattedTarget = MoneyFormatter.formatRupees(targetPaise, includeSymbol = true)
+        val bucketItems = state.categories.filter { it.category.defaultBucket == bucket }
+        val pinnedCount = bucketItems.count { it.category.isPinned }
+        val flexibleCount = bucketItems.count { !it.category.isPinned }
+
+        val detailsText = buildString {
+            append("This will rebalance the ${bucket.name.lowercase()} bucket to exactly match your $percent target ($formattedTarget).\n\n")
+            if (pinnedCount > 0) {
+                append("• $pinnedCount fixed/pinned bill${if (pinnedCount > 1) "s" else ""} will remain strictly unchanged.\n")
+            }
+            append("• $flexibleCount flexible categor${if (flexibleCount == 1) "y" else "ies"} will be adjusted proportionally.")
+        }
+
+        ConfirmDialog(
+            title = "Align ${bucket.name} to $percent ($formattedTarget)?",
+            text = detailsText,
+            confirmText = "Align to $percent",
+            isDestructive = false,
+            onConfirm = {
+                viewModel.rebalanceBucket(bucket)
+                bucketToRebalance = null
+            },
+            onDismiss = { bucketToRebalance = null }
+        )
+    }
+
     // Transfer Budget Dialog
     if (showTransferDialog) {
         val activeCategories = state.categories.map { it.category }
@@ -402,13 +458,17 @@ private fun BucketSectionHeader(
     bucket: BudgetBucket,
     totalAllocated: Long,
     totalSpent: Long,
-    totalRemaining: Long
+    totalRemaining: Long,
+    targetPaise: Long = 0L,
+    onRebalance: (() -> Unit)? = null
 ) {
-    val bucketTitle = when (bucket) {
-        BudgetBucket.NEEDS -> "Needs (50%)"
-        BudgetBucket.WANTS -> "Wants (30%)"
-        BudgetBucket.SAVINGS -> "Savings (20%)"
+    val (bucketPercent, bucketTitle) = when (bucket) {
+        BudgetBucket.NEEDS -> "50%" to "Needs (50%)"
+        BudgetBucket.WANTS -> "30%" to "Wants (30%)"
+        BudgetBucket.SAVINGS -> "20%" to "Savings (20%)"
     }
+
+    val isBalanced = targetPaise > 0L && totalAllocated == targetPaise
 
     Column(
         modifier = Modifier
@@ -420,12 +480,49 @@ private fun BucketSectionHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = bucketTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Text(
+                    text = bucketTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                if (targetPaise > 0L && onRebalance != null) {
+                    if (isBalanced) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "✓ Balanced",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .clickable(onClick = onRebalance)
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "⚖️ Align to $bucketPercent",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
+            }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

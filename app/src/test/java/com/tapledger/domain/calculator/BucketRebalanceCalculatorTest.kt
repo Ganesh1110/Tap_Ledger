@@ -172,4 +172,38 @@ class BucketRebalanceCalculatorTest {
         assertThat(result.success).isTrue()
         assertThat(result.adjustments).isEmpty()
     }
+
+    @Test
+    fun rebalance_oneTapBucketHeaderRebalance_rebalancesAllFlexibleCategoriesToExactTarget() {
+        // Needs 50% target = ₹25,000
+        val targetLimit = 25_000_00L
+        val existing = listOf(
+            CategoryRebalanceInput(categoryId = 1, currentAllocationPaise = 12_000_00L, spentPaise = 2_000_00L, isPinned = true),  // Rent (PINNED)
+            CategoryRebalanceInput(categoryId = 2, currentAllocationPaise = 10_000_00L, spentPaise = 3_000_00L, isPinned = false), // Groceries
+            CategoryRebalanceInput(categoryId = 3, currentAllocationPaise = 8_000_00L, spentPaise = 1_000_00L, isPinned = false)   // Utilities
+        )
+
+        // 1-Tap header rebalance sets targetCategoryAllocationPaise = 0L
+        val result = BucketRebalanceCalculator.calculateRebalance(
+            targetBucketLimitPaise = targetLimit,
+            targetCategoryAllocationPaise = 0L,
+            existingCategories = existing
+        )
+
+        assertThat(result.success).isTrue()
+        // Rent (Pinned) must be unchanged at ₹12,000
+        assertThat(result.adjustments[1]).isEqualTo(12_000_00L)
+
+        // Total of all categories must sum to EXACTLY targetLimit (₹25,000)
+        val total = result.adjustments.values.sum()
+        assertThat(total).isEqualTo(targetLimit)
+
+        // Groceries + Utilities must sum to 25,000 - 12,000 = ₹13,000
+        val flexibleTotal = (result.adjustments[2] ?: 0L) + (result.adjustments[3] ?: 0L)
+        assertThat(flexibleTotal).isEqualTo(13_000_00L)
+
+        // And both must be >= spent amounts
+        assertThat(result.adjustments[2]!!).isAtLeast(3_000_00L)
+        assertThat(result.adjustments[3]!!).isAtLeast(1_000_00L)
+    }
 }

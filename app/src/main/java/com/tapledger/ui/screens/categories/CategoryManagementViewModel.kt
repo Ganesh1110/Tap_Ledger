@@ -350,7 +350,78 @@ class CategoryManagementViewModel @Inject constructor(
         }
     }
 
+    fun rebalanceBucket(bucket: BudgetBucket) {
+        viewModelScope.launch {
+            try {
+                val state = _uiState.value
+                val periodId = state.currentPeriodId
+                if (periodId <= 0L) {
+                    _uiState.update { it.copy(errorMessage = "No active budget period found") }
+                    return@launch
+                }
+
+                val plannedIncomePaise = state.plannedIncomePaise
+                if (plannedIncomePaise <= 0L) {
+                    _uiState.update { it.copy(errorMessage = "Set monthly planned income first to enable 50/30/20 rebalancing") }
+                    return@launch
+                }
+
+                val targets = BudgetCalculator.calculate503020Targets(plannedIncomePaise)
+                val bucketTargetPaise = when (bucket) {
+                    BudgetBucket.NEEDS -> targets.needsPaise
+                    BudgetBucket.WANTS -> targets.wantsPaise
+                    BudgetBucket.SAVINGS -> targets.savingsPaise
+                }
+
+                val categoriesInBucket = state.categories.filter { it.category.defaultBucket == bucket }
+                if (categoriesInBucket.isEmpty()) {
+                    _uiState.update { it.copy(errorMessage = "No categories found in ${bucket.name}") }
+                    return@launch
+                }
+
+                val inputs = categoriesInBucket.map {
+                    CategoryRebalanceInput(
+                        categoryId = it.category.id,
+                        currentAllocationPaise = it.currentAllocationPaise,
+                        spentPaise = it.spentPaise,
+                        isPinned = it.category.isPinned
+                    )
+                }
+
+                val rebalanceResult = BucketRebalanceCalculator.calculateRebalance(
+                    targetBucketLimitPaise = bucketTargetPaise,
+                    targetCategoryAllocationPaise = 0L,
+                    existingCategories = inputs
+                )
+
+                if (!rebalanceResult.success) {
+                    _uiState.update { it.copy(errorMessage = rebalanceResult.errorMessage ?: "Failed to rebalance ${bucket.name}") }
+                    return@launch
+                }
+
+                budgetRepository.rebalanceBucketAllocations(
+                    periodId = periodId,
+                    rebalanceAdjustments = rebalanceResult.adjustments
+                )
+
+                val bucketPercent = when (bucket) {
+                    BudgetBucket.NEEDS -> "50%"
+                    BudgetBucket.WANTS -> "30%"
+                    BudgetBucket.SAVINGS -> "20%"
+                }
+                val formattedTarget = MoneyFormatter.formatRupees(bucketTargetPaise, includeSymbol = true)
+                _uiState.update { it.copy(infoMessage = "Aligned ${bucket.name} to $bucketPercent ($formattedTarget)") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Failed to rebalance bucket") }
+            }
+        }
+    }
+
     fun clearErrorMessage() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    fun clearInfoMessage() {
+        _uiState.update { it.copy(infoMessage = null) }
     }
 }

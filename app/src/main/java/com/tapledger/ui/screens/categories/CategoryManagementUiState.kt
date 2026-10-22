@@ -27,6 +27,7 @@ data class CategoryManagementUiState(
     val categories: List<CategoryItemState> = emptyList(),
     val adjustments: List<BudgetAdjustmentEntity> = emptyList(),
     val errorMessage: String? = null,
+    val infoMessage: String? = null,
     val bulletBarsState: ChartState<BulletBarsModel> = ChartState.Loading,
     val categoryDonutState: ChartState<CategoryDonutModel> = ChartState.Loading,
     val selectedDonutSlice: CategoryDonutSlice? = null,
