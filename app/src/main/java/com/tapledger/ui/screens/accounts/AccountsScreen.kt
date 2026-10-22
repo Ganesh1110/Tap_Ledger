@@ -116,14 +116,7 @@ fun AccountsScreen(
                         )
                     }
                 },
-                actions = {
-                    IconButton(onClick = onNavigateToStatements) {
-                        Icon(
-                            imageVector = Icons.Default.FileUpload,
-                            contentDescription = "Import Statement PDF"
-                        )
-                    }
-                },
+                actions = {},
                 colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
@@ -283,18 +276,6 @@ fun AccountsScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Correct Balance", fontWeight = FontWeight.Bold)
                             Text("Fix today's balance via adjustment (Recommended)", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            showActionDialog = false
-                            onNavigateToStatements()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Import Statement (PDF / CSV)", fontWeight = FontWeight.Bold)
-                            Text("Reconcile ledger against official bank statement", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     OutlinedButton(

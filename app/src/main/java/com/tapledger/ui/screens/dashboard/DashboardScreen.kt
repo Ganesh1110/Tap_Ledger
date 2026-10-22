@@ -138,7 +138,7 @@ fun DashboardScreen(
     onNavigateToBackup: () -> Unit,
     onNavigateToSetup: () -> Unit,
     onNavigateToCategories: () -> Unit,
-    onNavigateToStatements: () -> Unit,
+    onNavigateToStatements: () -> Unit = {},
     onNavigateToMonthClose: () -> Unit,
     onNavigateToDiagnostics: () -> Unit,
     onNavigateToInsights: () -> Unit = {},
@@ -498,36 +498,7 @@ fun DashboardScreen(
                                 }
                             }
 
-                            // 2. Reconcile Button
-                            Surface(
-                                onClick = onNavigateToStatements,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Sync,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Reconcile",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-
-                            // 3. Close Month Button
+                            // 2. Close Month Button
                             Surface(
                                 onClick = onNavigateToMonthClose,
                                 modifier = Modifier.weight(1f),

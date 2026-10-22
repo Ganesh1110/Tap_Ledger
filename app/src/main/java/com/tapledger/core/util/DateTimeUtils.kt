@@ -81,4 +81,29 @@ object DateTimeUtils {
     fun formatDateTime(epochMillis: Long): String {
         return toZonedDateTime(epochMillis).format(DATE_TIME_FORMATTER)
     }
+
+    /**
+     * Converts a UTC midnight epoch millis (e.g. from Material 3 DatePicker)
+     * to Asia/Kolkata epoch millis. If the selected date is today in IST, uses current
+     * time-of-day; otherwise, combines the selected date with the current time-of-day in IST.
+     */
+    fun utcMidnightToIstEpochMillis(utcMillis: Long): Long {
+        val pickedDate = Instant.ofEpochMilli(utcMillis).atZone(ZoneId.of("UTC")).toLocalDate()
+        val todayIst = LocalDate.now(IST_ZONE)
+        return if (pickedDate == todayIst) {
+            nowEpochMillis()
+        } else {
+            val nowTime = ZonedDateTime.now(IST_ZONE).toLocalTime()
+            pickedDate.atTime(nowTime).atZone(IST_ZONE).toInstant().toEpochMilli()
+        }
+    }
+
+    /**
+     * Converts an Asia/Kolkata epoch millis to UTC midnight epoch millis
+     * for feeding into Material 3 DatePicker (which operates in UTC).
+     */
+    fun istEpochMillisToUtcMidnightMillis(epochMillis: Long): Long {
+        val istDate = toLocalDate(epochMillis)
+        return istDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+    }
 }

@@ -79,4 +79,28 @@ class DateTimeUtilsTest {
             }
         }
     }
+
+    @Test
+    fun testDatePickerTimezoneConversion_roundTripAndDatePreservation() {
+        // An IST timestamp on 2026-10-15 at 14:30:00
+        val istZdt = ZonedDateTime.of(2026, 10, 15, 14, 30, 0, 0, DateTimeUtils.IST_ZONE)
+        val epochMillis = istZdt.toInstant().toEpochMilli()
+
+        // Convert to UTC midnight for M3 DatePicker
+        val utcMidnight = DateTimeUtils.istEpochMillisToUtcMidnightMillis(epochMillis)
+        val utcZdt = Instant.ofEpochMilli(utcMidnight).atZone(ZoneId.of("UTC"))
+        assertThat(utcZdt.year).isEqualTo(2026)
+        assertThat(utcZdt.monthValue).isEqualTo(10)
+        assertThat(utcZdt.dayOfMonth).isEqualTo(15)
+        assertThat(utcZdt.hour).isEqualTo(0)
+        assertThat(utcZdt.minute).isEqualTo(0)
+
+        // Convert back from UTC midnight to IST
+        val convertedIstMillis = DateTimeUtils.utcMidnightToIstEpochMillis(utcMidnight)
+        val convertedDate = DateTimeUtils.toLocalDate(convertedIstMillis)
+        assertThat(convertedDate.year).isEqualTo(2026)
+        assertThat(convertedDate.monthValue).isEqualTo(10)
+        assertThat(convertedDate.dayOfMonth).isEqualTo(15)
+        assertThat(DateTimeUtils.formatDate(convertedIstMillis)).isEqualTo("15 Oct 2026")
+    }
 }

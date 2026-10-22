@@ -28,6 +28,7 @@ data class ManualEntryUiState(
     val amountRupeesText: String = "",
     val merchantText: String = "",
     val noteText: String = "",
+    val selectedDateMillis: Long = DateTimeUtils.nowEpochMillis(),
     val isSuccess: Boolean = false,
     val errorMessage: String? = null
 )
@@ -99,6 +100,10 @@ class ManualEntryViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(noteText = note)
     }
 
+    fun onDateSelected(epochMillis: Long) {
+        _uiState.value = _uiState.value.copy(selectedDateMillis = epochMillis)
+    }
+
     fun submitTransaction() {
         val state = _uiState.value
         val amountPaise = try {
@@ -120,7 +125,7 @@ class ManualEntryViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val now = DateTimeUtils.nowEpochMillis()
+                val occurredAt = state.selectedDateMillis
                 when (state.selectedKind) {
                     TransactionKind.EXPENSE,
                     TransactionKind.FEE,
@@ -136,7 +141,7 @@ class ManualEntryViewModel @Inject constructor(
                         transactionRepository.recordExpense(
                             accountId = accountId,
                             amountPaise = amountPaise,
-                            occurredAt = now,
+                            occurredAt = occurredAt,
                             merchantRaw = state.merchantText.ifBlank { null },
                             merchantNormalized = state.merchantText.trim().uppercase().ifBlank { null },
                             note = state.noteText.ifBlank { null },
@@ -148,7 +153,7 @@ class ManualEntryViewModel @Inject constructor(
                         transactionRepository.recordIncome(
                             accountId = accountId,
                             amountPaise = amountPaise,
-                            occurredAt = now,
+                            occurredAt = occurredAt,
                             merchantRaw = state.merchantText.ifBlank { null },
                             merchantNormalized = state.merchantText.trim().uppercase().ifBlank { null },
                             note = state.noteText.ifBlank { null }
@@ -164,7 +169,7 @@ class ManualEntryViewModel @Inject constructor(
                             fromAccountId = accountId,
                             toAccountId = destAccountId,
                             amountPaise = amountPaise,
-                            occurredAt = now,
+                            occurredAt = occurredAt,
                             note = state.noteText.ifBlank { null }
                         )
                     }
@@ -172,7 +177,7 @@ class ManualEntryViewModel @Inject constructor(
                         transactionRepository.recordRefund(
                             accountId = accountId,
                             amountPaise = amountPaise,
-                            occurredAt = now,
+                            occurredAt = occurredAt,
                             categoryId = state.selectedCategoryId,
                             merchantRaw = state.merchantText.ifBlank { null },
                             note = state.noteText.ifBlank { null }
