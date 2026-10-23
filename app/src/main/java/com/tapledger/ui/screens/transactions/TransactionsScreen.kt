@@ -22,14 +22,19 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -70,6 +75,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionStatus
 import com.tapledger.ui.components.EmptyState
@@ -101,6 +107,8 @@ fun TransactionsScreen(
 
     var selectedTxForDetails by remember { mutableStateOf<TransactionEntity?>(null) }
     var isSearchVisible by remember { mutableStateOf(false) }
+    var showCategoryDropdown by remember { mutableStateOf(false) }
+    var showAccountDropdown by remember { mutableStateOf(false) }
 
     // Group filtered transactions by date
     val groupedByDate = remember(state.filteredTransactions) {
@@ -187,11 +195,28 @@ fun TransactionsScreen(
                     )
                 }
 
-                // Filter Chips Row (Month, All, Pending, Categorized, Voided)
+                // Filter Chips Row (Clear All, Month, Kind, Category, Account, Status)
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     contentPadding = PaddingValues(vertical = Spacing.xxs)
                 ) {
+                    if (state.isAnyFilterActive) {
+                        item {
+                            FilterChip(
+                                selected = true,
+                                onClick = { viewModel.clearAllFilters() },
+                                label = { Text("Clear All") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Clear,
+                                        contentDescription = "Clear all filters",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+
                     item {
                         FilterChip(
                             selected = state.isMonthFilterActive,
@@ -213,13 +238,178 @@ fun TransactionsScreen(
                             }
                         )
                     }
+
+                    // Kind Filters (Expense, Income, Transfer)
                     item {
                         FilterChip(
-                            selected = state.selectedStatus == null,
-                            onClick = { viewModel.onStatusSelected(null) },
-                            label = { Text("All (${state.filteredTransactions.size})") }
+                            selected = state.selectedKind == TransactionKind.EXPENSE,
+                            onClick = {
+                                viewModel.onKindSelected(
+                                    if (state.selectedKind == TransactionKind.EXPENSE) null else TransactionKind.EXPENSE
+                                )
+                            },
+                            label = { Text("Expenses") }
                         )
                     }
+                    item {
+                        FilterChip(
+                            selected = state.selectedKind == TransactionKind.INCOME,
+                            onClick = {
+                                viewModel.onKindSelected(
+                                    if (state.selectedKind == TransactionKind.INCOME) null else TransactionKind.INCOME
+                                )
+                            },
+                            label = { Text("Income") }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = state.selectedKind == TransactionKind.TRANSFER,
+                            onClick = {
+                                viewModel.onKindSelected(
+                                    if (state.selectedKind == TransactionKind.TRANSFER) null else TransactionKind.TRANSFER
+                                )
+                            },
+                            label = { Text("Transfers") }
+                        )
+                    }
+
+                    // Category / Bucket Filter Dropdown Chip
+                    item {
+                        Box {
+                            val selectedCatId = state.selectedCategoryId
+                            val selectedBucket = state.selectedBucket
+                            val isCategoryOrBucketSelected = selectedCatId != null || selectedBucket != null
+                            val categoryChipLabel = when {
+                                selectedCatId != null -> state.categoriesMap[selectedCatId]?.name ?: "Category"
+                                selectedBucket != null -> selectedBucket.name.lowercase().replaceFirstChar { it.uppercase() }
+                                else -> "Category"
+                            }
+                            FilterChip(
+                                selected = isCategoryOrBucketSelected,
+                                onClick = { showCategoryDropdown = true },
+                                label = { Text(categoryChipLabel) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Category,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                            DropdownMenu(
+                                expanded = showCategoryDropdown,
+                                onDismissRequest = { showCategoryDropdown = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("All Categories") },
+                                    onClick = {
+                                        viewModel.onCategorySelected(null)
+                                        viewModel.onBucketSelected(null)
+                                        showCategoryDropdown = false
+                                    }
+                                )
+                                HorizontalDivider()
+                                Text(
+                                    text = "BUCKETS",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                )
+                                BudgetBucket.entries.forEach { bucket ->
+                                    DropdownMenuItem(
+                                        text = { Text(bucket.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                        onClick = {
+                                            viewModel.onBucketSelected(bucket)
+                                            showCategoryDropdown = false
+                                        }
+                                    )
+                                }
+                                if (state.categoriesMap.isNotEmpty()) {
+                                    HorizontalDivider()
+                                    Text(
+                                        text = "CATEGORIES",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    )
+                                    state.categoriesMap.values.sortedBy { it.name }.forEach { cat ->
+                                        DropdownMenuItem(
+                                            text = { Text(cat.name) },
+                                            onClick = {
+                                                viewModel.onCategorySelected(cat.id)
+                                                showCategoryDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Account Filter Dropdown Chip
+                    item {
+                        Box {
+                            val selectedAccId = state.selectedAccountId
+                            val accountChipLabel = if (selectedAccId != null) {
+                                state.accountsMap[selectedAccId]?.name ?: "Account"
+                            } else {
+                                "Account"
+                            }
+                            FilterChip(
+                                selected = selectedAccId != null,
+                                onClick = { showAccountDropdown = true },
+                                label = { Text(accountChipLabel) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.AccountBalance,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                            DropdownMenu(
+                                expanded = showAccountDropdown,
+                                onDismissRequest = { showAccountDropdown = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("All Accounts") },
+                                    onClick = {
+                                        viewModel.onAccountSelected(null)
+                                        showAccountDropdown = false
+                                    }
+                                )
+                                if (state.accountsMap.isNotEmpty()) {
+                                    HorizontalDivider()
+                                    state.accountsMap.values.sortedBy { it.name }.forEach { acc ->
+                                        DropdownMenuItem(
+                                            text = { Text(acc.name) },
+                                            onClick = {
+                                                viewModel.onAccountSelected(acc.id)
+                                                showAccountDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Status Chips
                     item {
                         FilterChip(
                             selected = state.selectedStatus == TransactionStatus.PENDING,
@@ -292,15 +482,13 @@ fun TransactionsScreen(
                     if (state.filteredTransactions.isEmpty()) {
                         item(key = "empty_state") {
                             EmptyState(
-                                title = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "No matching transactions" else "No transactions in ${DateTimeUtils.formatMonthYear(state.selectedYear, state.selectedMonth)}",
-                                subtitle = if (state.searchQuery.isNotEmpty() || state.selectedDateFilterEpoch != null) "Try adjusting your search or date filter." else "Switch months or add a transaction for this period.",
+                                title = if (state.isAnyFilterActive) "No matching transactions" else "No transactions in ${DateTimeUtils.formatMonthYear(state.selectedYear, state.selectedMonth)}",
+                                subtitle = if (state.isAnyFilterActive) "Try adjusting or clearing your filters." else "Switch months or add a transaction for this period.",
                                 icon = Icons.AutoMirrored.Filled.ReceiptLong,
-                                actionLabel = if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) "Clear Filters" else if (state.isMonthFilterActive) "Show All Months" else "Add Transaction",
+                                actionLabel = if (state.isAnyFilterActive) "Clear All Filters" else if (state.isMonthFilterActive) "Show All Months" else "Add Transaction",
                                 onActionClick = {
-                                    if (state.searchQuery.isNotEmpty() || state.selectedStatus != null || state.selectedDateFilterEpoch != null) {
-                                        viewModel.onSearchQueryChanged("")
-                                        viewModel.onStatusSelected(null)
-                                        viewModel.clearDateFilter()
+                                    if (state.isAnyFilterActive) {
+                                        viewModel.clearAllFilters()
                                     } else if (state.isMonthFilterActive) {
                                         viewModel.toggleMonthFilter()
                                     } else {
@@ -332,9 +520,13 @@ fun TransactionsScreen(
                             key = { it.id }
                         ) { tx ->
                             val account = state.accountsMap[tx.accountId]
+                            val categoryId = state.txAllocationsMap[tx.id]?.firstOrNull()
+                            val primaryCategory = categoryId?.let { state.categoriesMap[it] }
                             TransactionRow(
                                 tx = tx,
                                 accountName = account?.name,
+                                categoryName = primaryCategory?.name,
+                                bucketName = primaryCategory?.defaultBucket?.name?.lowercase()?.replaceFirstChar { it.uppercase() },
                                 onClick = { selectedTxForDetails = tx },
                                 onVoid = {
                                     viewModel.voidTransaction(tx.id)

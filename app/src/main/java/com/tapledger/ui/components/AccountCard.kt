@@ -31,17 +31,21 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.FilledTonalButton
 import com.tapledger.core.model.AccountType
 import com.tapledger.domain.model.AccountBalanceSummary
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.ExpenseRedContainer
+import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 
 @Composable
 fun AccountCard(
     summary: AccountBalanceSummary,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    onPayBill: (() -> Unit)? = null
 ) {
     val isCreditCard = summary.account.type == AccountType.CREDIT_CARD
     val icon: ImageVector = when (summary.account.type) {
@@ -139,6 +143,30 @@ fun AccountCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp
                 )
+                if (isCreditCard) {
+                    if (summary.currentBalancePaise < 0 && onPayBill != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        FilledTonalButton(
+                            onClick = onPayBill,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(26.dp)
+                        ) {
+                            Text(
+                                text = "Pay Bill",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                fontSize = 11.sp
+                            )
+                        }
+                    } else if (summary.currentBalancePaise >= 0) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "✓ Paid in Full",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = IncomeGreen,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
             }
         }
     }

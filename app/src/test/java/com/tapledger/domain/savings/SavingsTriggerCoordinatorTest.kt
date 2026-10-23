@@ -300,6 +300,7 @@ class SavingsTriggerCoordinatorTest {
         override suspend fun getAllocationsInPeriod(startEpochMillis: Long, endEpochMillis: Long): List<TransactionAllocationEntity> = allocations
         override suspend fun getAllocationsForCategoryInPeriod(categoryId: Long, startEpochMillis: Long, endEpochMillis: Long): List<TransactionAllocationEntity> = allocations.filter { it.categoryId == categoryId }
         override suspend fun getAllTransactionAllocationsSync(): List<TransactionAllocationEntity> = allocations
+        override fun observeAllAllocations(): Flow<List<TransactionAllocationEntity>> = flowOf(allocations)
     }
 
     private lateinit var planDao: FakeSavingsTransferPlanDao

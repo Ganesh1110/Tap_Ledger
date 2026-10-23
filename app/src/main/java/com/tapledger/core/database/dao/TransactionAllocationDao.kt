@@ -48,4 +48,7 @@ interface TransactionAllocationDao {
 
     @Query("SELECT * FROM transaction_allocations")
     suspend fun getAllTransactionAllocationsSync(): List<TransactionAllocationEntity>
+
+    @Query("SELECT * FROM transaction_allocations")
+    fun observeAllAllocations(): Flow<List<TransactionAllocationEntity>>
 }

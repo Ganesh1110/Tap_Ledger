@@ -7,6 +7,8 @@ import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.entity.AccountEntity
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.TransactionEntity
+import com.tapledger.core.model.BudgetBucket
+import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionStatus
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
@@ -42,15 +44,30 @@ data class TransactionsUiState(
     val filteredTransactions: List<TransactionEntity> = emptyList(),
     val categoriesMap: Map<Long, CategoryEntity> = emptyMap(),
     val accountsMap: Map<Long, AccountEntity> = emptyMap(),
+    val txAllocationsMap: Map<Long, List<Long>> = emptyMap(),
     val searchQuery: String = "",
     val selectedStatus: TransactionStatus? = null,
+    val selectedKind: TransactionKind? = null,
+    val selectedCategoryId: Long? = null,
+    val selectedBucket: BudgetBucket? = null,
+    val selectedAccountId: Long? = null,
     val selectedDateFilterEpoch: Long? = null,
     val selectedYear: Int = 2026,
     val selectedMonth: Int = 10,
     val isMonthFilterActive: Boolean = true,
     val heatmapState: ChartState<SpendingHeatmapModel> = ChartState.Loading,
     val isLoading: Boolean = true
-)
+) {
+    val isAnyFilterActive: Boolean
+        get() = searchQuery.isNotBlank() ||
+                selectedStatus != null ||
+                selectedKind != null ||
+                selectedCategoryId != null ||
+                selectedBucket != null ||
+                selectedAccountId != null ||
+                selectedDateFilterEpoch != null ||
+                !isMonthFilterActive
+}
 
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
@@ -69,6 +86,18 @@ class TransactionsViewModel @Inject constructor(
     private val _selectedStatus = MutableStateFlow<TransactionStatus?>(null)
     val selectedStatus: StateFlow<TransactionStatus?> = _selectedStatus.asStateFlow()
 
+    private val _selectedKind = MutableStateFlow<TransactionKind?>(null)
+    val selectedKind: StateFlow<TransactionKind?> = _selectedKind.asStateFlow()
+
+    private val _selectedCategoryId = MutableStateFlow<Long?>(null)
+    val selectedCategoryId: StateFlow<Long?> = _selectedCategoryId.asStateFlow()
+
+    private val _selectedBucket = MutableStateFlow<BudgetBucket?>(null)
+    val selectedBucket: StateFlow<BudgetBucket?> = _selectedBucket.asStateFlow()
+
+    private val _selectedAccountId = MutableStateFlow<Long?>(null)
+    val selectedAccountId: StateFlow<Long?> = _selectedAccountId.asStateFlow()
+
     private val _selectedDateFilterEpoch = MutableStateFlow<Long?>(null)
     val selectedDateFilterEpoch: StateFlow<Long?> = _selectedDateFilterEpoch.asStateFlow()
 
@@ -84,9 +113,29 @@ class TransactionsViewModel @Inject constructor(
     private val _categoriesMap = MutableStateFlow<Map<Long, CategoryEntity>>(emptyMap())
     private val _accountsMap = MutableStateFlow<Map<Long, AccountEntity>>(emptyMap())
 
+    private data class FilterExtra(
+        val kind: TransactionKind?,
+        val categoryId: Long?,
+        val bucket: BudgetBucket?,
+        val accountId: Long?
+    )
+
+    private val _filterExtra = combine(
+        _selectedKind,
+        _selectedCategoryId,
+        _selectedBucket,
+        _selectedAccountId
+    ) { kind, catId, bucket, accId ->
+        FilterExtra(kind, catId, bucket, accId)
+    }
+
     private data class FilterCriteria(
         val query: String,
         val status: TransactionStatus?,
+        val kind: TransactionKind?,
+        val categoryId: Long?,
+        val bucket: BudgetBucket?,
+        val accountId: Long?,
         val dateEpoch: Long?,
         val monthFilter: MonthFilterState
     )
@@ -95,17 +144,29 @@ class TransactionsViewModel @Inject constructor(
         _searchQuery,
         _selectedStatus,
         _selectedDateFilterEpoch,
-        _monthFilterState
-    ) { query, status, dateEpoch, monthFilter ->
-        FilterCriteria(query, status, dateEpoch, monthFilter)
+        _monthFilterState,
+        _filterExtra
+    ) { query, status, dateEpoch, monthFilter, extra ->
+        FilterCriteria(
+            query = query,
+            status = status,
+            kind = extra.kind,
+            categoryId = extra.categoryId,
+            bucket = extra.bucket,
+            accountId = extra.accountId,
+            dateEpoch = dateEpoch,
+            monthFilter = monthFilter
+        )
     }
 
     val uiState: StateFlow<TransactionsUiState> = combine(
         transactionRepository.observeAllTransactions(),
+        transactionAllocationDao.observeAllAllocations(),
         _filterCriteria,
         _categoriesMap,
         _accountsMap
-    ) { txList, filter, catMap, accMap ->
+    ) { txList, allocations, filter, catMap, accMap ->
+        val allocMap: Map<Long, List<Long>> = allocations.groupBy { it.transactionId }.mapValues { (_, list) -> list.map { it.categoryId } }
         val monthStart = DateTimeUtils.getStartOfMonthEpochMillis(filter.monthFilter.year, filter.monthFilter.month)
         val monthEnd = DateTimeUtils.getEndOfMonthEpochMillis(filter.monthFilter.year, filter.monthFilter.month)
 
@@ -114,16 +175,34 @@ class TransactionsViewModel @Inject constructor(
                 tx.occurredAt >= monthStart && tx.occurredAt < monthEnd
             }
             val matchesStatus = (filter.status == null || tx.status == filter.status)
+            val matchesKind = (filter.kind == null || tx.kind == filter.kind)
+            val matchesAccount = (filter.accountId == null || tx.accountId == filter.accountId)
+
+            val txCatIds = allocMap[tx.id] ?: emptyList()
+            val matchesCategory = (filter.categoryId == null || filter.categoryId in txCatIds)
+            val matchesBucket = (filter.bucket == null || txCatIds.any { catMap[it]?.defaultBucket == filter.bucket })
+
             val matchesDate = if (filter.dateEpoch == null) true else {
                 tx.occurredAt >= filter.dateEpoch && tx.occurredAt < (filter.dateEpoch + ChartMath.MILLIS_PER_IST_DAY)
             }
             val matchesQuery = if (filter.query.isBlank()) true else {
                 val q = filter.query.trim().lowercase()
-                (tx.merchantRaw?.lowercase()?.contains(q) == true) ||
-                        (tx.notes?.lowercase()?.contains(q) == true) ||
-                        tx.amountPaise.toString().contains(q)
+                val merchantMatch = tx.merchantRaw?.lowercase()?.contains(q) == true ||
+                        tx.merchantNormalized?.lowercase()?.contains(q) == true
+                val noteMatch = tx.notes?.lowercase()?.contains(q) == true
+                val accountMatch = accMap[tx.accountId]?.name?.lowercase()?.contains(q) == true
+
+                val amountRupeesStr = (tx.amountPaise / 100L).toString()
+                val rawPaiseStr = tx.amountPaise.toString()
+                val amountMatch = amountRupeesStr == q || amountRupeesStr.contains(q) || rawPaiseStr.contains(q)
+
+                val categoryMatch = txCatIds.any { catId ->
+                    catMap[catId]?.name?.lowercase()?.contains(q) == true
+                }
+
+                merchantMatch || noteMatch || accountMatch || amountMatch || categoryMatch
             }
-            matchesMonth && matchesStatus && matchesDate && matchesQuery
+            matchesMonth && matchesStatus && matchesKind && matchesAccount && matchesCategory && matchesBucket && matchesDate && matchesQuery
         }
 
         val heatmap = run {
@@ -142,8 +221,13 @@ class TransactionsViewModel @Inject constructor(
             filteredTransactions = filtered,
             categoriesMap = catMap,
             accountsMap = accMap,
+            txAllocationsMap = allocMap,
             searchQuery = filter.query,
             selectedStatus = filter.status,
+            selectedKind = filter.kind,
+            selectedCategoryId = filter.categoryId,
+            selectedBucket = filter.bucket,
+            selectedAccountId = filter.accountId,
             selectedDateFilterEpoch = filter.dateEpoch,
             selectedYear = filter.monthFilter.year,
             selectedMonth = filter.monthFilter.month,
@@ -176,6 +260,35 @@ class TransactionsViewModel @Inject constructor(
 
     fun onStatusSelected(status: TransactionStatus?) {
         _selectedStatus.value = status
+    }
+
+    fun onKindSelected(kind: TransactionKind?) {
+        _selectedKind.value = kind
+    }
+
+    fun onCategorySelected(categoryId: Long?) {
+        _selectedCategoryId.value = categoryId
+        if (categoryId != null) _selectedBucket.value = null
+    }
+
+    fun onBucketSelected(bucket: BudgetBucket?) {
+        _selectedBucket.value = bucket
+        if (bucket != null) _selectedCategoryId.value = null
+    }
+
+    fun onAccountSelected(accountId: Long?) {
+        _selectedAccountId.value = accountId
+    }
+
+    fun clearAllFilters() {
+        _searchQuery.value = ""
+        _selectedStatus.value = null
+        _selectedKind.value = null
+        _selectedCategoryId.value = null
+        _selectedBucket.value = null
+        _selectedAccountId.value = null
+        _selectedDateFilterEpoch.value = null
+        _monthFilterState.update { it.copy(isFilterActive = true) }
     }
 
     fun onSelectHeatmapDay(epochMillis: Long) {

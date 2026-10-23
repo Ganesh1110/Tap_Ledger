@@ -94,6 +94,10 @@ fun AccountsScreen(
     var showEditStartingDialog by remember { mutableStateOf(false) }
     var showTransferDialog by remember { mutableStateOf(false) }
     var preselectedFromAccountId by remember { mutableStateOf<Long?>(null) }
+    var preselectedToAccountId by remember { mutableStateOf<Long?>(null) }
+    var preselectedAmountRupees by remember { mutableStateOf("") }
+    var transferDialogTitle by remember { mutableStateOf("Transfer Between Accounts") }
+    var prefilledTransferNote by remember { mutableStateOf("") }
     var isStartingLocked by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
@@ -125,6 +129,10 @@ fun AccountsScreen(
                 actions = {
                     IconButton(onClick = {
                         preselectedFromAccountId = null
+                        preselectedToAccountId = null
+                        preselectedAmountRupees = ""
+                        transferDialogTitle = "Transfer Between Accounts"
+                        prefilledTransferNote = ""
                         showTransferDialog = true
                     }) {
                         Icon(
@@ -245,6 +253,8 @@ fun AccountsScreen(
                         items = liabilities,
                         key = { "liability_${it.account.id}" }
                     ) { summary ->
+                        val isCard = summary.account.type == AccountType.CREDIT_CARD
+                        val hasOutstanding = summary.currentBalancePaise < 0
                         Column {
                             AccountCard(
                                 summary = summary,
@@ -254,11 +264,21 @@ fun AccountsScreen(
                                         isStartingLocked = viewModel.isOpeningBalanceLocked(summary.account)
                                     }
                                     showActionDialog = true
-                                }
+                                },
+                                onPayBill = if (isCard && hasOutstanding) {
+                                    {
+                                        preselectedFromAccountId = null
+                                        preselectedToAccountId = summary.account.id
+                                        preselectedAmountRupees = (kotlin.math.abs(summary.currentBalancePaise) / 100).toString()
+                                        transferDialogTitle = "Pay ${summary.account.name} Bill"
+                                        prefilledTransferNote = "Credit Card Bill Payment"
+                                        showTransferDialog = true
+                                    }
+                                } else null
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Tap for options • Correct balance or edit opening balance",
+                                text = if (isCard && hasOutstanding) "Tap 'Pay Bill' to clear dues from Bank • Tap card for options" else "Tap for options • Correct balance or edit opening balance",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = Spacing.sm)
@@ -294,11 +314,33 @@ fun AccountsScreen(
                             Text("Quickly match app with your actual bank balance (Recommended)", style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                    if (summary.account.type == AccountType.CREDIT_CARD && summary.currentBalancePaise < 0) {
+                        Button(
+                            onClick = {
+                                val cardId = summary.account.id
+                                val billRupees = (kotlin.math.abs(summary.currentBalancePaise) / 100).toString()
+                                showActionDialog = false
+                                preselectedFromAccountId = null
+                                preselectedToAccountId = cardId
+                                preselectedAmountRupees = billRupees
+                                transferDialogTitle = "Pay ${summary.account.name} Bill"
+                                prefilledTransferNote = "Credit Card Bill Payment"
+                                showTransferDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("💳 Pay Full Bill (${MoneyFormatter.formatPaiseToRupees(kotlin.math.abs(summary.currentBalancePaise))})", fontWeight = FontWeight.Bold)
+                        }
+                    }
                     OutlinedButton(
                         onClick = {
                             val fromId = summary.account.id
                             showActionDialog = false
                             preselectedFromAccountId = fromId
+                            preselectedToAccountId = null
+                            preselectedAmountRupees = ""
+                            transferDialogTitle = "Transfer Between Accounts"
+                            prefilledTransferNote = ""
                             showTransferDialog = true
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -496,12 +538,16 @@ fun AccountsScreen(
         )
     }
 
-    // Quick Account Transfer Dialog
+    // Quick Account Transfer Dialog / Pay Bill Dialog
     if (showTransferDialog) {
         val allAccounts = state.accountSummaries.map { it.account }
         QuickTransferDialog(
             accounts = allAccounts,
             initialFromAccountId = preselectedFromAccountId,
+            initialToAccountId = preselectedToAccountId,
+            initialAmountRupees = preselectedAmountRupees,
+            initialNote = prefilledTransferNote,
+            dialogTitle = transferDialogTitle,
             onDismiss = { showTransferDialog = false },
             onTransfer = { fromId, toId, amountRupees, note ->
                 viewModel.recordTransfer(fromId, toId, amountRupees, note)
@@ -515,36 +561,49 @@ fun AccountsScreen(
 private fun QuickTransferDialog(
     accounts: List<AccountEntity>,
     initialFromAccountId: Long?,
+    initialToAccountId: Long? = null,
+    initialAmountRupees: String = "",
+    initialNote: String = "",
+    dialogTitle: String = "Transfer Between Accounts",
     onDismiss: () -> Unit,
     onTransfer: (fromAccountId: Long, toAccountId: Long, amountRupees: String, note: String?) -> Unit
 ) {
-    var fromAccount by remember(accounts, initialFromAccountId) {
+    var fromAccount by remember(accounts, initialFromAccountId, initialToAccountId) {
         val initial = if (initialFromAccountId != null) {
             accounts.find { it.id == initialFromAccountId }
+        } else if (initialToAccountId != null) {
+            accounts.firstOrNull { it.id != initialToAccountId && it.type == AccountType.BANK }
+                ?: accounts.firstOrNull { it.id != initialToAccountId && it.type != AccountType.CREDIT_CARD }
+                ?: accounts.firstOrNull { it.id != initialToAccountId }
         } else {
             accounts.firstOrNull { it.type != AccountType.CREDIT_CARD } ?: accounts.firstOrNull()
         }
         mutableStateOf(initial)
     }
 
-    var toAccount by remember(accounts, fromAccount) {
-        val dest = accounts.firstOrNull { it.id != fromAccount?.id && it.type == AccountType.CASH }
-            ?: accounts.firstOrNull { it.id != fromAccount?.id }
+    var toAccount by remember(accounts, fromAccount, initialToAccountId) {
+        val dest = if (initialToAccountId != null) {
+            accounts.find { it.id == initialToAccountId }
+        } else {
+            accounts.firstOrNull { it.id != fromAccount?.id && it.type == AccountType.CASH }
+                ?: accounts.firstOrNull { it.id != fromAccount?.id }
+        }
         mutableStateOf(dest)
     }
 
-    var amountInput by remember { mutableStateOf("") }
-    var noteInput by remember { mutableStateOf("") }
+    var amountInput by remember(initialAmountRupees) { mutableStateOf(initialAmountRupees) }
+    var noteInput by remember(initialNote) { mutableStateOf(initialNote) }
     var showFromDropdown by remember { mutableStateOf(false) }
     var showToDropdown by remember { mutableStateOf(false) }
 
+    val isPayingBill = toAccount?.type == AccountType.CREDIT_CARD
     val quickAmounts = listOf("500", "1000", "2000", "5000")
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Transfer Between Accounts",
+                text = dialogTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -662,7 +721,7 @@ private fun QuickTransferDialog(
                 },
                 enabled = amountInput.isNotBlank() && fromAccount != null && toAccount != null && fromAccount?.id != toAccount?.id
             ) {
-                Text("Transfer")
+                Text(if (isPayingBill) "Pay Bill" else "Transfer")
             }
         },
         dismissButton = {

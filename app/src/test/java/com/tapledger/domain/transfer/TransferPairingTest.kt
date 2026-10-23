@@ -182,6 +182,7 @@ class TransferPairingTest {
         override suspend fun getAllocationsInPeriod(startEpochMillis: Long, endEpochMillis: Long): List<TransactionAllocationEntity> = emptyList()
         override suspend fun getAllocationsForCategoryInPeriod(categoryId: Long, startEpochMillis: Long, endEpochMillis: Long): List<TransactionAllocationEntity> = emptyList()
         override suspend fun getAllTransactionAllocationsSync(): List<TransactionAllocationEntity> = allocations
+        override fun observeAllAllocations(): Flow<List<TransactionAllocationEntity>> = emptyFlow()
     }
 
     private class FakeAuditLogDao : AuditLogDao {
