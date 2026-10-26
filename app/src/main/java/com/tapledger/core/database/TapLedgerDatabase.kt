@@ -20,8 +20,6 @@ import com.tapledger.core.database.dao.SavingsContributionDao
 import com.tapledger.core.database.dao.SavingsGoalDao
 import com.tapledger.core.database.dao.SavingsPlanEntryDao
 import com.tapledger.core.database.dao.SavingsTransferPlanDao
-import com.tapledger.core.database.dao.StatementImportDao
-import com.tapledger.core.database.dao.StatementLineDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.dao.UnparsedAlertDao
@@ -41,8 +39,6 @@ import com.tapledger.core.database.entity.SavingsContributionEntity
 import com.tapledger.core.database.entity.SavingsGoalEntity
 import com.tapledger.core.database.entity.SavingsPlanEntryEntity
 import com.tapledger.core.database.entity.SavingsTransferPlanEntity
-import com.tapledger.core.database.entity.StatementImportEntity
-import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.database.entity.UnparsedAlertEntity
@@ -59,8 +55,6 @@ import com.tapledger.core.database.entity.UnparsedAlertEntity
         AdvanceLedgerEntity::class,
         MerchantMapEntity::class,
         UnparsedAlertEntity::class,
-        StatementImportEntity::class,
-        StatementLineEntity::class,
         MonthCloseEntity::class,
         AuditLogEntity::class,
         SavingsGoalEntity::class,
@@ -87,8 +81,6 @@ abstract class TapLedgerDatabase : RoomDatabase() {
     abstract fun advanceLedgerDao(): AdvanceLedgerDao
     abstract fun merchantMapDao(): MerchantMapDao
     abstract fun unparsedAlertDao(): UnparsedAlertDao
-    abstract fun statementImportDao(): StatementImportDao
-    abstract fun statementLineDao(): StatementLineDao
     abstract fun monthCloseDao(): MonthCloseDao
     abstract fun auditLogDao(): AuditLogDao
     abstract fun savingsGoalDao(): SavingsGoalDao
@@ -101,7 +93,7 @@ abstract class TapLedgerDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "tapledger.db"
-        const val DATABASE_VERSION = 5
+        const val DATABASE_VERSION = 6
     }
 }
 

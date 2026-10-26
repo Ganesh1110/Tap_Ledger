@@ -2,7 +2,7 @@ package com.tapledger.core.model
 
 /**
  * Operating mode of the application (Flow.md §18, D012).
- * - [MANAGER]: Full financial access (accounts, budget periods, transactions, statements, backup/restore).
+ * - [MANAGER]: Full financial access (accounts, budget periods, transactions, backup/restore).
  * - [SAVING]: Dedicated savings & goals focus (goals, contributions, emergency fund, commitments, fixed deposits).
  */
 enum class AppMode {

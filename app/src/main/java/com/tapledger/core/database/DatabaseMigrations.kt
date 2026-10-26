@@ -610,5 +610,26 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/**
+ * Migration from Database Version 5 to Version 6.
+ * - Completely removes Bank Statement Reconciliation module: drops `statement_lines` and `statement_imports` tables.
+ * - Runs PRAGMA integrity_check.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS `statement_lines`")
+        db.execSQL("DROP TABLE IF EXISTS `statement_imports`")
+
+        val cursor = db.query("PRAGMA integrity_check")
+        cursor.use {
+            if (it.moveToFirst()) {
+                val result = it.getString(0)
+                check(result == "ok") { "Database integrity check failed after migration 5 -> 6: $result" }
+            }
+        }
+    }
+}
+
+
 
 

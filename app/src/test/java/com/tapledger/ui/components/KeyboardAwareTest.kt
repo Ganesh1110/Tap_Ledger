@@ -83,8 +83,5 @@ class KeyboardAwareTest {
 
         val categoriesFile = File("src/main/java/com/tapledger/ui/screens/categories/CategoryManagementScreen.kt")
         assertThat(categoriesFile.readText()).contains("verticalScroll(rememberScrollState())")
-
-        val statementsFile = File("src/main/java/com/tapledger/ui/screens/statement/StatementReconciliationScreen.kt")
-        assertThat(statementsFile.readText()).contains("verticalScroll(rememberScrollState())")
     }
 }

@@ -8,8 +8,6 @@ import com.tapledger.core.database.entity.BudgetAllocationEntity
 import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
-import com.tapledger.core.database.entity.StatementImportEntity
-import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.AccountType
@@ -569,45 +567,7 @@ class DataIntegrityCheckerTest {
         assertThat(issueM2!!.severity).isEqualTo(IntegritySeverity.ERROR)
 
         // -------------------------------------------------------------
-        // Rule 17: S1_STATEMENT_MISMATCH (WARNING)
-        // -------------------------------------------------------------
-        val stmtS1 = StatementImportEntity(
-            id = 171,
-            accountId = 1L,
-            periodStart = 1000L,
-            periodEnd = 2000L,
-            openingBalancePaise = 100_00L,
-            closingBalancePaise = 150_00L, // Reported ₹150
-            totalDebitsPaise = 0L,
-            totalCreditsPaise = 40_00L,    // Credits ₹40 -> Expected ₹140 != ₹150!
-            lineCount = 1,
-            createdAt = 1000L
-        )
-        val stmtLineS1 = StatementLineEntity(
-            id = 1701,
-            importId = 171,
-            transactionDate = 1500L,
-            description = "Credit",
-            creditPaise = 40_00L,
-            debitPaise = 0L
-        )
-        val issuesS1 = checker.verifyIntegrity(
-            accounts = listOf(account1),
-            categories = listOf(category1),
-            periods = listOf(period1),
-            allocations = emptyList(),
-            transactions = emptyList(),
-            transactionAllocations = emptyList(),
-            monthCloses = emptyList(),
-            statementImports = listOf(stmtS1),
-            statementLines = listOf(stmtLineS1)
-        )
-        val issueS1 = issuesS1.find { it.ruleId == "S1_STATEMENT_MISMATCH" }
-        assertThat(issueS1).isNotNull()
-        assertThat(issueS1!!.severity).isEqualTo(IntegritySeverity.WARNING)
-
-        // -------------------------------------------------------------
-        // Rule 18: R1_CUMULATIVE_REFUND_EXCEEDED (ERROR)
+        // Rule 17: R1_CUMULATIVE_REFUND_EXCEEDED (ERROR)
         // -------------------------------------------------------------
         val origTxR1 = TransactionEntity(
             id = 181,
@@ -752,8 +712,6 @@ class DataIntegrityCheckerTest {
             monthCloses = emptyList(),
             adjustments = emptyList<BudgetAdjustmentEntity>(),
             advances = emptyList<AdvanceLedgerEntity>(),
-            statementImports = emptyList<StatementImportEntity>(),
-            statementLines = emptyList<StatementLineEntity>(),
             savingsGoals = listOf(validGoal, invalidTargetGoal, negativeBalanceGoal),
             savingsContributions = listOf(contribValid, contribNegative, contribOrphan)
         )

@@ -10,7 +10,6 @@ import com.tapledger.ui.charts.model.CategoryDonutModel
 import com.tapledger.ui.charts.model.DashboardHeroRingModel
 import com.tapledger.ui.charts.model.DiagnosticsSeverityBarModel
 import com.tapledger.ui.charts.model.NetWorthChartModel
-import com.tapledger.ui.charts.model.ReconciliationBridgeModel
 import com.tapledger.ui.charts.model.SixPeriodTrendModel
 import com.tapledger.ui.charts.model.SpendingHeatmapModel
 import com.tapledger.ui.charts.model.TopMerchantsModel
@@ -122,14 +121,6 @@ object ChartSummaryHelper {
             totalSweep += it.sweepPaise
         }
         return "${MoneyFormatter.formatCompactIndian(totalCarry)} carried forward • ${MoneyFormatter.formatCompactIndian(totalSweep)} swept"
-    }
-
-    fun summarizeV12Reconciliation(model: ReconciliationBridgeModel): String {
-        return if (model.isReconciled) {
-            "Fully reconciled with statement closing balance"
-        } else {
-            "${MoneyFormatter.formatCompactIndian(model.residualPaise)} discrepancy requires review"
-        }
     }
 
     fun summarizeV13Diagnostics(model: DiagnosticsSeverityBarModel): String {

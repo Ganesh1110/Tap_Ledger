@@ -279,7 +279,7 @@ class BackupManager @Inject constructor(
                 return@withContext Result.failure(IllegalStateException("Automatic rollback triggered: database open failed (${migrationEx.message})", migrationEx))
             }
 
-            // 9. Run DataIntegrityChecker (19 Formal Invariant Rules)
+            // 9. Run DataIntegrityChecker (18 Formal Invariant Rules)
             val accounts = database.accountDao().getAllAccountsSync()
             val categories = database.categoryDao().getAllCategoriesSync()
             val periods = database.budgetPeriodDao().getAllPeriodsSync()
@@ -289,8 +289,6 @@ class BackupManager @Inject constructor(
             val monthCloses = database.monthCloseDao().getAllMonthClosesSync()
             val adjustments = database.budgetAdjustmentDao().getAllAdjustmentsSync()
             val advances = database.advanceLedgerDao().getAllAdvancesSync()
-            val statementImports = database.statementImportDao().getAllImportsSync()
-            val statementLines = database.statementLineDao().getAllLinesSync()
 
             val issues = dataIntegrityChecker.verifyIntegrity(
                 accounts = accounts,
@@ -301,9 +299,7 @@ class BackupManager @Inject constructor(
                 transactionAllocations = transactionAllocations,
                 monthCloses = monthCloses,
                 adjustments = adjustments,
-                advances = advances,
-                statementImports = statementImports,
-                statementLines = statementLines
+                advances = advances
             )
 
             val hasFailures = issues.any {

@@ -117,7 +117,7 @@ fun MainScaffold(
 
     // 3. SAVING MODE (Flow.md §18, D012)
     // When in Saving mode, render dedicated SavingNavGraph without manager navigation or screens.
-    // Sensitive Manager actions (accounts, budget periods, statements, backup/restore) are strictly gated.
+    // Sensitive Manager actions (accounts, budget periods, backup/restore) are strictly gated.
     if (appMode == AppMode.SAVING) {
         SavingNavGraph(
             onSwitchToManager = {

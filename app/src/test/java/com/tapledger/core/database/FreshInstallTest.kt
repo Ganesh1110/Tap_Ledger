@@ -36,8 +36,6 @@ class FreshInstallTest {
         "budget_adjustments",
         "advance_ledger",
         "month_closes",
-        "statement_imports",
-        "statement_lines",
         "merchant_map"
     )
 
@@ -271,38 +269,6 @@ class FreshInstallTest {
                     `reconciliation_status` TEXT NOT NULL,
                     `override_reason` TEXT,
                     `closing_balances_json` TEXT NOT NULL
-                );
-            """)
-
-            stmt.execute("""
-                CREATE TABLE `statement_imports` (
-                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    `account_id` INTEGER NOT NULL,
-                    `period_start` INTEGER NOT NULL,
-                    `period_end` INTEGER NOT NULL,
-                    `opening_balance_paise` INTEGER NOT NULL,
-                    `closing_balance_paise` INTEGER NOT NULL,
-                    `total_debits_paise` INTEGER NOT NULL,
-                    `total_credits_paise` INTEGER NOT NULL,
-                    `line_count` INTEGER NOT NULL,
-                    `status` TEXT NOT NULL,
-                    `created_at` INTEGER NOT NULL
-                );
-            """)
-
-            stmt.execute("""
-                CREATE TABLE `statement_lines` (
-                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    `import_id` INTEGER NOT NULL,
-                    `transaction_date` INTEGER NOT NULL,
-                    `value_date` INTEGER,
-                    `description` TEXT NOT NULL,
-                    `reference` TEXT,
-                    `debit_paise` INTEGER NOT NULL,
-                    `credit_paise` INTEGER NOT NULL,
-                    `balance_after_paise` INTEGER,
-                    `matched_transaction_id` INTEGER,
-                    `match_status` TEXT NOT NULL
                 );
             """)
 

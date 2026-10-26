@@ -2,7 +2,7 @@
 
 **TapLedger** is a personal, strictly offline Android monthly budget and expense tracking application designed for privacy-focused, single-user financial management.
 
-It automatically captures bank and UPI payment notifications, classifies spending with minimal effort, maintains precise account balances independently from budget categories, reconciles transactions against bank/card statements (PDF & CSV), and closes each budget month with controlled advance carry-forward handling.
+It automatically captures bank and UPI payment notifications, classifies spending with minimal effort, maintains precise account balances independently from budget categories, and closes each budget month with controlled advance carry-forward handling.
 
 ---
 
@@ -38,7 +38,6 @@ It automatically captures bank and UPI payment notifications, classifies spendin
 | **Database**             | Room 2.6.1 + SQLite (KSP schema export & migration triggers) |
 | **Dependency Injection** | Hilt 2.52                                                    |
 | **Cryptography**         | Argon2id (BouncyCastle `bcprov-jdk18on`) + Android KeyStore  |
-| **PDF Processing**       | Pure local `pdfbox-android` (Offline PDF statement parsing)  |
 | **Async & Background**   | Kotlin Coroutines 1.9.0, Flow, WorkManager 2.10.0            |
 | **Min / Target SDK**     | 29 / 35                                                      |
 | **Timezone & Currency**  | `Asia/Kolkata` / `Long` paise arithmetic                     |
@@ -72,13 +71,7 @@ It automatically captures bank and UPI payment notifications, classifies spendin
 - **Intra-Month Transfers**: Shift budget funds between categories mid-month without breaking historical integrity.
 - **Month Close Engine**: Locks past periods and carries forward unused bucket advances or negative overspend based on custom rules.
 
-### 5. PDF & CSV Statement Import & Reconciliation
-
-- **Offline PDF Parsing**: Extract bank and credit card statement lines locally using `pdfbox-android`.
-- **Automated 1-to-1 Reconciliation**: Matches statement records against app transactions with arithmetic verification and missing-transaction detection.
-- **Reconciliation Bridge**: Visual overview comparing statement ending balances with calculated app balances.
-
-### 6. App Security & Argon2id MPIN Lock
+### 5. App Security & Argon2id MPIN Lock
 
 - **Argon2id Key Derivation**: High-security password hashing using Argon2id via BouncyCastle.
 - **Android KeyStore Integration**: Master keys and salts stored securely in `AndroidMpinKeystore`.
@@ -139,8 +132,7 @@ TapLedger/
 │   │   │   │   └── util/         # DateTimeUtils (Asia/Kolkata epoch calculation)
 │   │   │   ├── data/
 │   │   │   │   ├── backup/       # BackupManager (VACUUM INTO & PRAGMA check), RestoreBuffer
-│   │   │   │   ├── repository/   # Account, Budget, Transaction, Diagnostics Repositories
-│   │   │   │   └── statement/    # StatementPdfParser, StatementCsvParser, Reconciliation Engine
+│   │   │   │   └── repository/   # Account, Budget, Transaction, Diagnostics Repositories
 │   │   │   ├── di/               # Hilt Dependency Injection Modules
 │   │   │   ├── domain/
 │   │   │   │   ├── calculator/   # AccountBalanceCalculator & BudgetCalculator
@@ -153,12 +145,12 @@ TapLedger/
 │   │   │       ├── components/   # Shared UI Cards, Money Text, Status Badges, Skeletons
 │   │   │       ├── navigation/   # TapLedgerNavGraph, SavingNavGraph, MainScaffold, MainViewModel
 │   │   │       ├── screens/      # Dashboard, Pending Inbox, Transactions, Accounts,
-│   │   │       │                 # Categories, Statement Reconciliation, Month Close,
-│   │   │       │                 # MPIN Lock, Backup/Restore, Data Diagnostics, Insights, Saving
+│   │   │       │                 # Categories, Month Close, MPIN Lock, Backup/Restore,
+│   │   │       │                 # Data Diagnostics, Insights, Saving
 │   │   │       └── theme/        # Color, Type, Spacing, Motion, Chart Palette
 │   └── src/test/
 │       └── java/com/tapledger/   # Unit test suite (Money, Dates, Calculators, Parsers,
-│                                 # Reconciliation, MPIN Security, Backup/Restore, Savings)
+│                                 # MPIN Security, Backup/Restore, Savings)
 ├── decisions.md                  # Architectural decision log (D001-D015)
 └── build.gradle.kts / settings.gradle.kts
 ```
@@ -176,7 +168,6 @@ TapLedger/
 - [x] **M5 — Listener & Liveness Heartbeat**: `NotificationListenerService`, active notification recovery, multi-level deduplication, heartbeat worker.
 - [x] **M6 — Categorization & Pending Inbox**: Quick Needs/Wants/Savings bucket chips, category selection, split transactions, pending transaction inbox.
 - [x] **M7 — Accounts & Net Worth**: Account listing (Bank, CC, Cash, Savings), asset/liability split, net worth history cards.
-- [x] **M8 — Statement Import & Reconciliation**: PDF & CSV statement parsing (offline PDFBox), 1-to-1 reconciliation engine matching, missing-in-app detection.
 - [x] **M9 — Month Close**: Period locking, `advance_ledger` carry-forward, negative advance overspend capture.
 - [x] **M10 — App Security & Lock**: Argon2id password hashing via BouncyCastle, KeyStore salt management, MPIN setup, keypad lock screen, step-up auth.
 - [x] **M11 — Category & Budget Management**: Bucket allocations, advance rules, intra-month budget transfers, envelope progress bars.

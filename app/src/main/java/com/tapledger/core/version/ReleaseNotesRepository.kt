@@ -101,8 +101,8 @@ class ReleaseNotesRepositoryImpl @Inject constructor() : ReleaseNotesRepository 
                     icon = Icons.Default.Lock
                 ),
                 ReleaseHighlight(
-                    title = "Bank Statement Reconciliation",
-                    description = "Import PDF and CSV statements directly on-device to cross-verify notification-captured records against official ledgers.",
+                    title = "Month Close & Advance Engine",
+                    description = "Formal month-end reconciliation with unspent envelope carry-forward, surplus sweep to savings, and audit trails.",
                     category = ReleaseCategory.NEW_FEATURE,
                     icon = Icons.AutoMirrored.Filled.ReceiptLong
                 ),

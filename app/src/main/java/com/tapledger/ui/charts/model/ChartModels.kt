@@ -274,34 +274,6 @@ data class AdvanceRolloverChartModel(
     val tableRows: List<AdvanceRolloverTableRow>
 )
 
-// --- V12: Reconciliation Bridge Waterfall ---
-@Immutable
-data class ReconciliationBridgeStep(
-    val label: String,
-    val deltaPaise: Long,
-    val runningTotalPaise: Long,
-    val isResidual: Boolean
-)
-
-@Immutable
-data class ReconciliationTableRow(
-    val stepLabel: String,
-    val deltaFormatted: String,
-    val runningTotalFormatted: String,
-    val note: String
-)
-
-@Immutable
-data class ReconciliationBridgeModel(
-    val steps: List<ReconciliationBridgeStep>,
-    val appClosingPaise: Long,
-    val stmtClosingPaise: Long,
-    val residualPaise: Long,
-    val isReconciled: Boolean,
-    val contentDescription: String,
-    val tableRows: List<ReconciliationTableRow>
-)
-
 // --- V13: Diagnostics Severity Bar ---
 @Immutable
 data class DiagnosticsSeverityBarModel(

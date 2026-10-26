@@ -109,6 +109,7 @@ import com.tapledger.ui.components.SkeletonList
 import com.tapledger.ui.components.StatBlock
 import com.tapledger.ui.components.TransactionRow
 import com.tapledger.domain.calculator.GoalApportionmentCalculator
+import com.tapledger.service.FinancialNotificationListenerService
 import com.tapledger.ui.screens.dashboard.components.DashboardBucketRingsCard
 import com.tapledger.ui.screens.dashboard.components.DashboardBurnUpCard
 import com.tapledger.ui.screens.dashboard.components.DashboardHeroRingCard
@@ -139,7 +140,6 @@ fun DashboardScreen(
     onNavigateToBackup: () -> Unit,
     onNavigateToSetup: () -> Unit,
     onNavigateToCategories: () -> Unit,
-    onNavigateToStatements: () -> Unit = {},
     onNavigateToMonthClose: () -> Unit,
     onNavigateToDiagnostics: () -> Unit,
     onNavigateToInsights: () -> Unit = {},
@@ -169,9 +169,10 @@ fun DashboardScreen(
         }
     }
 
-    val isListenerGranted = remember(context) {
-        PermissionUtils.isNotificationListenerGranted(context)
-    }
+    val isListenerGranted = PermissionUtils.rememberNotificationListenerGranted()
+    val isServiceConnected by FinancialNotificationListenerService.connectedState.collectAsStateWithLifecycle(
+        initialValue = FinancialNotificationListenerService.isConnected
+    )
 
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialScrollIndex)
     val isExpandedFab by remember {
@@ -371,8 +372,8 @@ fun DashboardScreen(
                             }
                         }
 
-                        // Notification Listener Warning (if not granted) - Compact for 5.5" displays
-                        if (!isListenerGranted) {
+                        // Notification Listener Warning (if not granted or disconnected) - Compact for 5.5" displays
+                        if (!isListenerGranted || !isServiceConnected) {
                             Spacer(modifier = Modifier.height(Spacing.xs))
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -401,13 +402,13 @@ fun DashboardScreen(
                                         Spacer(modifier = Modifier.width(Spacing.xs))
                                         Column {
                                             Text(
-                                                text = "Listener Inactive",
+                                                text = if (!isListenerGranted) "Listener Inactive" else "Listener Disconnected",
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onErrorContainer
                                             )
                                             Text(
-                                                text = "Allow alerts for auto-tracking",
+                                                text = if (!isListenerGranted) "Allow alerts for auto-tracking" else "OS stopped reader service — tap Reconnect",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
                                                 maxLines = 1,
@@ -428,8 +429,12 @@ fun DashboardScreen(
                                         }
                                         Button(
                                             onClick = {
-                                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                                context.startActivity(intent)
+                                                if (!isListenerGranted) {
+                                                    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                                    context.startActivity(intent)
+                                                } else {
+                                                    FinancialNotificationListenerService.requestRebindService(context, forceToggleComponent = true)
+                                                }
                                             },
                                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                                                 containerColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -437,7 +442,7 @@ fun DashboardScreen(
                                             ),
                                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                                         ) {
-                                            Text("Enable", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                            Text(if (!isListenerGranted) "Enable" else "Reconnect", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                         }
                                     }
                                 }

@@ -9,8 +9,6 @@ import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.BudgetPeriodStatus
 import com.tapledger.core.model.CheckpointType
 import com.tapledger.core.model.MonthCloseReconciliationStatus
-import com.tapledger.core.model.StatementImportStatus
-import com.tapledger.core.model.StatementMatchStatus
 import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
@@ -72,18 +70,6 @@ class Converters {
 
     @TypeConverter
     fun toTransactionSource(value: String?): TransactionSource? = value?.let { TransactionSource.valueOf(it) }
-
-    @TypeConverter
-    fun fromStatementImportStatus(value: StatementImportStatus?): String? = value?.name
-
-    @TypeConverter
-    fun toStatementImportStatus(value: String?): StatementImportStatus? = value?.let { StatementImportStatus.valueOf(it) }
-
-    @TypeConverter
-    fun fromStatementMatchStatus(value: StatementMatchStatus?): String? = value?.name
-
-    @TypeConverter
-    fun toStatementMatchStatus(value: String?): StatementMatchStatus? = value?.let { StatementMatchStatus.valueOf(it) }
 
     @TypeConverter
     fun fromAuditAction(value: AuditAction?): String? = value?.name

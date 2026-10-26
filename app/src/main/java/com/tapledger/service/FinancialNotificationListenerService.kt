@@ -63,33 +63,53 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         var lastNotificationSeenAt: Long = 0L
             internal set
 
-        fun requestRebindService(context: Context) {
+        fun requestRebindService(context: Context, forceToggleComponent: Boolean = false) {
+            val isGranted = com.tapledger.core.util.PermissionUtils.isNotificationListenerGranted(context)
+            if (!isGranted) {
+                Log.w("TapLedgerListener", "Cannot request rebind: Notification Listener permission not granted in Settings")
+                return
+            }
+
+            if (isConnected && !forceToggleComponent) {
+                Log.i("TapLedgerListener", "Notification Listener is already connected. Skipping rebind.")
+                return
+            }
+
             val componentName = ComponentName(context, FinancialNotificationListenerService::class.java)
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 try {
                     requestRebind(componentName)
+                    Log.i("TapLedgerListener", "Standard requestRebind called")
                 } catch (e: Exception) {
                     Log.w("TapLedgerListener", "Standard requestRebind call failed: ${e.message}")
                 }
             }
 
-            // Perform component toggle trick to force Android's NotificationManagerService
-            // to reconnect the binder even if the OS killed the process or put the binder in a dead state
-            try {
-                val pm = context.packageManager
-                pm.setComponentEnabledSetting(
-                    componentName,
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP
-                )
-                pm.setComponentEnabledSetting(
-                    componentName,
-                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                    PackageManager.DONT_KILL_APP
-                )
-                Log.i("TapLedgerListener", "NotificationListener component toggled for reconnect")
-            } catch (e: Exception) {
-                Log.w("TapLedgerListener", "Failed to toggle component enabled setting", e)
+            if (forceToggleComponent || !isConnected) {
+                try {
+                    val pm = context.packageManager
+                    pm.setComponentEnabledSetting(
+                        componentName,
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        PackageManager.DONT_KILL_APP
+                    )
+                    pm.setComponentEnabledSetting(
+                        componentName,
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        PackageManager.DONT_KILL_APP
+                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        try {
+                            requestRebind(componentName)
+                        } catch (e: Exception) {
+                            Log.w("TapLedgerListener", "Secondary requestRebind call failed: ${e.message}")
+                        }
+                    }
+                    Log.i("TapLedgerListener", "NotificationListener component toggled and rebind requested")
+                } catch (e: Exception) {
+                    Log.w("TapLedgerListener", "Failed to toggle component enabled setting", e)
+                }
             }
         }
     }
@@ -187,7 +207,7 @@ class FinancialNotificationListenerService : NotificationListenerService() {
             postTime = sbn.postTime
         )
 
-        Log.d("TapLedgerListener", "Notification received from pkg='$pkg' | title='$title'")
+        Log.d("TapLedgerListener", "Notification received from pkg='$pkg' | title='$title' | text='$effectiveText'")
 
         if (restoreNotificationBuffer.isSpoolingActive()) {
             restoreNotificationBuffer.spoolEvent(event)

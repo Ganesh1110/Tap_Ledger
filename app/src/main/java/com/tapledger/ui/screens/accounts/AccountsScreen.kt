@@ -81,8 +81,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AccountsScreen(
     viewModel: AccountsViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {},
-    onNavigateToStatements: () -> Unit = {}
+    onNavigateBack: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())

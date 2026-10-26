@@ -409,8 +409,6 @@ class OnboardingDomainTest {
                         monthCloses: List<com.tapledger.core.database.entity.MonthCloseEntity>,
                         adjustments: List<BudgetAdjustmentEntity>,
                         advances: List<AdvanceLedgerEntity>,
-                        statementImports: List<com.tapledger.core.database.entity.StatementImportEntity>,
-                        statementLines: List<com.tapledger.core.database.entity.StatementLineEntity>,
                         savingsGoals: List<com.tapledger.core.database.entity.SavingsGoalEntity>,
                         savingsContributions: List<com.tapledger.core.database.entity.SavingsContributionEntity>,
                         savingsTransferPlans: List<com.tapledger.core.database.entity.SavingsTransferPlanEntity>,

@@ -7,8 +7,6 @@ import com.tapledger.core.database.entity.BudgetAllocationEntity
 import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
-import com.tapledger.core.database.entity.StatementImportEntity
-import com.tapledger.core.database.entity.StatementLineEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.AccountType
@@ -27,14 +25,14 @@ import javax.inject.Singleton
 
 /**
  * Data Integrity & Invariant Auditor (Flow.md §12).
- * Verifies all 19 formal database rules with exact codes and severities:
- * T1..T4, A1..A4, B1..B4, C1, P1, M1, M2, S1, R1, R2.
+ * Verifies all 18 formal database rules with exact codes and severities:
+ * T1..T4, A1..A4, B1..B4, C1, P1, M1, M2, R1, R2.
  */
 @Singleton
 open class DataIntegrityChecker @Inject constructor() {
 
     /**
-     * Executes all 19 invariant checks across database records.
+     * Executes all 18 invariant checks across database records.
      * Returns a list of actionable issues found.
      */
     open fun verifyIntegrity(
@@ -47,8 +45,6 @@ open class DataIntegrityChecker @Inject constructor() {
         monthCloses: List<MonthCloseEntity>,
         adjustments: List<BudgetAdjustmentEntity> = emptyList(),
         advances: List<AdvanceLedgerEntity> = emptyList(),
-        statementImports: List<StatementImportEntity> = emptyList(),
-        statementLines: List<StatementLineEntity> = emptyList(),
         savingsGoals: List<com.tapledger.core.database.entity.SavingsGoalEntity> = emptyList(),
         savingsContributions: List<com.tapledger.core.database.entity.SavingsContributionEntity> = emptyList(),
         savingsTransferPlans: List<com.tapledger.core.database.entity.SavingsTransferPlanEntity> = emptyList(),
@@ -509,33 +505,7 @@ open class DataIntegrityChecker @Inject constructor() {
         }
 
         // =============================================================
-        // 7. Statement Arithmetic Rules (S1)
-        // =============================================================
-
-        // Rule S1_STATEMENT_MISMATCH (WARNING):
-        // Internal statement arithmetic equals reported closing
-        for (stmt in statementImports) {
-            val lines = statementLines.filter { it.importId == stmt.id }
-            if (lines.isNotEmpty()) {
-                val totalDebits = lines.sumOf { it.debitPaise }
-                val totalCredits = lines.sumOf { it.creditPaise }
-                val expectedClosing = stmt.openingBalancePaise + totalCredits - totalDebits
-                if (expectedClosing != stmt.closingBalancePaise) {
-                    issues.add(
-                        IntegrityIssue(
-                            ruleId = "S1_STATEMENT_MISMATCH",
-                            message = "Statement import #${stmt.id} internal arithmetic mismatch (Expected: $expectedClosing, Reported: ${stmt.closingBalancePaise})",
-                            entityType = "StatementImport",
-                            entityId = stmt.id.toString(),
-                            severity = IntegritySeverity.WARNING
-                        )
-                    )
-                }
-            }
-        }
-
-        // =============================================================
-        // 8. Refund Rules (R1, R2)
+        // 7. Refund Rules (R1, R2)
         // =============================================================
 
         // Rule R1_CUMULATIVE_REFUND_EXCEEDED (ERROR): Σ Refunds(T) ≤ T.amount_paise

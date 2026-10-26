@@ -12,8 +12,6 @@ import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.MerchantMapDao
 import com.tapledger.core.database.dao.MonthCloseDao
-import com.tapledger.core.database.dao.StatementImportDao
-import com.tapledger.core.database.dao.StatementLineDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.dao.UnparsedAlertDao
@@ -40,7 +38,8 @@ object DatabaseModule {
                 com.tapledger.core.database.MIGRATION_1_2,
                 com.tapledger.core.database.MIGRATION_2_3,
                 com.tapledger.core.database.MIGRATION_3_4,
-                com.tapledger.core.database.MIGRATION_4_5
+                com.tapledger.core.database.MIGRATION_4_5,
+                com.tapledger.core.database.MIGRATION_5_6
             )
             .addCallback(com.tapledger.core.database.DatabaseTriggers.Callback)
             .build()
@@ -76,12 +75,6 @@ object DatabaseModule {
 
     @Provides
     fun provideUnparsedAlertDao(db: TapLedgerDatabase): UnparsedAlertDao = db.unparsedAlertDao()
-
-    @Provides
-    fun provideStatementImportDao(db: TapLedgerDatabase): StatementImportDao = db.statementImportDao()
-
-    @Provides
-    fun provideStatementLineDao(db: TapLedgerDatabase): StatementLineDao = db.statementLineDao()
 
     @Provides
     fun provideMonthCloseDao(db: TapLedgerDatabase): MonthCloseDao = db.monthCloseDao()

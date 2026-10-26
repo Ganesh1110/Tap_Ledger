@@ -263,11 +263,6 @@ fun MonthCloseScreen(
                                 isChecked = true
                             )
                             ChecklistRow(
-                                title = "Bank Statements Reconciled",
-                                subtitle = "Statement lines verified against ledger",
-                                isChecked = true
-                            )
-                            ChecklistRow(
                                 title = "Data Integrity Scanner Passed",
                                 subtitle = "Zero invariant errors found in ledger",
                                 isChecked = true

@@ -34,7 +34,6 @@ class NavigationFlowTest {
             Screen.BackupRestore,
             Screen.Setup,
             Screen.CategoryManagement,
-            Screen.StatementReconciliation,
             Screen.MonthClose,
             Screen.DataDiagnostics,
             Screen.Insights
@@ -49,7 +48,6 @@ class NavigationFlowTest {
         assertThat(routes).contains("backup_restore")
         assertThat(routes).contains("setup")
         assertThat(routes).contains("categories")
-        assertThat(routes).contains("statements")
         assertThat(routes).contains("month_close")
         assertThat(routes).contains("diagnostics")
         assertThat(routes).contains("insights")

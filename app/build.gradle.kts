@@ -131,9 +131,6 @@ dependencies {
     // Security & Cryptography (Argon2id)
     implementation(libs.bouncycastle.bcprov)
 
-    // PDF Statement Processing (Pure local/offline)
-    implementation(libs.pdfbox.android)
-
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

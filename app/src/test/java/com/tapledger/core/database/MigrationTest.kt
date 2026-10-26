@@ -469,6 +469,34 @@ class MigrationTest {
             assertThat(rsNew.getInt("is_pinned")).isEqualTo(1)
         }
     }
+
+    @Test
+    fun migration_5_to_6_dropsStatementTables() {
+        // Migrate 1 -> 2 -> 3 -> 4 -> 5 -> 6
+        MIGRATION_1_2.migrate(dbAdapter)
+        MIGRATION_2_3.migrate(dbAdapter)
+        MIGRATION_3_4.migrate(dbAdapter)
+        MIGRATION_4_5.migrate(dbAdapter)
+
+        // Verify statement tables exist in v5
+        conn.createStatement().use { stmt ->
+            val rsImports = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='statement_imports'")
+            assertThat(rsImports.next()).isTrue()
+            val rsLines = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='statement_lines'")
+            assertThat(rsLines.next()).isTrue()
+        }
+
+        // Apply MIGRATION_5_6
+        MIGRATION_5_6.migrate(dbAdapter)
+
+        // Verify statement tables are dropped in v6
+        conn.createStatement().use { stmt ->
+            val rsImports = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='statement_imports'")
+            assertThat(rsImports.next()).isFalse()
+            val rsLines = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='statement_lines'")
+            assertThat(rsLines.next()).isFalse()
+        }
+    }
 }
 
 

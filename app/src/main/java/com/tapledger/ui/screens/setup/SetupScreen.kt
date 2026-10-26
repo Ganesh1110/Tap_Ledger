@@ -76,13 +76,15 @@ fun SetupScreen(
         if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
     }
 
-    val isListenerGranted = remember(context) {
-        PermissionUtils.isNotificationListenerGranted(context)
-    }
+    val isListenerGranted = PermissionUtils.rememberNotificationListenerGranted()
 
     val isServiceConnected by FinancialNotificationListenerService.connectedState.collectAsStateWithLifecycle(
         initialValue = FinancialNotificationListenerService.isConnected
     )
+
+    val isIgnoringBatteryOptimizations = remember(context) {
+        PermissionUtils.isIgnoringBatteryOptimizations(context)
+    }
 
     val prefs = remember(context) {
         context.getSharedPreferences("tapledger_setup_prefs", Context.MODE_PRIVATE)
@@ -97,6 +99,8 @@ fun SetupScreen(
     var recentsLockConfirmed by remember {
         mutableStateOf(prefs.getBoolean("recents_lock_confirmed", false))
     }
+
+    val isBatteryGranted = isIgnoringBatteryOptimizations || batteryUnrestrictedConfirmed
 
     Scaffold(
         topBar = {
@@ -160,6 +164,45 @@ fun SetupScreen(
                 }
             }
 
+            // Android 13+ Restricted Setting Notice
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                item(key = "restricted_settings_notice") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(Spacing.md),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.sm))
+                            Column {
+                                Text(
+                                    text = "Android 13+ Security Note",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "If Notification Access is greyed out in system Settings: Open App Info for TapLedger, tap the 3 dots menu in the top-right corner, and select 'Allow restricted settings'.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Requirement 1: Notification Listener Access (Live detectable status)
             item(key = "req_listener") {
                 val listenerStatus = when {
@@ -194,7 +237,7 @@ fun SetupScreen(
                                 context.startActivity(intent)
                             }
                         } else {
-                            FinancialNotificationListenerService.requestRebindService(context)
+                            FinancialNotificationListenerService.requestRebindService(context, forceToggleComponent = true)
                         }
                     }
                 )
@@ -204,20 +247,23 @@ fun SetupScreen(
             item(key = "req_battery") {
                 RequirementCard(
                     title = "Battery Optimization: Unrestricted",
-                    description = "Prevents Android from putting TapLedger to sleep when your phone is locked.",
-                    status = if (batteryUnrestrictedConfirmed) Status.Granted else Status.Undetectable,
+                    description = if (isIgnoringBatteryOptimizations) "Verified: TapLedger is exempt from battery saver restriction." else "Prevents Android from putting TapLedger to sleep when your phone is locked.",
+                    status = if (isBatteryGranted) Status.Granted else Status.NeedsAction,
                     isManualChecked = batteryUnrestrictedConfirmed,
                     onManualCheckChange = {
                         batteryUnrestrictedConfirmed = it
                         prefs.edit().putBoolean("battery_unrestricted_confirmed", it).apply()
                     },
                     manualLabel = "I've set Battery to Unrestricted",
-                    actionText = "Open App Battery Settings",
+                    actionText = if (isIgnoringBatteryOptimizations) "App Settings" else "Optimize Battery",
                     onAction = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.fromParts("package", context.packageName, null)
+                        try {
+                            val intent = PermissionUtils.createIgnoreBatteryOptimizationsIntent(context)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            val intent = PermissionUtils.createAppDetailsSettingsIntent(context)
+                            context.startActivity(intent)
                         }
-                        context.startActivity(intent)
                     }
                 )
             }

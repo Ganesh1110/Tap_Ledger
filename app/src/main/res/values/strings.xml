@@ -40,9 +40,6 @@
 
     <string name="chart_v11_summary">%1$s carried forward • %2$s swept</string>
 
-    <string name="chart_v12_summary_reconciled">Fully reconciled with statement closing balance</string>
-    <string name="chart_v12_summary_discrepancy">%1$s discrepancy requires review</string>
-
     <string name="chart_v13_summary_clean">All financial data clean • 0 issues found</string>
     <string name="chart_v13_summary_issues">%1$d issues found (%2$d critical, %3$d error)</string>
 
@@ -67,7 +64,7 @@
     <string name="chart_pattern_shaded_title">Shaded Pattern</string>
     <string name="chart_pattern_shaded_desc">Deficit applied from earlier advances or negative rollovers.</string>
     <string name="chart_pattern_hatched_title">Hatched Red Pattern</string>
-    <string name="chart_pattern_hatched_desc">Budget overflow (spend &gt; 100%) or unresolved statement discrepancy.</string>
+    <string name="chart_pattern_hatched_desc">Budget overflow (spend &gt; 100%).</string>
     <string name="chart_pattern_dashed_title">Dashed / Hatch Line</string>
     <string name="chart_pattern_dashed_desc">Current period in progress or display-only spending projection.</string>
 </resources>

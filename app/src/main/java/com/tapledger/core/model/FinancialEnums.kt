@@ -76,22 +76,6 @@ enum class MonthCloseReconciliationStatus {
     UNRECONCILED
 }
 
-enum class StatementImportStatus {
-    IMPORTED,
-    RECONCILED,
-    ARITHMETIC_ERROR,
-    CANCELLED
-}
-
-enum class StatementMatchStatus {
-    MATCHED,
-    MATCHED_WITH_DISCREPANCY,
-    MISSING_IN_APP,
-    MISSING_IN_STATEMENT,
-    TIMING_DIFFERENCE,
-    RESOLVED
-}
-
 enum class AuditAction {
     CREATED,
     UPDATED,

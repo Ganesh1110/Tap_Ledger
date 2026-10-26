@@ -6,8 +6,6 @@
     @androidx.room.Entity *;
 }
 
-# PDFBox Android & BouncyCastle ProGuard rules
--dontwarn com.gemalto.jp2.**
+# BouncyCastle ProGuard rules
 -dontwarn org.bouncycastle.**
 -keep class org.bouncycastle.** { *; }
--keep class com.tom_roush.pdfbox.** { *; }

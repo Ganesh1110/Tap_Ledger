@@ -24,7 +24,6 @@ import com.tapledger.ui.screens.mpin.AppLockSettingsScreen
 import com.tapledger.ui.screens.mpin.MpinSetupScreen
 import com.tapledger.ui.screens.pending.PendingInboxScreen
 import com.tapledger.ui.screens.setup.SetupScreen
-import com.tapledger.ui.screens.statement.StatementReconciliationScreen
 import com.tapledger.ui.screens.transactions.TransactionsScreen
 import com.tapledger.ui.theme.MotionSpec
 
@@ -37,7 +36,6 @@ sealed class Screen(val route: String) {
     object BackupRestore : Screen("backup_restore")
     object Setup : Screen("setup")
     object CategoryManagement : Screen("categories")
-    object StatementReconciliation : Screen("statements")
     object MonthClose : Screen("month_close")
     object DataDiagnostics : Screen("diagnostics")
     object Insights : Screen("insights")
@@ -90,7 +88,6 @@ fun TapLedgerNavGraph(
                 onNavigateToBackup = { navController.navigate(Screen.BackupRestore.route) },
                 onNavigateToSetup = { navController.navigate(Screen.Setup.route) },
                 onNavigateToCategories = { navController.navigate(Screen.CategoryManagement.route) },
-                onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) },
                 onNavigateToMonthClose = { navController.navigate(Screen.MonthClose.route) },
                 onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
@@ -119,8 +116,7 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.Accounts.route) {
             AccountsScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToStatements = { navController.navigate(Screen.StatementReconciliation.route) }
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable(Screen.BackupRestore.route) {
@@ -136,11 +132,6 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.CategoryManagement.route) {
             CategoryManagementScreen()
-        }
-        composable(Screen.StatementReconciliation.route) {
-            StatementReconciliationScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
         }
         composable(Screen.MonthClose.route) {
             MonthCloseScreen(

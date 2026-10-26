@@ -124,9 +124,7 @@ fun PendingInboxScreen(
         }
     }
 
-    val isListenerActive = remember(context) {
-        PermissionUtils.isNotificationListenerGranted(context)
-    }
+    val isListenerActive = PermissionUtils.rememberNotificationListenerGranted()
 
     val isServiceConnected by FinancialNotificationListenerService.connectedState.collectAsStateWithLifecycle(
         initialValue = FinancialNotificationListenerService.isConnected
@@ -211,7 +209,7 @@ fun PendingInboxScreen(
                             if (!isListenerActive) {
                                 onNavigateToSetup()
                             } else if (!isServiceConnected) {
-                                FinancialNotificationListenerService.requestRebindService(context)
+                                FinancialNotificationListenerService.requestRebindService(context, forceToggleComponent = true)
                                 coroutineScope.launch {
                                     snackbarHostState.showSnackbar("Rebinding notification listener...")
                                 }
@@ -259,7 +257,7 @@ fun PendingInboxScreen(
                                     if (!isListenerActive) {
                                         onNavigateToSetup()
                                     } else {
-                                        FinancialNotificationListenerService.requestRebindService(context)
+                                        FinancialNotificationListenerService.requestRebindService(context, forceToggleComponent = true)
                                         coroutineScope.launch {
                                             snackbarHostState.showSnackbar("Rebinding notification listener...")
                                         }

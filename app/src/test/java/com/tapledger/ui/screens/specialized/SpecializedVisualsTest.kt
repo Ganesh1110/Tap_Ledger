@@ -10,16 +10,12 @@ import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
-import com.tapledger.data.statement.DiscrepancyPair
-import com.tapledger.data.statement.ReconciliationProof
-import com.tapledger.data.statement.TimingDifferencePair
 import com.tapledger.domain.model.IntegrityIssue
 import com.tapledger.domain.model.IntegritySeverity
 import com.tapledger.domain.monthclose.MonthCloseEngine
 import com.tapledger.ui.charts.builder.DiagnosticsChartBuilder
 import com.tapledger.ui.charts.builder.InsightsChartBuilder
 import com.tapledger.ui.charts.builder.MonthCloseChartBuilder
-import com.tapledger.ui.charts.builder.ReconciliationChartBuilder
 import com.tapledger.ui.charts.model.ChartState
 import com.tapledger.ui.charts.util.ChartMath
 import org.junit.Test
@@ -193,76 +189,6 @@ class SpecializedVisualsTest {
         val state = MonthCloseChartBuilder.buildAdvanceRolloverBars(preview)
         assertThat(state).isInstanceOf(ChartState.Empty::class.java)
         assertThat((state as ChartState.Empty).message).contains("No advance adjustments")
-    }
-
-    // -------------------------------------------------------------
-    // V12: RECONCILIATION BRIDGE TESTS
-    // -------------------------------------------------------------
-
-    @Test
-    fun testV12_ReconciliationBridge_FullyReconciledProof() {
-        val proof = ReconciliationProof(
-            stmtClosingPaise = 65_000_00L,
-            appBalanceEndPaise = 65_000_00L,
-            lhsPaise = 65_000_00L,
-            stmtOpeningPaise = 50_000_00L,
-            appBalanceStartMinusPaise = 50_000_00L,
-            openingDifferentialPaise = 0L,
-            missingInAppSumPaise = 0L,
-            missingInStmtSumPaise = 0L,
-            discrepancySumPaise = 0L,
-            timingDifferenceSumPaise = 0L,
-            rhsPaise = 65_000_00L,
-            isBalanced = true,
-            missingInAppLines = emptyList(),
-            missingInStmtTransactions = emptyList(),
-            discrepancies = emptyList<DiscrepancyPair>(),
-            timingDifferences = emptyList<TimingDifferencePair>()
-        )
-
-        val state = ReconciliationChartBuilder.buildReconciliationBridge(proof)
-        assertThat(state).isInstanceOf(ChartState.Data::class.java)
-        val data = (state as ChartState.Data).data
-
-        assertThat(data.isReconciled).isTrue()
-        assertThat(data.residualPaise).isEqualTo(0L)
-        assertThat(data.steps.any { it.isResidual }).isFalse()
-        assertThat(data.contentDescription).contains("Reconciliation balanced")
-    }
-
-    @Test
-    fun testV12_ReconciliationBridge_NonZeroResidualDrawnAsResidual() {
-        val proof = ReconciliationProof(
-            stmtClosingPaise = 60_000_00L,
-            appBalanceEndPaise = 55_000_00L,
-            lhsPaise = 60_000_00L,
-            stmtOpeningPaise = 50_000_00L,
-            appBalanceStartMinusPaise = 50_000_00L,
-            openingDifferentialPaise = 0L,
-            missingInAppSumPaise = 0L,
-            missingInStmtSumPaise = 0L,
-            discrepancySumPaise = 0L,
-            timingDifferenceSumPaise = 0L,
-            rhsPaise = 55_000_00L,
-            isBalanced = false,
-            missingInAppLines = emptyList(),
-            missingInStmtTransactions = emptyList(),
-            discrepancies = emptyList<DiscrepancyPair>(),
-            timingDifferences = emptyList<TimingDifferencePair>()
-        )
-
-        val state = ReconciliationChartBuilder.buildReconciliationBridge(proof)
-        assertThat(state).isInstanceOf(ChartState.Data::class.java)
-        val data = (state as ChartState.Data).data
-
-        assertThat(data.isReconciled).isFalse()
-        assertThat(data.residualPaise).isEqualTo(5_000_00L)
-
-        // Residual step exists and is marked isResidual = true (drawn in red per §17.2 V12)
-        val residualStep = data.steps.firstOrNull { it.isResidual }
-        assertThat(residualStep).isNotNull()
-        assertThat(residualStep?.deltaPaise).isEqualTo(5_000_00L)
-        assertThat(data.contentDescription).contains("Unreconciled: residual of")
     }
 
     // -------------------------------------------------------------

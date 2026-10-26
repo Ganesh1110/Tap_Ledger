@@ -8,8 +8,6 @@ import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.MonthCloseDao
-import com.tapledger.core.database.dao.StatementImportDao
-import com.tapledger.core.database.dao.StatementLineDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.AuditLogEntity
@@ -30,8 +28,6 @@ class DiagnosticsRepository @Inject constructor(
     private val transactionDao: TransactionDao,
     private val transactionAllocationDao: TransactionAllocationDao,
     private val monthCloseDao: MonthCloseDao,
-    private val statementImportDao: StatementImportDao,
-    private val statementLineDao: StatementLineDao,
     private val auditLogDao: AuditLogDao,
     private val savingsGoalDao: com.tapledger.core.database.dao.SavingsGoalDao,
     private val savingsContributionDao: com.tapledger.core.database.dao.SavingsContributionDao,
@@ -51,8 +47,6 @@ class DiagnosticsRepository @Inject constructor(
         val transactions = transactionDao.getAllTransactionsSync()
         val txAllocations = transactionAllocationDao.getAllTransactionAllocationsSync()
         val monthCloses = monthCloseDao.getAllMonthClosesSync()
-        val statementImports = statementImportDao.getAllImportsSync()
-        val statementLines = statementLineDao.getAllLinesSync()
         val savingsGoals = savingsGoalDao.getAllGoalsSync()
         val savingsContributions = savingsContributionDao.getAllContributionsSync()
         val savingsTransferPlans = savingsTransferPlanDao.getAllPlansSync()
@@ -68,8 +62,6 @@ class DiagnosticsRepository @Inject constructor(
             monthCloses = monthCloses,
             adjustments = adjustments,
             advances = advances,
-            statementImports = statementImports,
-            statementLines = statementLines,
             savingsGoals = savingsGoals,
             savingsContributions = savingsContributions,
             savingsTransferPlans = savingsTransferPlans

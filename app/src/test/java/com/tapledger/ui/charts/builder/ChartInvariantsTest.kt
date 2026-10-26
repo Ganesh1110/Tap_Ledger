@@ -30,9 +30,6 @@ import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransactionSource
 import com.tapledger.core.model.TransactionStatus
 import com.tapledger.data.repository.BudgetRepository
-import com.tapledger.data.statement.DiscrepancyPair
-import com.tapledger.data.statement.ReconciliationProof
-import com.tapledger.data.statement.TimingDifferencePair
 import com.tapledger.domain.calculator.BudgetCalculator
 import com.tapledger.domain.model.BudgetPeriodSummary
 import com.tapledger.domain.monthclose.MonthCloseEngine
@@ -490,48 +487,6 @@ class ChartInvariantsTest {
             assertThat(p.direction).isEqualTo(r.direction)
             assertThat(p.appliedToPeriodId).isEqualTo(r.appliedToPeriodId)
         }
-    }
-
-    // --- Invariant I8: V12 Residual == 0 on Valid Proof & Non-Zero with Red Bar Otherwise ---
-    @Test
-    fun testI8_ReconciliationBridgeResidualZeroOnValidProofAndRedBarOtherwise() {
-        val balancedProof = ReconciliationProof(
-            stmtClosingPaise = 50_000_00L,
-            appBalanceEndPaise = 40_000_00L,
-            lhsPaise = 50_000_00L,
-            stmtOpeningPaise = 30_000_00L,
-            appBalanceStartMinusPaise = 25_000_00L,
-            openingDifferentialPaise = 5_000_00L,
-            missingInAppSumPaise = 6_000_00L,
-            missingInStmtSumPaise = 1_000_00L,
-            discrepancySumPaise = 0L,
-            timingDifferenceSumPaise = 0L,
-            rhsPaise = 50_000_00L,
-            isBalanced = true,
-            missingInAppLines = emptyList(),
-            missingInStmtTransactions = emptyList(),
-            discrepancies = emptyList(),
-            timingDifferences = emptyList()
-        )
-
-        val balancedBridgeState = ReconciliationChartBuilder.buildReconciliationBridge(balancedProof)
-        val balancedBridge = (balancedBridgeState as ChartState.Data).data
-
-        assertThat(balancedBridge.residualPaise).isEqualTo(0L)
-        assertThat(balancedBridge.isReconciled).isTrue()
-        assertThat(balancedBridge.steps.any { it.isResidual }).isFalse()
-
-        // Unbalanced proof (e.g. discrepancy not accounted for)
-        val unbalancedProof = balancedProof.copy(
-            stmtClosingPaise = 52_000_00L, // 2,000 paise unaccounted difference
-            isBalanced = false
-        )
-        val unbalancedBridgeState = ReconciliationChartBuilder.buildReconciliationBridge(unbalancedProof)
-        val unbalancedBridge = (unbalancedBridgeState as ChartState.Data).data
-
-        assertThat(unbalancedBridge.residualPaise).isEqualTo(2_000_00L)
-        assertThat(unbalancedBridge.isReconciled).isFalse()
-        assertThat(unbalancedBridge.steps.any { it.isResidual }).isTrue()
     }
 
     // --- Invariant I9: Status Filtering - Only CATEGORIZED in Spend Visuals ---

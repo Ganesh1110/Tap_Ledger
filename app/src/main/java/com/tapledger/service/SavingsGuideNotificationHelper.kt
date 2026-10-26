@@ -100,7 +100,7 @@ object SavingsGuideNotificationHelper {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Transfer Unconfirmed")
             .setContentText("Transfer of $formatted is waiting for bank alert verification")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("Transfer of $formatted marked moved 3+ days ago has not yet been confirmed by bank alert. Check statement or correct balance if needed."))
+            .setStyle(NotificationCompat.BigTextStyle().bigText("Transfer of $formatted marked moved 3+ days ago has not yet been confirmed by bank alert. Check account or correct balance if needed."))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .build()

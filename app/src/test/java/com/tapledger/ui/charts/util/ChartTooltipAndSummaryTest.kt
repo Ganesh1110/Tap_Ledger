@@ -326,28 +326,6 @@ class ChartTooltipAndSummaryTest {
     }
 
     @Test
-    fun summarizeV12Reconciliation_reconciledVsDiscrepancy() {
-        val reconciledModel = ReconciliationBridgeModel(
-            steps = emptyList(),
-            appClosingPaise = 15_000_00L,
-            stmtClosingPaise = 15_000_00L,
-            residualPaise = 0L,
-            isReconciled = true,
-            contentDescription = "",
-            tableRows = emptyList()
-        )
-        assertThat(ChartSummaryHelper.summarizeV12Reconciliation(reconciledModel))
-            .isEqualTo("Fully reconciled with statement closing balance")
-
-        val discrepancyModel = reconciledModel.copy(
-            residualPaise = 1_500_00L,
-            isReconciled = false
-        )
-        assertThat(ChartSummaryHelper.summarizeV12Reconciliation(discrepancyModel))
-            .isEqualTo("₹1.5K discrepancy requires review")
-    }
-
-    @Test
     fun summarizeV13Diagnostics_cleanLedgerVsViolations() {
         val cleanModel = DiagnosticsSeverityBarModel(
             criticalCount = 0,
