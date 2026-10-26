@@ -7,11 +7,15 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import com.tapledger.R
 import com.tapledger.core.database.dao.AccountDao
 import com.tapledger.core.database.dao.TransactionDao
@@ -44,8 +48,14 @@ class FinancialNotificationListenerService : NotificationListenerService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     companion object {
+        private val _connectedState = MutableStateFlow(false)
+        val connectedState: StateFlow<Boolean> = _connectedState.asStateFlow()
+
         var isConnected: Boolean = false
-            internal set
+            internal set(value) {
+                field = value
+                _connectedState.value = value
+            }
         var lastConnectedAt: Long = 0L
             internal set
         var lastDisconnectedAt: Long = 0L
@@ -54,12 +64,32 @@ class FinancialNotificationListenerService : NotificationListenerService() {
             internal set
 
         fun requestRebindService(context: Context) {
+            val componentName = ComponentName(context, FinancialNotificationListenerService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 try {
-                    requestRebind(ComponentName(context, FinancialNotificationListenerService::class.java))
+                    requestRebind(componentName)
                 } catch (e: Exception) {
-                    Log.w("TapLedgerListener", "Failed to requestRebind: ${e.message}")
+                    Log.w("TapLedgerListener", "Standard requestRebind call failed: ${e.message}")
                 }
+            }
+
+            // Perform component toggle trick to force Android's NotificationManagerService
+            // to reconnect the binder even if the OS killed the process or put the binder in a dead state
+            try {
+                val pm = context.packageManager
+                pm.setComponentEnabledSetting(
+                    componentName,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+                pm.setComponentEnabledSetting(
+                    componentName,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+                Log.i("TapLedgerListener", "NotificationListener component toggled for reconnect")
+            } catch (e: Exception) {
+                Log.w("TapLedgerListener", "Failed to toggle component enabled setting", e)
             }
         }
     }
@@ -84,10 +114,8 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         super.onListenerDisconnected()
         isConnected = false
         lastDisconnectedAt = DateTimeUtils.nowEpochMillis()
-        // Section 39: Rebind request on disconnection
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            requestRebind(ComponentName(this, FinancialNotificationListenerService::class.java))
-        }
+        // Rebind request on disconnection
+        requestRebindService(this)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -106,16 +134,48 @@ class FinancialNotificationListenerService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString().orEmpty()
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+        val tickerText = sbn.notification.tickerText?.toString()
+
+        val textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+        val lineTexts = textLines?.mapNotNull { it?.toString() } ?: emptyList()
 
         val effectiveText = when {
             bigText.isNotBlank() && bigText.length > text.length -> bigText
-            else -> text
+            text.isNotBlank() -> text
+            tickerText != null && tickerText.isNotBlank() -> tickerText
+            lineTexts.isNotEmpty() -> lineTexts.joinToString(" ")
+            else -> ""
         }
 
         val messagesList = mutableListOf<String>()
         val msgArray = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-        msgArray?.forEach {
-            it?.toString()?.let { str -> messagesList.add(str) }
+        msgArray?.forEach { item ->
+            when (item) {
+                is android.os.Bundle -> {
+                    val msgText = item.getCharSequence("text")?.toString()
+                    if (!msgText.isNullOrBlank()) {
+                        messagesList.add(msgText)
+                    }
+                }
+                is CharSequence -> {
+                    messagesList.add(item.toString())
+                }
+                else -> {
+                    item?.toString()?.let { str ->
+                        if (!str.startsWith("Bundle[")) {
+                            messagesList.add(str)
+                        }
+                    }
+                }
+            }
+        }
+        lineTexts.forEach { line ->
+            if (line.isNotBlank() && line != effectiveText) {
+                messagesList.add(line)
+            }
+        }
+        if (!tickerText.isNullOrBlank() && tickerText != effectiveText && tickerText != title) {
+            messagesList.add(tickerText)
         }
 
         val event = NotificationEvent(

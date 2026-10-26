@@ -32,7 +32,9 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Warning
+import com.tapledger.service.FinancialNotificationListenerService
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -126,6 +128,31 @@ fun PendingInboxScreen(
         PermissionUtils.isNotificationListenerGranted(context)
     }
 
+    val isServiceConnected by FinancialNotificationListenerService.connectedState.collectAsStateWithLifecycle(
+        initialValue = FinancialNotificationListenerService.isConnected
+    )
+
+    val listenerStatusText = when {
+        !isListenerActive -> "Listener access inactive in Settings — tap to fix"
+        !isServiceConnected -> "Listener disconnected by OS — tap to reconnect"
+        else -> "Financial Notification Listener active & connected"
+    }
+    val listenerStatusColor = when {
+        !isListenerActive -> MaterialTheme.colorScheme.error
+        !isServiceConnected -> MaterialTheme.colorScheme.tertiary
+        else -> IncomeGreen
+    }
+    val listenerBgColor = when {
+        !isListenerActive -> MaterialTheme.colorScheme.errorContainer
+        !isServiceConnected -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+        else -> MaterialTheme.colorScheme.surfaceContainerLow
+    }
+    val listenerIcon = when {
+        !isListenerActive -> Icons.Default.Warning
+        !isServiceConnected -> Icons.Default.SyncProblem
+        else -> Icons.Default.HealthAndSafety
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -176,12 +203,21 @@ fun PendingInboxScreen(
 
                 Spacer(modifier = Modifier.height(Spacing.sm))
 
-                // Listener health indicator
+                // Listener health indicator with 1-tap rebind
                 Card(
-                    modifier = Modifier.padding(horizontal = Spacing.lg),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isListenerActive) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.errorContainer
-                    ),
+                    modifier = Modifier
+                        .padding(horizontal = Spacing.lg)
+                        .clickable {
+                            if (!isListenerActive) {
+                                onNavigateToSetup()
+                            } else if (!isServiceConnected) {
+                                FinancialNotificationListenerService.requestRebindService(context)
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Rebinding notification listener...")
+                                }
+                            }
+                        },
+                    colors = CardDefaults.cardColors(containerColor = listenerBgColor),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
@@ -189,17 +225,17 @@ fun PendingInboxScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.HealthAndSafety,
+                            imageVector = listenerIcon,
                             contentDescription = null,
-                            tint = if (isListenerActive) IncomeGreen else MaterialTheme.colorScheme.error,
+                            tint = listenerStatusColor,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(Spacing.xs))
                         Text(
-                            text = if (isListenerActive) "Financial Notification Listener active" else "Listener inactive — tap to fix",
+                            text = listenerStatusText,
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
-                            color = if (isListenerActive) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onErrorContainer
+                            color = if (isListenerActive && isServiceConnected) MaterialTheme.colorScheme.onSurfaceVariant else listenerStatusColor
                         )
                     }
                 }
@@ -213,6 +249,46 @@ fun PendingInboxScreen(
                 contentPadding = PaddingValues(top = Spacing.xs, bottom = Spacing.listBottomPadding),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
+                // If listener is disconnected or inactive, alert user at top of pending list
+                if (!isListenerActive || !isServiceConnected) {
+                    item(key = "listener_warning_header") {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (!isListenerActive) {
+                                        onNavigateToSetup()
+                                    } else {
+                                        FinancialNotificationListenerService.requestRebindService(context)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Rebinding notification listener...")
+                                        }
+                                    }
+                                },
+                            colors = CardDefaults.cardColors(containerColor = listenerBgColor),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = listenerIcon,
+                                    contentDescription = null,
+                                    tint = listenerStatusColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(Spacing.xs))
+                                Text(
+                                    text = listenerStatusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = listenerStatusColor
+                                )
+                            }
+                        }
+                    }
+                }
                 items(
                     items = pendingTxs,
                     key = { it.id }

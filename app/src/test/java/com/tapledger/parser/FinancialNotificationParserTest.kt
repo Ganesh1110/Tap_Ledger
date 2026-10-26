@@ -127,9 +127,87 @@ class FinancialNotificationParserTest {
         val billDueEvent = NotificationEvent(
             packageName = "com.google.android.apps.messaging",
             title = "Credit Card",
-            text = "Your HDFC Credit Card bill due is Rs. 15,400. Minimum due is Rs. 1,000.",
+            text = "Your HDFC Credit Card bill is due of Rs. 15,400. Minimum amount due is Rs. 1,000.",
             postTime = 1728374000000L
         )
         assertThat(FinancialNotificationParser.parse(billDueEvent)).isNull()
+    }
+
+    @Test
+    fun parse_phonePePayment_extractsAmountAndMerchant() {
+        val event = NotificationEvent(
+            packageName = "com.phonepe.app",
+            title = "PhonePe",
+            text = "Payment of ₹350 to Starbucks was successful.",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+
+        assertThat(result).isNotNull()
+        result?.let {
+            assertThat(it.amountPaise).isEqualTo(35000L)
+            assertThat(it.merchantRaw).isEqualTo("Starbucks")
+            assertThat(it.kind).isEqualTo(TransactionKind.EXPENSE)
+        }
+    }
+
+    @Test
+    fun parse_gpayBulletMaskedAccount_extractsLast4AndAmount() {
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.nbu.paisa.user",
+            title = "Google Pay",
+            text = "Paid ₹120 to Chai Point using State Bank of India •••• 5678",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+
+        assertThat(result).isNotNull()
+        result?.let {
+            assertThat(it.amountPaise).isEqualTo(12000L)
+            assertThat(it.accountLast4).isEqualTo("5678")
+            assertThat(it.merchantRaw).isEqualTo("Chai Point")
+            assertThat(it.kind).isEqualTo(TransactionKind.EXPENSE)
+        }
+    }
+
+    @Test
+    fun parse_debitWithPromoTagline_extractsTransactionSuccessfully() {
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "HDFC Bank Alert",
+            text = "Alert: Rs. 400.00 spent on your HDFC Bank Card ending 9012 at DOMINOS on 23-OCT-26. Use coupon PIZZA for discount on next order.",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+
+        assertThat(result).isNotNull()
+        result?.let {
+            assertThat(it.amountPaise).isEqualTo(40000L)
+            assertThat(it.accountLast4).isEqualTo("9012")
+            assertThat(it.merchantRaw).isEqualTo("DOMINOS")
+            assertThat(it.kind).isEqualTo(TransactionKind.EXPENSE)
+        }
+    }
+
+    @Test
+    fun parse_billPaymentWithDueDateMention_extractsTransactionSuccessfully() {
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "Airtel",
+            text = "Your Airtel bill payment of Rs. 999.00 was successful. Debited from A/C 1234 on 23-Oct-26. Due date was 24-Oct.",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+
+        assertThat(result).isNotNull()
+        result?.let {
+            assertThat(it.amountPaise).isEqualTo(99900L)
+            assertThat(it.accountLast4).isEqualTo("1234")
+            assertThat(it.kind).isEqualTo(TransactionKind.EXPENSE)
+        }
     }
 }

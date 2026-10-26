@@ -54,9 +54,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.BuildConfig
 import com.tapledger.core.database.TapLedgerDatabase
 import com.tapledger.core.util.PermissionUtils
+import com.tapledger.service.FinancialNotificationListenerService
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
@@ -77,6 +79,10 @@ fun SetupScreen(
     val isListenerGranted = remember(context) {
         PermissionUtils.isNotificationListenerGranted(context)
     }
+
+    val isServiceConnected by FinancialNotificationListenerService.connectedState.collectAsStateWithLifecycle(
+        initialValue = FinancialNotificationListenerService.isConnected
+    )
 
     val prefs = remember(context) {
         context.getSharedPreferences("tapledger_setup_prefs", Context.MODE_PRIVATE)
@@ -156,20 +162,39 @@ fun SetupScreen(
 
             // Requirement 1: Notification Listener Access (Live detectable status)
             item(key = "req_listener") {
+                val listenerStatus = when {
+                    !isListenerGranted -> Status.NeedsAction
+                    !isServiceConnected -> Status.NeedsAction
+                    else -> Status.Granted
+                }
+                val descriptionText = when {
+                    !isListenerGranted -> "Enables TapLedger to read incoming bank SMS and payment alerts offline."
+                    !isServiceConnected -> "Access authorized in Settings, but background service is currently disconnected by OS. Tap 'Reconnect Listener' to rebind."
+                    else -> "Active & Connected. Capturing bank SMS and UPI payment notifications offline."
+                }
+                val actionLabel = when {
+                    !isListenerGranted -> "Open Listener Settings"
+                    !isServiceConnected -> "Reconnect Listener"
+                    else -> "Test Rebind"
+                }
                 RequirementCard(
                     title = "Automatic Transaction Reader",
-                    description = "Enables TapLedger to read incoming bank SMS and payment alerts offline.",
-                    status = if (isListenerGranted) Status.Granted else Status.NeedsAction,
-                    actionText = if (!isListenerGranted) "Open Listener Settings" else null,
+                    description = descriptionText,
+                    status = listenerStatus,
+                    actionText = actionLabel,
                     onAction = {
-                        try {
-                            val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
+                        if (!isListenerGranted) {
+                            try {
+                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
                             }
-                            context.startActivity(intent)
+                        } else {
+                            FinancialNotificationListenerService.requestRebindService(context)
                         }
                     }
                 )
