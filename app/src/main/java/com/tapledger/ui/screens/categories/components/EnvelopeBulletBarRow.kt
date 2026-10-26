@@ -46,6 +46,7 @@ import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.defaultMinSize
 import com.tapledger.ui.charts.render.rememberIsCompactChart
 
@@ -107,20 +108,27 @@ fun EnvelopeBulletBarRow(
                 .fillMaxWidth()
                 .padding(horizontal = Spacing.md, vertical = if (isCompact) Spacing.md else Spacing.sm)
         ) {
-            // Header: Category Name, Status Icon, and Rupee Values
+            // Header: Category Name, Badges, Pin, and Money Values
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Left side: Name, Fixed badge, Status icon
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
                         text = item.categoryName,
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     if (isPinned) {
-                        Spacer(modifier = Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
@@ -131,11 +139,11 @@ fun EnvelopeBulletBarRow(
                                 text = "📌 Fixed",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 1
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(6.dp))
                     if (item.bucket == BudgetBucket.SAVINGS && item.isGoalAchieved) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
@@ -167,8 +175,29 @@ fun EnvelopeBulletBarRow(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.width(Spacing.xs))
+
+                // Right side: Money amounts & Pin action
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Text(
+                        text = MoneyFormatter.formatPaiseToRupees(item.spentPaise),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (item.isExceeded) ExpenseRed else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = " / ${MoneyFormatter.formatPaiseToRupees(item.adjustedBudgetPaise)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+
                     if (onTogglePin != null) {
+                        Spacer(modifier = Modifier.width(4.dp))
                         IconButton(
                             onClick = onTogglePin,
                             modifier = Modifier.size(24.dp)
@@ -180,19 +209,7 @@ fun EnvelopeBulletBarRow(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Text(
-                        text = MoneyFormatter.formatPaiseToRupees(item.spentPaise),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (item.isExceeded) ExpenseRed else MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = " / ${MoneyFormatter.formatPaiseToRupees(item.adjustedBudgetPaise)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
 
