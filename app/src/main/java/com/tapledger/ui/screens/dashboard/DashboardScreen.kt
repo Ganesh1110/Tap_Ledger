@@ -568,7 +568,8 @@ fun DashboardScreen(
                             Spacer(modifier = Modifier.height(Spacing.xs))
                             SafeDailySpendPill(
                                 safeSpend = safeSpend,
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                pendingSpendPaise = state.pendingSpendPaise
                             )
                         }
                     }

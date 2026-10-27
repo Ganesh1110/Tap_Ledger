@@ -280,4 +280,42 @@ class ManualEntryViewModelTest {
         assertThat(tx.kind).isEqualTo(TransactionKind.INCOME)
         assertThat(tx.merchantRaw).isEqualTo("Freelance Client")
     }
+
+    @Test
+    fun testAdjustmentKind_setsErrorMessage_doesNotSilentlySucceed() = runTest {
+        val viewModel = ManualEntryViewModel(
+            accountRepository = accountRepository,
+            budgetRepository = budgetRepository,
+            transactionRepository = transactionRepository,
+            merchantRepository = merchantRepository
+        )
+        advanceUntilIdle()
+
+        viewModel.onKindSelected(TransactionKind.ADJUSTMENT)
+        viewModel.onAmountChanged("500")
+
+        viewModel.submitTransaction()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.isSuccess).isFalse()
+        assertThat(viewModel.uiState.value.errorMessage).contains("Adjustments cannot be recorded as manual transactions")
+    }
+
+    @Test
+    fun testDateBeforeOpeningBalance_showsWarningMessage() = runTest {
+        val viewModel = ManualEntryViewModel(
+            accountRepository = accountRepository,
+            budgetRepository = budgetRepository,
+            transactionRepository = transactionRepository,
+            merchantRepository = merchantRepository
+        )
+        advanceUntilIdle()
+
+        // testAccount openingBalanceDate is 1_700_000_000_000L
+        val priorDate = 1_700_000_000_000L - 86_400_000L
+        viewModel.onDateSelected(priorDate)
+
+        assertThat(viewModel.uiState.value.openingBalanceWarningMessage).isNotNull()
+        assertThat(viewModel.uiState.value.openingBalanceWarningMessage).contains("before HDFC Bank's opening balance date")
+    }
 }

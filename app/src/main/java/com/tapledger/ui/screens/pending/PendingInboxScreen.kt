@@ -292,18 +292,30 @@ fun PendingInboxScreen(
                     key = { it.id }
                 ) { tx ->
                     val suggestedCat = categories.find { it.id == suggestedMap[tx.id] }
+                    val isIncome = tx.kind == com.tapledger.core.model.TransactionKind.INCOME ||
+                        tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_EARNED ||
+                        tx.direction == com.tapledger.core.model.TransactionDirection.IN
 
                     val dismissState = rememberSwipeToDismissBoxState(
                         confirmValueChange = { dismissValue ->
                             when (dismissValue) {
                                 SwipeToDismissBoxValue.StartToEnd -> {
-                                    val targetCatId = suggestedCat?.id ?: categories.firstOrNull()?.id
-                                    if (targetCatId != null) {
+                                    if (isIncome) {
                                         if (tx.accountId == null) {
-                                            unassignedTxToCategorize = tx to targetCatId
+                                            unassignedTxToAssign = tx
                                         } else {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            viewModel.categorizeTransaction(tx.id, targetCatId, tx.amountPaise)
+                                            viewModel.confirmTransaction(tx.id)
+                                        }
+                                    } else {
+                                        val targetCatId = suggestedCat?.id ?: categories.firstOrNull()?.id
+                                        if (targetCatId != null) {
+                                            if (tx.accountId == null) {
+                                                unassignedTxToCategorize = tx to targetCatId
+                                            } else {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                viewModel.categorizeTransaction(tx.id, targetCatId, tx.amountPaise)
+                                            }
                                         }
                                     }
                                     true
@@ -344,9 +356,17 @@ fun PendingInboxScreen(
                             ) {
                                 if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Done, contentDescription = "Categorize", tint = IncomeGreen)
+                                        Icon(
+                                            imageVector = Icons.Default.Done,
+                                            contentDescription = if (isIncome) "Confirm Income" else "Categorize",
+                                            tint = IncomeGreen
+                                        )
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Apply Suggestion", fontWeight = FontWeight.Bold, color = IncomeGreen)
+                                        Text(
+                                            text = if (isIncome) "Confirm Income" else "Apply Suggestion",
+                                            fontWeight = FontWeight.Bold,
+                                            color = IncomeGreen
+                                        )
                                     }
                                 } else {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -368,6 +388,10 @@ fun PendingInboxScreen(
                             },
                             onRequestAssignAccount = {
                                 unassignedTxToAssign = tx
+                            },
+                            onConfirm = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.confirmTransaction(tx.id)
                             },
                             onCategorize = { catId ->
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -505,11 +529,15 @@ private fun PendingTransactionCard(
     suggestedCategory: CategoryEntity? = null,
     onAssignAccount: (Long) -> Unit,
     onRequestAssignAccount: () -> Unit,
+    onConfirm: () -> Unit,
     onCategorize: (Long) -> Unit,
     onVoid: () -> Unit
 ) {
     var expandedBucket by remember { mutableStateOf<BudgetBucket?>(null) }
     val assignedAccount = accounts.find { it.id == tx.accountId }
+    val isIncome = tx.kind == com.tapledger.core.model.TransactionKind.INCOME ||
+        tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_EARNED ||
+        tx.direction == com.tapledger.core.model.TransactionDirection.IN
 
     Card(
         modifier = Modifier
@@ -534,7 +562,7 @@ private fun PendingTransactionCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = tx.merchantRaw ?: "Captured Expense",
+                        text = tx.merchantRaw ?: if (isIncome) "Captured Income" else "Captured Expense",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -549,7 +577,7 @@ private fun PendingTransactionCard(
                 MoneyText(
                     amountPaise = tx.amountPaise,
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    semantic = MoneySemantic.Expense
+                    semantic = if (isIncome) MoneySemantic.Income else MoneySemantic.Expense
                 )
             }
 
@@ -610,89 +638,118 @@ private fun PendingTransactionCard(
                 }
             }
 
-            // 1-Tap Suggested Category Apply Button (if suggestion exists)
-            if (suggestedCategory != null) {
+            if (isIncome) {
                 Spacer(modifier = Modifier.height(Spacing.xs))
-                Button(
-                    onClick = { onCategorize(suggestedCategory.id) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                ) {
-                    Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(Spacing.xs))
-                    Text(
-                        text = "1-Tap Apply: ${suggestedCategory.name} (${suggestedCategory.defaultBucket.name})",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Spacing.xs))
-
-            // Bucket Chips (<= 2 taps categorization)
-            Text(
-                text = "Assign Bucket:",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-            ) {
-                listOf(
-                    BudgetBucket.NEEDS to "Needs",
-                    BudgetBucket.WANTS to "Wants",
-                    BudgetBucket.SAVINGS to "Savings"
-                ).forEach { (bucket, label) ->
-                    val isSelected = expandedBucket == bucket
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            val bucketCats = categories.filter { it.defaultBucket == bucket }
-                            if (bucketCats.size == 1) {
-                                // Exactly 1 category in this bucket: 1-tap categorization!
-                                onCategorize(bucketCats.first().id)
-                            } else {
-                                // Toggle bucket subcategory selection
-                                expandedBucket = if (isSelected) null else bucket
-                            }
-                        },
-                        label = { Text(label, fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            // Expanded Sub-categories under the selected bucket (2nd tap!)
-            AnimatedVisibility(visible = expandedBucket != null) {
-                val bucketCats = categories.filter { it.defaultBucket == expandedBucket }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = Spacing.xs)
-                ) {
-                    Text(
-                        text = "Select Category in ${expandedBucket?.name}:",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                if (tx.accountId != null) {
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = IncomeGreen,
+                            contentColor = androidx.compose.ui.graphics.Color.White
+                        )
                     ) {
-                        bucketCats.forEach { cat ->
-                            AssistChip(
-                                onClick = { onCategorize(cat.id) },
-                                label = { Text(cat.name, fontSize = 11.sp) }
-                            )
+                        Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text(
+                            text = "1-Tap Confirm Income",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Assign an account above to confirm this income.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                // 1-Tap Suggested Category Apply Button (if suggestion exists)
+                if (suggestedCategory != null) {
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Button(
+                        onClick = { onCategorize(suggestedCategory.id) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text(
+                            text = "1-Tap Apply: ${suggestedCategory.name} (${suggestedCategory.defaultBucket.name})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.xs))
+
+                // Bucket Chips (<= 2 taps categorization)
+                Text(
+                    text = "Assign Bucket:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    listOf(
+                        BudgetBucket.NEEDS to "Needs",
+                        BudgetBucket.WANTS to "Wants",
+                        BudgetBucket.SAVINGS to "Savings"
+                    ).forEach { (bucket, label) ->
+                        val isSelected = expandedBucket == bucket
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                val bucketCats = categories.filter { it.defaultBucket == bucket }
+                                if (bucketCats.size == 1) {
+                                    // Exactly 1 category in this bucket: 1-tap categorization!
+                                    onCategorize(bucketCats.first().id)
+                                } else {
+                                    // Toggle bucket subcategory selection
+                                    expandedBucket = if (isSelected) null else bucket
+                                }
+                            },
+                            label = { Text(label, fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // Expanded Sub-categories under the selected bucket (2nd tap!)
+                AnimatedVisibility(visible = expandedBucket != null) {
+                    val bucketCats = categories.filter { it.defaultBucket == expandedBucket }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Spacing.xs)
+                    ) {
+                        Text(
+                            text = "Select Category in ${expandedBucket?.name}:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        ) {
+                            bucketCats.forEach { cat ->
+                                AssistChip(
+                                    onClick = { onCategorize(cat.id) },
+                                    label = { Text(cat.name, fontSize = 11.sp) }
+                                )
+                            }
                         }
                     }
                 }

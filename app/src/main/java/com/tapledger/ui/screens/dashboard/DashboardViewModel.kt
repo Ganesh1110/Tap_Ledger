@@ -76,7 +76,8 @@ data class DashboardUiState(
     val transferPlanState: TransferPlanDashboardState? = null,
     val activeGoals: List<GoalApportionmentItem> = emptyList(),
     val preferredPayApp: String? = null,
-    val safeDailySpend: SafeDailySpendResult? = null
+    val safeDailySpend: SafeDailySpendResult? = null,
+    val pendingSpendPaise: Long = 0L
 )
 
 @HiltViewModel
@@ -363,6 +364,13 @@ class DashboardViewModel @Inject constructor(
                 todaySpentPaise = todaySpentPaise
             )
 
+            val pendingExpenseTxs = periodTxs.filter {
+                it.status == TransactionStatus.PENDING &&
+                it.direction == com.tapledger.core.model.TransactionDirection.OUT &&
+                it.kind != com.tapledger.core.model.TransactionKind.TRANSFER
+            }
+            val pendingSpendPaise = pendingExpenseTxs.sumOf { it.amountPaise }
+
             _uiState.value = DashboardUiState(
                 isLoading = false,
                 pendingCount = pendingCount,
@@ -379,7 +387,8 @@ class DashboardViewModel @Inject constructor(
                 transferPlanState = transferPlanDashboardState,
                 activeGoals = activeGoals,
                 preferredPayApp = savingsGuidePreferences.getConfig().preferredPayApp,
-                safeDailySpend = safeDailySpend
+                safeDailySpend = safeDailySpend,
+                pendingSpendPaise = pendingSpendPaise
             )
         }
     }

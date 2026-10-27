@@ -63,7 +63,8 @@ import com.tapledger.ui.theme.WarningAmber
 @Composable
 fun SafeDailySpendPill(
     safeSpend: SafeDailySpendResult,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    pendingSpendPaise: Long = 0L
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
@@ -110,7 +111,7 @@ fun SafeDailySpendPill(
         isOverBudget -> "Over budget"
         safeSpend.todaySpentPaise > 0L -> "₹${MoneyFormatter.formatPaiseToRupees(safeSpend.todayRemainingPaise).replace("₹", "")} left today"
         else -> "${safeSpend.daysRemaining} days left"
-    }
+    } + if (pendingSpendPaise > 0L && !isClosed) " • ${MoneyFormatter.formatPaiseToRupees(pendingSpendPaise)} pending" else ""
 
     Surface(
         onClick = { showDialog = true },
@@ -184,6 +185,7 @@ fun SafeDailySpendPill(
     if (showDialog) {
         SafeDailySpendDialog(
             safeSpend = safeSpend,
+            pendingSpendPaise = pendingSpendPaise,
             onDismiss = { showDialog = false }
         )
     }
@@ -192,6 +194,7 @@ fun SafeDailySpendPill(
 @Composable
 fun SafeDailySpendDialog(
     safeSpend: SafeDailySpendResult,
+    pendingSpendPaise: Long = 0L,
     onDismiss: () -> Unit
 ) {
     val isOverBudget = safeSpend.isOverBudget
@@ -274,6 +277,32 @@ fun SafeDailySpendDialog(
                                     color = if (safeSpend.todayRemainingPaise > 0L) IncomeGreen else ExpenseRed
                                 )
                             }
+                        }
+                    }
+                }
+
+                if (pendingSpendPaise > 0L && !isClosed) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = WarningAmber.copy(alpha = 0.12f)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = WarningAmber,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text(
+                                text = "${MoneyFormatter.formatPaiseToRupees(pendingSpendPaise)} unreviewed spend pending in inbox (not counted in budget)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                         }
                     }
                 }
