@@ -107,7 +107,7 @@ fun SetupScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Reliability Setup",
+                        text = "Auto-Capture Setup",
                         fontWeight = FontWeight.Bold
                     )
                 },

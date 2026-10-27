@@ -88,7 +88,7 @@ fun DataDiagnosticsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Data Integrity",
+                        text = "Data Health & Integrity",
                         fontWeight = FontWeight.Bold
                     )
                 },

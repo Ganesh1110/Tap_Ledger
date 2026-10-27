@@ -120,6 +120,7 @@ import com.tapledger.ui.screens.dashboard.components.DashboardBurnUpCard
 import com.tapledger.ui.screens.dashboard.components.DashboardHeroRingCard
 import com.tapledger.ui.screens.dashboard.components.DashboardSixPeriodTrendCard
 import com.tapledger.ui.screens.dashboard.components.GoalAllocationBottomSheet
+import com.tapledger.ui.screens.dashboard.components.SettingsBottomSheet
 import com.tapledger.ui.screens.dashboard.components.TransferPlanBottomSheet
 import com.tapledger.ui.screens.dashboard.components.SafeDailySpendPill
 import com.tapledger.ui.screens.dashboard.components.TransferPlanCard
@@ -292,91 +293,16 @@ fun DashboardScreen(
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(Spacing.xs))
-                                Box {
-                                    IconButton(
-                                        onClick = { showSettingsMenu = true },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = "Settings",
-                                            modifier = Modifier.size(20.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    DropdownMenu(
-                                        expanded = showSettingsMenu,
-                                        onDismissRequest = { showSettingsMenu = false }
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("What's New & Updates") },
-                                            onClick = {
-                                                showSettingsMenu = false
-                                                onShowWhatsNew()
-                                            },
-                                            leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Savings & Goals (Beta)") },
-                                            onClick = {
-                                                showSettingsMenu = false
-                                                onNavigateToSavings()
-                                            },
-                                            leadingIcon = { Icon(Icons.Default.Savings, contentDescription = null) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Backup & Restore") },
-                                            onClick = {
-                                                showSettingsMenu = false
-                                                onNavigateToBackup()
-                                            },
-                                            leadingIcon = { Icon(Icons.Default.Save, contentDescription = null) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Data Diagnostics") },
-                                            onClick = {
-                                                showSettingsMenu = false
-                                                onNavigateToDiagnostics()
-                                            },
-                                            leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("App Lock & Security") },
-                                            onClick = {
-                                                showSettingsMenu = false
-                                                onNavigateToAppLockSettings()
-                                            },
-                                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Savings Guide Settings") },
-                                            onClick = {
-                                                showSettingsMenu = false
-                                                onNavigateToSavingsGuideSettings()
-                                            },
-                                            leadingIcon = { Icon(Icons.Default.Savings, contentDescription = null) }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Reliability Setup") },
-                                            onClick = {
-                                                showSettingsMenu = false
-                                                onNavigateToSetup()
-                                            },
-                                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) }
-                                        )
-                                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = Spacing.md, vertical = Spacing.xs)
-                                        ) {
-                                            Text(
-                                                text = "TapLedger v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
+                                IconButton(
+                                    onClick = { showSettingsMenu = true },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Settings & Tools",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
@@ -899,6 +825,19 @@ fun DashboardScreen(
                             Text("Cancel")
                         }
                     }
+                )
+            }
+
+            if (showSettingsMenu) {
+                SettingsBottomSheet(
+                    onDismissRequest = { showSettingsMenu = false },
+                    onNavigateToSetup = onNavigateToSetup,
+                    onNavigateToSavings = onNavigateToSavings,
+                    onNavigateToSavingsGuideSettings = onNavigateToSavingsGuideSettings,
+                    onNavigateToBackup = onNavigateToBackup,
+                    onNavigateToAppLockSettings = onNavigateToAppLockSettings,
+                    onNavigateToDiagnostics = onNavigateToDiagnostics,
+                    onShowWhatsNew = onShowWhatsNew
                 )
             }
         }

@@ -172,7 +172,7 @@ fun PendingInboxScreen(
                     IconButton(onClick = onNavigateToSetup) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Reliability Setup"
+                            contentDescription = "Auto-Capture Setup"
                         )
                     }
                 },

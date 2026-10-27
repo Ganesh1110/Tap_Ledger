@@ -64,7 +64,7 @@ fun SavingsGuideSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Savings Guide Settings", fontWeight = FontWeight.Bold) },
+                title = { Text("Savings Automation Rules", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
