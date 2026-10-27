@@ -603,5 +603,24 @@ class LoanRepository @Inject constructor(
         val id = categoryDao.insert(newCat)
         return newCat.copy(id = id)
     }
+
+    suspend fun deleteLoan(loanId: Long): Boolean {
+        return transactionRunner.run {
+            val loan = loanDao.getById(loanId) ?: return@run false
+            loanDao.deleteInstallmentsByLoanId(loanId)
+            loanDao.deleteScheduleVersionsByLoanId(loanId)
+            loanDao.delete(loan)
+
+            val txCount = loanDao.countTransactionsForAccount(loan.accountId)
+            if (txCount == 0) {
+                loanDao.deleteAccountById(loan.accountId)
+            } else {
+                accountDao.getById(loan.accountId)?.let {
+                    accountDao.update(it.copy(isActive = false))
+                }
+            }
+            true
+        }
+    }
 }
 

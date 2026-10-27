@@ -485,6 +485,31 @@ class LoanViewModel @Inject constructor(
         _uiState.update { it.copy(successMessage = null, errorMessage = null) }
     }
 
+    fun deleteLoan(loan: LoanEntity) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExecutingAction = true) }
+            try {
+                loanRepository.deleteLoan(loan.id)
+                _uiState.update {
+                    it.copy(
+                        isExecutingAction = false,
+                        selectedLoan = if (it.selectedLoan?.id == loan.id) null else it.selectedLoan,
+                        amortizationSchedule = if (it.selectedLoan?.id == loan.id) emptyList() else it.amortizationSchedule,
+                        scheduleVersions = if (it.selectedLoan?.id == loan.id) emptyList() else it.scheduleVersions,
+                        successMessage = "Loan '${loan.name}' deleted."
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExecutingAction = false,
+                        errorMessage = e.message ?: "Failed to delete loan"
+                    )
+                }
+            }
+        }
+    }
+
     private fun parseRateToBp(rateString: String): Int {
         val clean = rateString.trim().replace("%", "")
         if (clean.isEmpty()) return 950

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Schedule
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -104,6 +106,7 @@ fun LoanManagementScreen(
     var loanToPay by remember { mutableStateOf<LoanEntity?>(null) }
     var loanToPrepay by remember { mutableStateOf<Pair<LoanEntity, PrepaymentStrategy>?>(null) }
     var loanToForeclose by remember { mutableStateOf<LoanEntity?>(null) }
+    var loanToDelete by remember { mutableStateOf<LoanEntity?>(null) }
     var selectedBankAccountId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(state.successMessage) {
@@ -182,6 +185,9 @@ fun LoanManagementScreen(
                         onForeclose = { loan ->
                             loanToForeclose = loan
                             selectedBankAccountId = loan.linkedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
+                        },
+                        onDeleteLoan = { loan ->
+                            loanToDelete = loan
                         },
                         onSelectForSchedule = { loan ->
                             viewModel.selectLoan(loan)
@@ -434,6 +440,33 @@ fun LoanManagementScreen(
             }
         )
     }
+
+    if (loanToDelete != null) {
+        val loan = loanToDelete!!
+        AlertDialog(
+            onDismissRequest = { loanToDelete = null },
+            title = { Text("Delete Loan", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Are you sure you want to delete '${loan.name}'? This will remove the loan and its amortization schedule.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteLoan(loan)
+                        loanToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.onError)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { loanToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -441,6 +474,7 @@ private fun ActiveLoansTab(
     loans: List<LoanEntity>,
     onPayEmi: (LoanEntity) -> Unit,
     onForeclose: (LoanEntity) -> Unit,
+    onDeleteLoan: (LoanEntity) -> Unit,
     onSelectForSchedule: (LoanEntity) -> Unit,
     onNavigateToSetup: () -> Unit
 ) {
@@ -492,7 +526,7 @@ private fun ActiveLoansTab(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(loan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                 val ratePercent = loan.annualInterestRateBp / 100
                                 val rateFrac = loan.annualInterestRateBp % 100
@@ -503,18 +537,31 @@ private fun ActiveLoansTab(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = "Due on ${loan.emiDay}th",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Due on ${loan.emiDay}th",
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onDeleteLoan(loan) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Loan",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
 
