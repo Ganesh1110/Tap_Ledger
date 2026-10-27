@@ -3,6 +3,7 @@ package com.tapledger.ui.charts.render
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,8 +26,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,70 +67,78 @@ fun PatternSwatch(type: ChartPatternType, modifier: Modifier = Modifier) {
     val surfaceColor = MaterialTheme.colorScheme.surfaceVariant
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
     val primaryColor = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(6.dp)
 
     Box(
         modifier = modifier
-            .size(36.dp, 24.dp)
-            .border(1.dp, outlineColor, RoundedCornerShape(4.dp))
-            .background(surfaceColor, RoundedCornerShape(4.dp))
+            .size(width = 44.dp, height = 28.dp)
+            .border(1.dp, outlineColor, shape)
+            .clip(shape)
+            .background(surfaceColor)
     ) {
-        Canvas(modifier = Modifier.matchParentSize()) {
-            val w = size.width
-            val h = size.height
+        Canvas(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(shape)
+        ) {
+            clipRect {
+                val w = size.width
+                val h = size.height
 
-            when (type) {
-                ChartPatternType.STRIPED_ADVANCE -> {
-                    val stripeColor = ChartPalette.LightSavings
-                    val strokeW = 2.dp.toPx()
-                    var x = -h
-                    while (x < w + h) {
-                        drawLine(
-                            color = stripeColor,
-                            start = Offset(x, h),
-                            end = Offset(x + h, 0f),
-                            strokeWidth = strokeW
-                        )
-                        x += 8.dp.toPx()
+                when (type) {
+                    ChartPatternType.STRIPED_ADVANCE -> {
+                        val stripeColor = ChartPalette.LightSavings
+                        val strokeW = 2.dp.toPx()
+                        var x = -h
+                        while (x < w + h) {
+                            drawLine(
+                                color = stripeColor,
+                                start = Offset(x, h),
+                                end = Offset(x + h, 0f),
+                                strokeWidth = strokeW
+                            )
+                            x += 8.dp.toPx()
+                        }
                     }
-                }
-                ChartPatternType.SHADED_DEFICIT -> {
-                    drawRect(color = ChartPalette.LightWants.copy(alpha = 0.35f))
-                    val strokeW = 1.5.dp.toPx()
-                    var x = -h
-                    while (x < w + h) {
-                        drawLine(
-                            color = ChartPalette.LightWants,
-                            start = Offset(x, h),
-                            end = Offset(x + h, 0f),
-                            strokeWidth = strokeW
-                        )
-                        x += 10.dp.toPx()
+                    ChartPatternType.SHADED_DEFICIT -> {
+                        drawRect(color = ChartPalette.LightWants.copy(alpha = 0.35f))
+                        val strokeW = 1.5.dp.toPx()
+                        var x = -h
+                        while (x < w + h) {
+                            drawLine(
+                                color = ChartPalette.LightWants,
+                                start = Offset(x, h),
+                                end = Offset(x + h, 0f),
+                                strokeWidth = strokeW
+                            )
+                            x += 10.dp.toPx()
+                        }
                     }
-                }
-                ChartPatternType.HATCHED_OVERFLOW -> {
-                    drawRect(color = ChartPalette.OverflowHatch.copy(alpha = 0.3f))
-                    val strokeW = 2.dp.toPx()
-                    var x = -h
-                    while (x < w + h) {
-                        drawLine(
-                            color = ChartPalette.OverflowHatch,
-                            start = Offset(x, h),
-                            end = Offset(x + h, 0f),
-                            strokeWidth = strokeW
-                        )
-                        x += 6.dp.toPx()
+                    ChartPatternType.HATCHED_OVERFLOW -> {
+                        drawRect(color = ChartPalette.OverflowHatch.copy(alpha = 0.3f))
+                        val strokeW = 2.dp.toPx()
+                        var x = -h
+                        while (x < w + h) {
+                            drawLine(
+                                color = ChartPalette.OverflowHatch,
+                                start = Offset(x, h),
+                                end = Offset(x + h, 0f),
+                                strokeWidth = strokeW
+                            )
+                            x += 6.dp.toPx()
+                        }
                     }
-                }
-                ChartPatternType.DASHED_IN_PROGRESS -> {
-                    drawRect(color = primaryContainer.copy(alpha = 0.4f))
-                    val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()), 0f)
-                    drawLine(
-                        color = primaryColor,
-                        start = Offset(0f, h / 2f),
-                        end = Offset(w, h / 2f),
-                        strokeWidth = 3.dp.toPx(),
-                        pathEffect = dashEffect
-                    )
+                    ChartPatternType.DASHED_IN_PROGRESS -> {
+                        drawRect(color = primaryContainer.copy(alpha = 0.4f))
+                        val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()), 0f)
+                        drawLine(
+                            color = primaryColor,
+                            start = Offset(0f, h / 2f),
+                            end = Offset(w, h / 2f),
+                            strokeWidth = 3.dp.toPx(),
+                            pathEffect = dashEffect
+                        )
+                    }
                 }
             }
         }
@@ -143,16 +154,20 @@ private fun PatternRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         PatternSwatch(type = type)
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = description,
@@ -178,13 +193,16 @@ fun ChartPatternLegendSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .padding(horizontal = 24.dp)
+                .padding(top = 8.dp, bottom = 32.dp)
         ) {
             Text(
                 text = stringResource(R.string.chart_pattern_legend_title),
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = stringResource(R.string.chart_pattern_legend_desc),
                 style = MaterialTheme.typography.bodySmall,
@@ -225,8 +243,6 @@ fun ChartPatternLegendSheet(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

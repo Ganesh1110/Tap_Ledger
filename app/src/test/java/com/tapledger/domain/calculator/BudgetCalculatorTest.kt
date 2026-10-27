@@ -178,4 +178,44 @@ class BudgetCalculatorTest {
         assertThat(foodSummary.netSpentPaise).isEqualTo(1_500_00L) // 2000 - 500 = 1500
         assertThat(foodSummary.remainingPaise).isEqualTo(3_500_00L) // 5000 - 1500 = 3500
     }
+
+    @Test
+    fun budgetSummary_includesSpendForUnbudgetedCategories() {
+        // Transaction categorized under category 99, which has NO allocation in this period
+        val orphanTx = TransactionEntity(
+            id = 201,
+            accountId = 1,
+            kind = TransactionKind.EXPENSE,
+            direction = com.tapledger.core.model.TransactionDirection.OUT,
+            amountPaise = 750_00L,
+            occurredAt = 1200L,
+            createdAt = 1200L,
+            updatedAt = 1200L,
+            status = TransactionStatus.CATEGORIZED,
+            source = TransactionSource.MANUAL
+        )
+        val orphanAlloc = TransactionAllocationEntity(
+            id = 601,
+            transactionId = 201,
+            categoryId = 99,
+            amountPaise = 750_00L
+        )
+
+        val summary = BudgetCalculator.calculateBudgetPeriodSummary(
+            period = period,
+            allocations = listOf(foodAllocation), // category 10 only
+            adjustments = emptyList(),
+            transactions = listOf(orphanTx),
+            allocationsForTransactions = listOf(orphanAlloc)
+        )
+
+        // The unbudgeted spend must NOT drop out
+        assertThat(summary.totalSpentPaise).isEqualTo(750_00L)
+        assertThat(summary.dashboardHeroSpendPaise).isEqualTo(750_00L)
+        val orphanSummary = summary.categorySummaries.find { it.allocation.categoryId == 99L }
+        assertThat(orphanSummary).isNotNull()
+        assertThat(orphanSummary!!.baseBudgetPaise).isEqualTo(0L)
+        assertThat(orphanSummary.netSpentPaise).isEqualTo(750_00L)
+        assertThat(orphanSummary.isExceeded).isTrue()
+    }
 }

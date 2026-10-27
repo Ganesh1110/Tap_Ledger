@@ -68,8 +68,22 @@ class PendingInboxViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 transactionRepository.assignAccount(transactionId, accountId)
+                val tx = _pendingTransactions.value.find { it.id == transactionId }
+                if (tx != null && (tx.kind == com.tapledger.core.model.TransactionKind.INCOME || tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_EARNED)) {
+                    transactionRepository.confirmTransaction(transactionId, "Auto-confirmed income upon account assignment")
+                }
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to assign account"
+            }
+        }
+    }
+
+    fun confirmTransaction(transactionId: Long) {
+        viewModelScope.launch {
+            try {
+                transactionRepository.confirmTransaction(transactionId, "Confirmed from Pending Inbox")
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to confirm transaction"
             }
         }
     }
@@ -114,6 +128,16 @@ class PendingInboxViewModel @Inject constructor(
                 transactionRepository.voidTransaction(transactionId, "Voided from Pending Inbox")
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Failed to void transaction"
+            }
+        }
+    }
+
+    fun restoreTransaction(transactionId: Long) {
+        viewModelScope.launch {
+            try {
+                transactionRepository.restoreTransaction(transactionId, "Restored via Undo")
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to restore transaction"
             }
         }
     }

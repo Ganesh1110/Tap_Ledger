@@ -60,6 +60,14 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
+data class CategoryPaceAlert(
+    val categoryId: Long,
+    val categoryName: String,
+    val percentageUsed: Int,
+    val daysRemaining: Int,
+    val isExceeded: Boolean
+)
+
 data class DashboardUiState(
     val isLoading: Boolean = true,
     val pendingCount: Int = 0,
@@ -76,7 +84,13 @@ data class DashboardUiState(
     val transferPlanState: TransferPlanDashboardState? = null,
     val activeGoals: List<GoalApportionmentItem> = emptyList(),
     val preferredPayApp: String? = null,
-    val safeDailySpend: SafeDailySpendResult? = null
+    val safeDailySpend: SafeDailySpendResult? = null,
+    val pendingSpendPaise: Long = 0L,
+    val showIncomeDiscrepancyBanner: Boolean = false,
+    val plannedIncomePaise: Long = 0L,
+    val actualIncomePaise: Long = 0L,
+    val currentPeriodId: Long? = null,
+    val paceAlerts: List<CategoryPaceAlert> = emptyList()
 )
 
 @HiltViewModel
@@ -341,7 +355,9 @@ class DashboardViewModel @Inject constructor(
                 if (alloc.transactionId in todayTxIds && alloc.categoryId !in savingsCategoryIds) {
                     val tx = periodTxs.find { it.id == alloc.transactionId }
                     if (tx != null) {
-                        if (tx.kind == com.tapledger.core.model.TransactionKind.EXPENSE || tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_CHARGED) {
+                        if (tx.kind == com.tapledger.core.model.TransactionKind.EXPENSE ||
+                            tx.kind == com.tapledger.core.model.TransactionKind.FEE ||
+                            tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_CHARGED) {
                             todaySpentPaise += alloc.amountPaise
                         } else if (tx.kind == com.tapledger.core.model.TransactionKind.REFUND) {
                             todaySpentPaise -= alloc.amountPaise
@@ -361,6 +377,40 @@ class DashboardViewModel @Inject constructor(
                 todaySpentPaise = todaySpentPaise
             )
 
+            val pendingExpenseTxs = periodTxs.filter {
+                it.status == TransactionStatus.PENDING &&
+                it.direction == com.tapledger.core.model.TransactionDirection.OUT &&
+                it.kind != com.tapledger.core.model.TransactionKind.TRANSFER
+            }
+            val pendingSpendPaise = pendingExpenseTxs.sumOf { it.amountPaise }
+
+            val plannedIncome = period.incomePaise
+            val actualIncome = budgetSummary.actualIncomePaise
+            val showDiscrepancy = period.status == BudgetPeriodStatus.OPEN && actualIncome > 0L && actualIncome != plannedIncome
+
+            val paceAlerts = if (isClosed || !safeDailySpend.isPeriodActive) {
+                emptyList()
+            } else {
+                val totalDays = safeDailySpend.totalDaysInPeriod.coerceAtLeast(1)
+                val elapsedDays = safeDailySpend.elapsedDays
+                val timePercentElapsed = (elapsedDays * 100) / totalDays
+
+                budgetSummary.categorySummaries
+                    .filter { it.allocation.bucketSnapshot != BudgetBucket.SAVINGS }
+                    .filter { cat ->
+                        (cat.percentageUsed >= 80 && cat.percentageUsed > timePercentElapsed + 15) || cat.isExceeded
+                    }
+                    .map { cat ->
+                        CategoryPaceAlert(
+                            categoryId = cat.allocation.categoryId,
+                            categoryName = cat.allocation.categoryNameSnapshot,
+                            percentageUsed = cat.percentageUsed,
+                            daysRemaining = safeDailySpend.daysRemaining,
+                            isExceeded = cat.isExceeded
+                        )
+                    }
+            }
+
             _uiState.value = DashboardUiState(
                 isLoading = false,
                 pendingCount = pendingCount,
@@ -377,8 +427,25 @@ class DashboardViewModel @Inject constructor(
                 transferPlanState = transferPlanDashboardState,
                 activeGoals = activeGoals,
                 preferredPayApp = savingsGuidePreferences.getConfig().preferredPayApp,
-                safeDailySpend = safeDailySpend
+                safeDailySpend = safeDailySpend,
+                pendingSpendPaise = pendingSpendPaise,
+                showIncomeDiscrepancyBanner = showDiscrepancy,
+                plannedIncomePaise = plannedIncome,
+                actualIncomePaise = actualIncome,
+                currentPeriodId = period.id,
+                paceAlerts = paceAlerts
             )
+        }
+    }
+
+    fun syncPlannedIncomeToActual(periodId: Long, actualIncomePaise: Long) {
+        viewModelScope.launch {
+            try {
+                budgetRepository.updatePeriodIncomeAndRebalance(periodId, actualIncomePaise)
+                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+            } catch (e: Exception) {
+                // Ignore or log error
+            }
         }
     }
 

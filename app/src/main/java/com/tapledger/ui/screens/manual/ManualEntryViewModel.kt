@@ -30,7 +30,8 @@ data class ManualEntryUiState(
     val noteText: String = "",
     val selectedDateMillis: Long = DateTimeUtils.nowEpochMillis(),
     val isSuccess: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val openingBalanceWarningMessage: String? = null
 )
 
 @HiltViewModel
@@ -48,16 +49,34 @@ class ManualEntryViewModel @Inject constructor(
         loadData()
     }
 
+    private fun computeOpeningBalanceWarning(
+        accountId: Long?,
+        dateMillis: Long,
+        accounts: List<AccountEntity>
+    ): String? {
+        val account = accounts.find { it.id == accountId } ?: return null
+        val openingStartOfDay = DateTimeUtils.getStartOfDayEpochMillis(account.openingBalanceDate)
+        val selectedStartOfDay = DateTimeUtils.getStartOfDayEpochMillis(dateMillis)
+        return if (selectedStartOfDay < openingStartOfDay) {
+            "Note: This date is before ${account.name}'s opening balance date (${DateTimeUtils.formatDate(account.openingBalanceDate)}). This entry will be excluded from the account balance."
+        } else {
+            null
+        }
+    }
+
     private fun loadData() {
         viewModelScope.launch {
             val accounts = accountRepository.getAllAccountsSync()
             val categories = budgetRepository.getAllCategoriesSync()
+            val defaultAccountId = accounts.firstOrNull()?.id
+            val warning = computeOpeningBalanceWarning(defaultAccountId, _uiState.value.selectedDateMillis, accounts)
             _uiState.value = _uiState.value.copy(
                 accounts = accounts,
                 categories = categories,
-                selectedAccountId = accounts.firstOrNull()?.id,
+                selectedAccountId = defaultAccountId,
                 destinationAccountId = accounts.getOrNull(1)?.id,
-                selectedCategoryId = categories.firstOrNull()?.id
+                selectedCategoryId = categories.firstOrNull()?.id,
+                openingBalanceWarningMessage = warning
             )
         }
     }
@@ -67,7 +86,8 @@ class ManualEntryViewModel @Inject constructor(
     }
 
     fun onAccountSelected(accountId: Long) {
-        _uiState.value = _uiState.value.copy(selectedAccountId = accountId)
+        val warning = computeOpeningBalanceWarning(accountId, _uiState.value.selectedDateMillis, _uiState.value.accounts)
+        _uiState.value = _uiState.value.copy(selectedAccountId = accountId, openingBalanceWarningMessage = warning)
     }
 
     fun onDestinationAccountSelected(accountId: Long) {
@@ -101,7 +121,8 @@ class ManualEntryViewModel @Inject constructor(
     }
 
     fun onDateSelected(epochMillis: Long) {
-        _uiState.value = _uiState.value.copy(selectedDateMillis = epochMillis)
+        val warning = computeOpeningBalanceWarning(_uiState.value.selectedAccountId, epochMillis, _uiState.value.accounts)
+        _uiState.value = _uiState.value.copy(selectedDateMillis = epochMillis, openingBalanceWarningMessage = warning)
     }
 
     fun submitTransaction() {
@@ -184,12 +205,19 @@ class ManualEntryViewModel @Inject constructor(
                         )
                     }
                     TransactionKind.ADJUSTMENT -> {
-                        // Handled via budget adjustment or direct
+                        throw IllegalArgumentException("Adjustments cannot be recorded as manual transactions. Use Budget Rebalance instead.")
                     }
                 }
                 _uiState.value = state.copy(isSuccess = true, errorMessage = null)
             } catch (e: Exception) {
-                _uiState.value = state.copy(errorMessage = e.message ?: "Failed to save transaction")
+                val rawMsg = e.message ?: "Failed to save transaction"
+                val friendlyMsg = if (rawMsg.contains("closed budget period", ignoreCase = true) ||
+                    rawMsg.contains("closed period", ignoreCase = true)) {
+                    "Cannot record transaction in a closed budget month. Please choose a date in an open period or reopen the month."
+                } else {
+                    rawMsg
+                }
+                _uiState.value = state.copy(errorMessage = friendlyMsg)
             }
         }
     }

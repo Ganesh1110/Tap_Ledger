@@ -216,6 +216,18 @@ fun BackupRestoreScreen(
                             Text("Verify Database Integrity", fontWeight = FontWeight.SemiBold)
                         }
                     }
+
+                    OutlinedButton(
+                        onClick = { viewModel.exportCsv() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text("Export Transactions (CSV)", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 

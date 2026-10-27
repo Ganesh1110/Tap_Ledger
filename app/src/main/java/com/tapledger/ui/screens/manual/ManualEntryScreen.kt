@@ -1,6 +1,8 @@
 package com.tapledger.ui.screens.manual
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -67,6 +71,7 @@ import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.Spacing
+import com.tapledger.ui.theme.WarningAmber
 import com.tapledger.ui.components.keyboardAware
 import java.time.LocalDate
 
@@ -222,6 +227,34 @@ fun ManualEntryScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // 2.5 Quick Presets (₹20 Tea, ₹50 Auto, ₹100 Snack, ₹250 Meal, ₹500 Fuel)
+            if (state.selectedKind == TransactionKind.EXPENSE) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    listOf(
+                        "20" to "Tea",
+                        "50" to "Auto/Metro",
+                        "100" to "Snack",
+                        "250" to "Meal",
+                        "500" to "Fuel/Grocery"
+                    ).forEach { (amt, label) ->
+                        AssistChip(
+                            onClick = {
+                                viewModel.onAmountChanged(amt)
+                                if (state.merchantText.isBlank()) {
+                                    viewModel.onMerchantChanged(label)
+                                }
+                            },
+                            label = { Text("₹$amt $label", fontSize = 11.sp) }
+                        )
+                    }
+                }
+            }
+
             var showDatePicker by remember { mutableStateOf(false) }
 
             // 3. Date Selection & Quick Presets (Today, Yesterday, Custom Pick Date)
@@ -296,6 +329,34 @@ fun ManualEntryScreen(
                         },
                         modifier = Modifier.weight(1.3f)
                     )
+                }
+
+                state.openingBalanceWarningMessage?.let { warning ->
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = WarningAmber.copy(alpha = 0.15f)),
+                        border = BorderStroke(1.dp, WarningAmber.copy(alpha = 0.8f)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = WarningAmber,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text(
+                                text = warning,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
 

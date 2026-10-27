@@ -57,10 +57,32 @@ class SafeDailySpendCalculatorTest {
         assertThat(result.elapsedDays).isEqualTo(22)
         assertThat(result.daysRemaining).isEqualTo(10) // 31 - 22 + 1 = 10
         assertThat(result.remainingBudgetPaise).isEqualTo(13_000_00L) // 31k - 18k = 13k
-        // ₹13,000 / 10 days = ₹1,300 / day
+        // Start of day available: ₹13,000 + ₹200 = ₹13,200 / 10 days = ₹1,320 / day
+        assertThat(result.safeDailyPaise).isEqualTo(1_320_00L)
+        // Spent 200 today -> 1,320 - 200 = 1,120 left for today (no double-counting)
+        assertThat(result.todayRemainingPaise).isEqualTo(1_120_00L)
+    }
+
+    @Test
+    fun testMidMonth_TodaySpentExceedsAllowance_ReturnsZeroLeftToday() {
+        val heroBudget = 31_000_00L
+        val heroSpent = 20_000_00L
+        val now = startAt + 21L * dayMillis + 1000L // Day 22 (10 days remaining)
+
+        val result = SafeDailySpendCalculator.calculate(
+            heroBudgetPaise = heroBudget,
+            heroSpentPaise = heroSpent,
+            periodStartAt = startAt,
+            periodEndAt = endAt,
+            nowIST = now,
+            isClosed = false,
+            todaySpentPaise = 2_000_00L // Spent ₹2,000 today
+        )
+
+        // Start of day available: ₹11,000 + ₹2,000 = ₹13,000 / 10 days = ₹1,300 allowance
         assertThat(result.safeDailyPaise).isEqualTo(1_300_00L)
-        // Spent 200 today -> 1,100 left for today
-        assertThat(result.todayRemainingPaise).isEqualTo(1_100_00L)
+        // Spent ₹2,000 > ₹1,300 allowance -> ₹0 remaining today
+        assertThat(result.todayRemainingPaise).isEqualTo(0L)
     }
 
     @Test
