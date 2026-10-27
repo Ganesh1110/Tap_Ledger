@@ -630,6 +630,45 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/**
+ * Migration from Database Version 6 to Version 7.
+ * - Creates `loans` table with foreign keys and indices for full loan setup, amortization, and EMI tracking.
+ * - Runs PRAGMA integrity_check.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `loans` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `account_id` INTEGER NOT NULL,
+                `name` TEXT NOT NULL,
+                `principal_paise` INTEGER NOT NULL,
+                `annual_interest_rate_bp` INTEGER NOT NULL,
+                `tenure_months` INTEGER NOT NULL,
+                `emi_day` INTEGER NOT NULL,
+                `emi_amount_paise` INTEGER NOT NULL,
+                `linked_bank_account_id` INTEGER,
+                `start_date_ms` INTEGER NOT NULL,
+                `is_active` INTEGER NOT NULL DEFAULT 1,
+                `created_at` INTEGER NOT NULL,
+                FOREIGN KEY(`account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`linked_bank_account_id`) REFERENCES `accounts`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_loans_account_id` ON `loans` (`account_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_loans_linked_bank_account_id` ON `loans` (`linked_bank_account_id`)")
+
+        val cursor = db.query("PRAGMA integrity_check")
+        cursor.use {
+            if (it.moveToFirst()) {
+                val result = it.getString(0)
+                check(result == "ok") { "Database integrity check failed after migration 6 -> 7: $result" }
+            }
+        }
+    }
+}
+
+
 
 
 

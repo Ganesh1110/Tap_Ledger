@@ -11,6 +11,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.tapledger.core.database.dao.LoanDao
 import com.tapledger.core.database.dao.RecurringCommitmentDao
 import com.tapledger.core.model.MoneyFormatter
 import dagger.hilt.EntryPoint
@@ -33,6 +34,7 @@ class CommitmentReminderWorker(
     @InstallIn(SingletonComponent::class)
     interface CommitmentWorkerEntryPoint {
         fun recurringCommitmentDao(): RecurringCommitmentDao
+        fun loanDao(): LoanDao
     }
 
     override suspend fun doWork(): Result {
@@ -41,22 +43,26 @@ class CommitmentReminderWorker(
             CommitmentWorkerEntryPoint::class.java
         )
         val commitmentDao = entryPoint.recurringCommitmentDao()
+        val loanDao = entryPoint.loanDao()
 
         val tomorrowDay = LocalDate.now().plusDays(1).dayOfMonth
         val activeCommitments = commitmentDao.getAllActiveSync()
         val dueTomorrow = activeCommitments.filter { it.dueDay == tomorrowDay }
 
-        if (dueTomorrow.isNotEmpty()) {
+        val activeLoans = loanDao.getAllActiveSync()
+        val loansDueTomorrow = activeLoans.filter { it.emiDay == tomorrowDay }
+
+        if (dueTomorrow.isNotEmpty() || loansDueTomorrow.isNotEmpty()) {
             val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val channelId = CHANNEL_ID
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     channelId,
-                    "Commitment Reminders",
+                    "Commitment & EMI Reminders",
                     NotificationManager.IMPORTANCE_DEFAULT
                 ).apply {
-                    description = "Reminders for upcoming SIP, RD, and recurring commitments"
+                    description = "Reminders for upcoming SIP, RD, loan EMIs, and recurring commitments"
                 }
                 notificationManager.createNotificationChannel(channel)
             }
@@ -76,6 +82,22 @@ class CommitmentReminderWorker(
                     notification
                 )
             }
+
+            for (loan in loansDueTomorrow) {
+                val formattedAmount = MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise)
+                val notification = NotificationCompat.Builder(applicationContext, channelId)
+                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setContentTitle("Upcoming Loan EMI Reminder")
+                    .setContentText("${loan.name}: $formattedAmount EMI is due tomorrow")
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setAutoCancel(true)
+                    .build()
+
+                notificationManager.notify(
+                    loan.id.toInt() + LOAN_NOTIFICATION_ID_BASE,
+                    notification
+                )
+            }
         }
 
         return Result.success()
@@ -85,6 +107,7 @@ class CommitmentReminderWorker(
         const val WORK_NAME = "commitment_due_reminders"
         const val CHANNEL_ID = "tapledger_commitment_reminders"
         private const val NOTIFICATION_ID_BASE = 50000
+        private const val LOAN_NOTIFICATION_ID_BASE = 60000
 
         fun enqueueDailyCheck(context: Context) {
             val constraints = Constraints.Builder().build()

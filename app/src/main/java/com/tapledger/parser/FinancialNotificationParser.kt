@@ -67,6 +67,11 @@ object FinancialNotificationParser {
         Pattern.CASE_INSENSITIVE
     )
 
+    private val LOAN_EMI_PATTERN = Pattern.compile(
+        "\\b(?:loan\\s*emi|emi\\s*debit(?:ed)?|towards\\s*emi|auto[- ]?debit(?:ed)?\\s*for\\s*loan|home\\s*loan|car\\s*loan|personal\\s*loan|nach\\s*debit.*loan|loan\\s*a/c|loan\\s*account)\\b",
+        Pattern.CASE_INSENSITIVE
+    )
+
     fun isPotentialFinancialAlert(text: String): Boolean {
         return FINANCIAL_HINT_PATTERNS.all { it.matcher(text).find() }
     }
@@ -226,7 +231,8 @@ object FinancialNotificationParser {
             occurredAt = event.postTime,
             isReversalOrRefund = isReversal,
             rawPreviewRedacted = redactSensitiveData(combinedText),
-            isSipOrAutoDebit = SIP_AUTO_DEBIT_PATTERN.matcher(combinedText).find()
+            isSipOrAutoDebit = SIP_AUTO_DEBIT_PATTERN.matcher(combinedText).find(),
+            isLoanEmi = LOAN_EMI_PATTERN.matcher(combinedText).find()
         )
     }
 

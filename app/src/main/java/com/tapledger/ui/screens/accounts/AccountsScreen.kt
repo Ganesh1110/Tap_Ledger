@@ -81,7 +81,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun AccountsScreen(
     viewModel: AccountsViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToLoans: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -273,11 +274,26 @@ fun AccountsScreen(
                                         prefilledTransferNote = "Credit Card Bill Payment"
                                         showTransferDialog = true
                                     }
+                                } else if (summary.account.type == AccountType.LOAN && hasOutstanding) {
+                                    {
+                                        preselectedFromAccountId = null
+                                        preselectedToAccountId = summary.account.id
+                                        preselectedAmountRupees = (kotlin.math.abs(summary.currentBalancePaise) / 100).toString()
+                                        transferDialogTitle = "Pay ${summary.account.name} EMI"
+                                        prefilledTransferNote = "Loan EMI Payment"
+                                        showTransferDialog = true
+                                    }
                                 } else null
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (isCard && hasOutstanding) "Tap 'Pay Bill' to clear dues from Bank • Tap card for options" else "Tap for options • Correct balance or edit opening balance",
+                                text = if (isCard && hasOutstanding) {
+                                    "Tap 'Pay Bill' to clear dues from Bank • Tap card for options"
+                                } else if (summary.account.type == AccountType.LOAN && hasOutstanding) {
+                                    "Tap 'Pay EMI' to record EMI payment • Tap card for options"
+                                } else {
+                                    "Tap for options • Correct balance or edit opening balance"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(start = Spacing.sm)
@@ -329,6 +345,17 @@ fun AccountsScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("💳 Pay Full Bill (${MoneyFormatter.formatPaiseToRupees(kotlin.math.abs(summary.currentBalancePaise))})", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (summary.account.type == AccountType.LOAN) {
+                        Button(
+                            onClick = {
+                                showActionDialog = false
+                                onNavigateToLoans()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("📊 Loan Details & Amortization", fontWeight = FontWeight.Bold)
                         }
                     }
                     OutlinedButton(

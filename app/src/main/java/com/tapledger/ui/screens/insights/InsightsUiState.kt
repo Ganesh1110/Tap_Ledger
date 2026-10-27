@@ -20,6 +20,12 @@ data class InsightsUiState(
     val selectedHeatmapDayEpoch: Long? = null,
     val selectedHeatmapDayTxs: List<TransactionEntity> = emptyList(),
     val selectedDonutSlice: CategoryDonutSlice? = null,
+    val totalInterestPaidPaise: Long = 0L,
+    val debtToIncomeBp: Int = 0,
+    val totalMonthlyDebtPaise: Long = 0L,
+    val monthlyIncomePaise: Long = 0L,
+    val activeLoansCount: Int = 0,
+    val totalOutstandingLoanPrincipalPaise: Long = 0L,
     val isLoading: Boolean = true,
     val errorMessage: String? = null
 )

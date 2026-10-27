@@ -2,7 +2,10 @@ package com.tapledger.ui.screens.insights
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tapledger.core.database.dao.AccountDao
 import com.tapledger.core.database.dao.BudgetPeriodDao
+import com.tapledger.core.database.dao.CategoryDao
+import com.tapledger.core.database.dao.LoanDao
 import com.tapledger.core.database.dao.MonthCloseDao
 import com.tapledger.core.database.dao.TransactionAllocationDao
 import com.tapledger.core.database.dao.TransactionDao
@@ -34,7 +37,10 @@ class InsightsViewModel @Inject constructor(
     private val budgetRepository: BudgetRepository,
     private val transactionRepository: TransactionRepository,
     private val transactionDao: TransactionDao,
-    private val transactionAllocationDao: TransactionAllocationDao
+    private val transactionAllocationDao: TransactionAllocationDao,
+    private val loanDao: LoanDao,
+    private val categoryDao: CategoryDao,
+    private val accountDao: AccountDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(InsightsUiState())
@@ -150,12 +156,58 @@ class InsightsViewModel @Inject constructor(
                 trend to merchants
             }
 
+            // Debt & Loan Metrics (Flow.md Phase 3 & Loan Insights)
+            val activeLoans = withContext(Dispatchers.Default) { loanDao.getAllActiveSync() }
+            val totalMonthlyDebt = activeLoans.sumOf { it.emiAmountPaise }
+            val monthlyIncome = if (openPeriod != null) {
+                val allocs = budgetRepository.getAllocationsForPeriodSync(openPeriod.id)
+                allocs.sumOf { it.amountPaise }
+            } else 0L
+
+            val dtiBp = if (monthlyIncome > 0L) {
+                ((totalMonthlyDebt * 10_000L) / monthlyIncome).toInt()
+            } else if (totalMonthlyDebt > 0L) {
+                10_000
+            } else 0
+
+            val interestCatIds = withContext(Dispatchers.Default) {
+                categoryDao.getAllCategoriesSync()
+                    .filter { it.name.contains("Interest", ignoreCase = true) }
+                    .map { it.id }
+                    .toSet()
+            }
+
+            val totalInterestPaid = withContext(Dispatchers.Default) {
+                if (interestCatIds.isNotEmpty()) {
+                    transactionAllocationDao.getAllTransactionAllocationsSync()
+                        .filter { it.categoryId in interestCatIds }
+                        .sumOf { it.amountPaise }
+                } else 0L
+            }
+
+            val totalOutstandingLoanPrincipal = withContext(Dispatchers.Default) {
+                activeLoans.sumOf { loan ->
+                    val acc = accountDao.getById(loan.accountId)
+                    if (acc != null) {
+                        val txs = transactionDao.getBalanceTransactionsForAccount(acc.id, 0L)
+                        val summary = com.tapledger.domain.calculator.AccountBalanceCalculator.calculateAccountBalance(acc, txs, asOfEpochMillis = nowIST)
+                        kotlin.math.abs(summary.currentBalancePaise)
+                    } else loan.principalPaise
+                }
+            }
+
             _uiState.update {
                 it.copy(
                     allPeriods = periods,
                     selectedPeriod = selectedPeriod,
                     cashFlowTrendState = cashFlowTrend,
                     topMerchantsState = topMerchants,
+                    totalInterestPaidPaise = totalInterestPaid,
+                    debtToIncomeBp = dtiBp,
+                    totalMonthlyDebtPaise = totalMonthlyDebt,
+                    monthlyIncomePaise = monthlyIncome,
+                    activeLoansCount = activeLoans.size,
+                    totalOutstandingLoanPrincipalPaise = totalOutstandingLoanPrincipal,
                     isLoading = false
                 )
             }

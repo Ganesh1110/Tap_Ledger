@@ -285,9 +285,11 @@ class FinancialIngestionPipeline @Inject constructor(
         // 6. Room Atomic Insert: transactions land as PENDING in Pending Inbox for user safety
         val txId = try {
             transactionRunner.run {
+                val initialKind = if (parsed.isLoanEmi) TransactionKind.TRANSFER else parsed.kind
+                val initialNotes = if (parsed.isLoanEmi) "Loan EMI Debit (Suggested: Loan Transfer)" else null
                 val tx = TransactionEntity(
                     accountId = resolvedAccountId,
-                    kind = parsed.kind,
+                    kind = initialKind,
                     direction = parsed.direction,
                     amountPaise = parsed.amountPaise,
                     merchantRaw = parsed.merchantRaw,
@@ -302,7 +304,8 @@ class FinancialIngestionPipeline @Inject constructor(
                     sourceFingerprint = parsed.sourceFingerprint,
                     possibleDuplicateOfId = possibleDuplicateOfId,
                     checkpointBalancePaise = parsed.reportedAvailableBalancePaise,
-                    checkpointType = parsed.checkpointType ?: if (parsed.reportedAvailableBalancePaise != null) com.tapledger.core.model.CheckpointType.AVAILABLE_BALANCE else null
+                    checkpointType = parsed.checkpointType ?: if (parsed.reportedAvailableBalancePaise != null) com.tapledger.core.model.CheckpointType.AVAILABLE_BALANCE else null,
+                    notes = initialNotes
                 )
                 val insertedId = transactionDao.insert(tx)
 

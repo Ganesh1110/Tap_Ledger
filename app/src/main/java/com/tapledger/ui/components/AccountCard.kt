@@ -48,6 +48,8 @@ fun AccountCard(
     onPayBill: (() -> Unit)? = null
 ) {
     val isCreditCard = summary.account.type == AccountType.CREDIT_CARD
+    val isLoan = summary.account.type == AccountType.LOAN
+    val isLiability = isCreditCard || isLoan
     val icon: ImageVector = when (summary.account.type) {
         AccountType.BANK -> Icons.Default.AccountBalance
         AccountType.CREDIT_CARD -> Icons.Default.CreditCard
@@ -138,12 +140,12 @@ fun AccountCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (isCreditCard) "Outstanding" else "Available",
+                    text = if (isLiability) "Outstanding" else "Available",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp
                 )
-                if (isCreditCard) {
+                if (isLiability) {
                     if (summary.currentBalancePaise < 0 && onPayBill != null) {
                         Spacer(modifier = Modifier.height(4.dp))
                         FilledTonalButton(
@@ -152,7 +154,7 @@ fun AccountCard(
                             modifier = Modifier.height(26.dp)
                         ) {
                             Text(
-                                text = "Pay Bill",
+                                text = if (isLoan) "Pay EMI" else "Pay Bill",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 fontSize = 11.sp
                             )
@@ -160,7 +162,7 @@ fun AccountCard(
                     } else if (summary.currentBalancePaise >= 0) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "✓ Paid in Full",
+                            text = if (isLoan) "✓ Settled" else "✓ Paid in Full",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = IncomeGreen,
                             fontSize = 10.sp

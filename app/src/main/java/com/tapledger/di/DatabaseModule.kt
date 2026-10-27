@@ -39,7 +39,8 @@ object DatabaseModule {
                 com.tapledger.core.database.MIGRATION_2_3,
                 com.tapledger.core.database.MIGRATION_3_4,
                 com.tapledger.core.database.MIGRATION_4_5,
-                com.tapledger.core.database.MIGRATION_5_6
+                com.tapledger.core.database.MIGRATION_5_6,
+                com.tapledger.core.database.MIGRATION_6_7
             )
             .addCallback(com.tapledger.core.database.DatabaseTriggers.Callback)
             .build()
@@ -102,6 +103,9 @@ object DatabaseModule {
 
     @Provides
     fun provideSavingsTransferPlanDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.SavingsTransferPlanDao = db.savingsTransferPlanDao()
+
+    @Provides
+    fun provideLoanDao(db: TapLedgerDatabase): com.tapledger.core.database.dao.LoanDao = db.loanDao()
 
     @Provides
     @Singleton

@@ -255,4 +255,42 @@ class FinancialNotificationParserTest {
             assertThat(it.kind).isEqualTo(TransactionKind.EXPENSE)
         }
     }
+
+    @Test
+    fun parse_loanEmiDebit_recognizesLoanEmi() {
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "HDFC Bank",
+            text = "Dear Customer, Rs. 14,500.00 debited from A/C 4321 on 05-Nov-26 towards Loan EMI for Home Loan. Avl Bal: Rs 85,200.00",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+
+        assertThat(result).isNotNull()
+        result?.let {
+            assertThat(it.amountPaise).isEqualTo(1450000L)
+            assertThat(it.accountLast4).isEqualTo("4321")
+            assertThat(it.isLoanEmi).isTrue()
+        }
+    }
+
+    @Test
+    fun parse_nachLoanDebit_recognizesLoanEmi() {
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "Axis Bank",
+            text = "A/C 1234 debited for Rs 8,250.00 via NACH debit loan EMI on 03-Oct-26.",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+
+        assertThat(result).isNotNull()
+        result?.let {
+            assertThat(it.amountPaise).isEqualTo(825000L)
+            assertThat(it.accountLast4).isEqualTo("1234")
+            assertThat(it.isLoanEmi).isTrue()
+        }
+    }
 }

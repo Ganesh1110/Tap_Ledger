@@ -1,0 +1,808 @@
+package com.tapledger.ui.screens.loans
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Percent
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tapledger.core.database.entity.LoanEntity
+import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.domain.calculator.AffordabilityStatus
+import com.tapledger.domain.calculator.AmortizationInstallment
+import com.tapledger.ui.components.EmptyState
+import com.tapledger.ui.theme.ExpenseRed
+import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.Spacing
+import com.tapledger.ui.theme.WarningAmber
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LoanManagementScreen(
+    viewModel: LoanViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    var loanToPay by remember { mutableStateOf<LoanEntity?>(null) }
+    var selectedBankAccountId by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(state.successMessage) {
+        state.successMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.dismissMessages()
+        }
+    }
+
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.dismissMessages()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Loans & EMIs", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            val tabs = listOf(
+                "Active Loans" to Icons.Default.Payments,
+                "Setup & Affordability" to Icons.Default.Calculate,
+                "Amortization" to Icons.Default.Schedule,
+                "Prepayment" to Icons.AutoMirrored.Filled.TrendingDown
+            )
+
+            SecondaryTabRow(
+                selectedTabIndex = state.selectedTab,
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
+                tabs.forEachIndexed { index, (title, icon) ->
+                    Tab(
+                        selected = state.selectedTab == index,
+                        onClick = { viewModel.selectTab(index) },
+                        text = { Text(title, maxLines = 1) },
+                        icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                }
+            }
+
+            if (state.isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                when (state.selectedTab) {
+                    0 -> ActiveLoansTab(
+                        loans = state.activeLoans,
+                        onPayEmi = { loan ->
+                            loanToPay = loan
+                            selectedBankAccountId = loan.linkedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
+                        },
+                        onSelectForSchedule = { loan ->
+                            viewModel.selectLoan(loan)
+                            viewModel.selectTab(2)
+                        },
+                        onNavigateToSetup = { viewModel.selectTab(1) }
+                    )
+                    1 -> LoanSetupAndAffordabilityTab(
+                        state = state,
+                        onFieldChange = viewModel::onSetupFieldChanged,
+                        onIncomeChange = viewModel::onAffordabilityIncomeChanged,
+                        onCreateLoan = viewModel::createLoan
+                    )
+                    2 -> AmortizationScheduleTab(
+                        loans = state.activeLoans,
+                        selectedLoan = state.selectedLoan,
+                        schedule = state.amortizationSchedule,
+                        onSelectLoan = viewModel::selectLoan
+                    )
+                    3 -> PrepaymentSimulatorTab(
+                        loans = state.activeLoans,
+                        selectedLoan = state.selectedLoan,
+                        prepaymentAmount = state.prepaymentAmountRupees,
+                        result = state.prepaymentSimulationResult,
+                        onSelectLoan = viewModel::selectLoan,
+                        onPrepaymentAmountChange = viewModel::onPrepaymentAmountChanged
+                    )
+                }
+            }
+        }
+    }
+
+    // One-Tap Pay EMI Dialog
+    if (loanToPay != null) {
+        val loan = loanToPay!!
+        AlertDialog(
+            onDismissRequest = { loanToPay = null },
+            title = { Text("Pay EMI: ${loan.name}", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Text(
+                        text = "Monthly EMI Amount: ${MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise)}",
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "This will transfer the principal portion to reduce loan liability and record the interest portion as a Needs expense.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Select Bank Account to pay from:", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+
+                    state.bankAccounts.forEach { bank ->
+                        FilterChip(
+                            selected = selectedBankAccountId == bank.id,
+                            onClick = { selectedBankAccountId = bank.id },
+                            label = { Text(bank.name) },
+                            leadingIcon = {
+                                Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val bankId = selectedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
+                        if (bankId != null) {
+                            viewModel.payEmi(loan, bankId)
+                            loanToPay = null
+                        }
+                    },
+                    enabled = selectedBankAccountId != null || state.bankAccounts.isNotEmpty()
+                ) {
+                    Text("Pay EMI Now")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { loanToPay = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ActiveLoansTab(
+    loans: List<LoanEntity>,
+    onPayEmi: (LoanEntity) -> Unit,
+    onSelectForSchedule: (LoanEntity) -> Unit,
+    onNavigateToSetup: () -> Unit
+) {
+    if (loans.isEmpty()) {
+        EmptyState(
+            title = "No Active Loans",
+            subtitle = "Add a loan to track EMIs and amortization",
+            actionLabel = "+ Setup Loan",
+            onActionClick = onNavigateToSetup
+        )
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${loans.size} Active Loans",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    FilledTonalButton(
+                        onClick = onNavigateToSetup,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Loan")
+                    }
+                }
+            }
+
+            items(loans, key = { it.id }) { loan ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(loan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                val ratePercent = loan.annualInterestRateBp / 100
+                                val rateFrac = loan.annualInterestRateBp % 100
+                                val rateFormatted = if (rateFrac == 0) "$ratePercent%" else "$ratePercent.$rateFrac%"
+                                Text(
+                                    text = "$rateFormatted p.a. • ${loan.tenureMonths} months tenure",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Due on ${loan.emiDay}th",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(Spacing.md))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Original Principal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(MoneyFormatter.formatPaiseToRupees(loan.principalPaise), fontWeight = FontWeight.SemiBold)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Monthly EMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise),
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 16.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(Spacing.md))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            OutlinedButton(
+                                onClick = { onSelectForSchedule(loan) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Schedule")
+                            }
+                            Button(
+                                onClick = { onPayEmi(loan) },
+                                modifier = Modifier.weight(1.3f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Pay EMI")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LoanSetupAndAffordabilityTab(
+    state: LoanUiState,
+    onFieldChange: (name: String?, principal: String?, rate: String?, tenure: String?, emiDay: String?, bankAccountId: Long?) -> Unit,
+    onIncomeChange: (String) -> Unit,
+    onCreateLoan: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+    ) {
+        Text("Loan Setup & Terms", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+        OutlinedTextField(
+            value = state.setupName,
+            onValueChange = { onFieldChange(it, null, null, null, null, null) },
+            label = { Text("Loan Name (e.g. HDFC Home Loan, Car Loan)") },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = state.setupPrincipalRupees,
+            onValueChange = { onFieldChange(null, it, null, null, null, null) },
+            label = { Text("Loan Principal (₹)") },
+            leadingIcon = { Text("₹", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            OutlinedTextField(
+                value = state.setupAnnualRatePercent,
+                onValueChange = { onFieldChange(null, null, it, null, null, null) },
+                label = { Text("Interest Rate (%)") },
+                trailingIcon = { Text("%", fontWeight = FontWeight.Bold) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f)
+            )
+
+            OutlinedTextField(
+                value = state.setupTenureMonths,
+                onValueChange = { onFieldChange(null, null, null, it, null, null) },
+                label = { Text("Tenure (Months)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        OutlinedTextField(
+            value = state.setupEmiDay,
+            onValueChange = { onFieldChange(null, null, null, null, it, null) },
+            label = { Text("EMI Debit Day (1 - 31)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        // Live Calculated EMI Hero Banner
+        if (state.liveCalculatedEmiPaise > 0L) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(Spacing.md),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Calculated Monthly EMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(
+                            text = MoneyFormatter.formatPaiseToRupees(state.liveCalculatedEmiPaise),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.Calculate,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = Spacing.xs))
+
+        // Pre-Loan Affordability Check (50/30/20 Framework)
+        Text("Pre-Loan Affordability Check", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            text = "Evaluates whether this loan fits your 50% Needs, 30% Wants, and 20% Savings allocation.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        OutlinedTextField(
+            value = state.affordabilityMonthlyIncomeRupees,
+            onValueChange = onIncomeChange,
+            label = { Text("Your Monthly Income (₹)") },
+            leadingIcon = { Text("₹", fontWeight = FontWeight.Bold) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        state.affordabilityResult?.let { aff ->
+            val statusColor = when (aff.status) {
+                AffordabilityStatus.SAFE -> IncomeGreen
+                AffordabilityStatus.MODERATE -> WarningAmber
+                AffordabilityStatus.HIGH_RISK -> ExpenseRed
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = statusColor.copy(alpha = 0.1f)),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(modifier = Modifier.padding(Spacing.md)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (aff.status == AffordabilityStatus.SAFE) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = statusColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.xs))
+                        Text(
+                            text = when (aff.status) {
+                                AffordabilityStatus.SAFE -> "Comfortably Affordable"
+                                AffordabilityStatus.MODERATE -> "Tight Budget Allocation"
+                                AffordabilityStatus.HIGH_RISK -> "High Debt Risk!"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            color = statusColor
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Text(text = aff.explanation, style = MaterialTheme.typography.bodyMedium)
+
+                    Spacer(modifier = Modifier.height(Spacing.sm))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("50% Needs Pool: ${MoneyFormatter.formatPaiseToRupees(aff.needs50PoolPaise)}", fontSize = 11.sp)
+                        Text("30% Wants: ${MoneyFormatter.formatPaiseToRupees(aff.wants30PoolPaise)}", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.xs))
+
+        Button(
+            onClick = onCreateLoan,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text("Create Loan Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun AmortizationScheduleTab(
+    loans: List<LoanEntity>,
+    selectedLoan: LoanEntity?,
+    schedule: List<AmortizationInstallment>,
+    onSelectLoan: (LoanEntity) -> Unit
+) {
+    if (loans.isEmpty()) {
+        EmptyState(
+            title = "No Loans Added Yet",
+            subtitle = "Setup a loan to view amortization schedule"
+        )
+    } else {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Loan Selector Chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                loans.forEach { loan ->
+                    FilterChip(
+                        selected = selectedLoan?.id == loan.id,
+                        onClick = { onSelectLoan(loan) },
+                        label = { Text(loan.name) }
+                    )
+                }
+            }
+
+            if (schedule.isEmpty()) {
+                EmptyState(
+                    title = "No Schedule Available",
+                    subtitle = "No schedule found for the selected loan"
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Mo", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.width(28.dp))
+                            Text("EMI", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Text("Principal", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Text("Interest", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Text("Balance", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        }
+                    }
+
+                    items(schedule, key = { it.monthIndex }) { inst ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("#${inst.monthIndex}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(28.dp))
+                                Text(MoneyFormatter.formatPaiseToRupees(inst.emiPaise), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                Text(MoneyFormatter.formatPaiseToRupees(inst.principalPaidPaise), fontSize = 11.sp, color = IncomeGreen, modifier = Modifier.weight(1f))
+                                Text(MoneyFormatter.formatPaiseToRupees(inst.interestPaise), fontSize = 11.sp, color = ExpenseRed, modifier = Modifier.weight(1f))
+                                Text(MoneyFormatter.formatPaiseToRupees(inst.closingPrincipalPaise), fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrepaymentSimulatorTab(
+    loans: List<LoanEntity>,
+    selectedLoan: LoanEntity?,
+    prepaymentAmount: String,
+    result: com.tapledger.domain.calculator.PrepaymentSimulationResult?,
+    onSelectLoan: (LoanEntity) -> Unit,
+    onPrepaymentAmountChange: (String) -> Unit
+) {
+    if (loans.isEmpty()) {
+        EmptyState(
+            title = "No Loans Added Yet",
+            subtitle = "Setup a loan to simulate part-prepayments"
+        )
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            Text("Part-Prepayment Simulator", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = "Simulate how a lump-sum payment saves interest and cuts months off your loan.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Loan Selector Chips
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                loans.forEach { loan ->
+                    FilterChip(
+                        selected = selectedLoan?.id == loan.id,
+                        onClick = { onSelectLoan(loan) },
+                        label = { Text(loan.name) }
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                value = prepaymentAmount,
+                onValueChange = onPrepaymentAmountChange,
+                label = { Text("Lump-Sum Prepayment Amount (₹)") },
+                leadingIcon = { Text("₹", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            result?.let { sim ->
+                Text("Prepayment Impact Comparison", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                // Option 1: Reduce Tenure
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.6f))
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Option 1: Reduce Tenure (Recommended)", fontWeight = FontWeight.Bold, color = IncomeGreen)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(IncomeGreen.copy(alpha = 0.15f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("Max Interest Saved", color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(Spacing.xs))
+                        Text(
+                            text = "Keep EMI same at ${MoneyFormatter.formatPaiseToRupees(sim.originalEmiPaise)} and close loan earlier.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Months Saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${sim.tenureOptionMonthsSaved} Months", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IncomeGreen)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Interest Saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    MoneyFormatter.formatPaiseToRupees(sim.tenureOptionInterestSavedPaise),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = IncomeGreen
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Option 2: Reduce EMI
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Text("Option 2: Reduce Monthly EMI", fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(Spacing.xs))
+                        Text(
+                            text = "Keep remaining tenure same at ${sim.originalRemainingTenureMonths} months and lower monthly cash outflow.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("New EMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(MoneyFormatter.formatPaiseToRupees(sim.emiOptionNewEmiPaise), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Monthly Cashflow Saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    "${MoneyFormatter.formatPaiseToRupees(sim.emiOptionMonthlySavingsPaise)} / mo",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

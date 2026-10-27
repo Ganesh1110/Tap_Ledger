@@ -47,6 +47,7 @@ sealed class Screen(val route: String) {
         fun createRoute(goalId: Long) = "goal_detail/$goalId"
     }
     object SavingsGuideSettings : Screen("savings_guide_settings")
+    object Loans : Screen("loans")
 }
 
 
@@ -94,6 +95,7 @@ fun TapLedgerNavGraph(
                 onNavigateToAppLockSettings = { navController.navigate(Screen.AppLockSettings.route) },
                 onNavigateToSavingsGuideSettings = { navController.navigate(Screen.SavingsGuideSettings.route) },
                 onNavigateToSavings = { navController.navigate(Screen.SavingHome.route) },
+                onNavigateToLoans = { navController.navigate(Screen.Loans.route) },
                 onShowWhatsNew = onShowWhatsNew
             )
         }
@@ -116,7 +118,8 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.Accounts.route) {
             AccountsScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToLoans = { navController.navigate(Screen.Loans.route) }
             )
         }
         composable(Screen.BackupRestore.route) {
@@ -213,6 +216,11 @@ fun TapLedgerNavGraph(
         }
         composable(Screen.SavingsGuideSettings.route) {
             com.tapledger.ui.screens.saving.SavingsGuideSettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Screen.Loans.route) {
+            com.tapledger.ui.screens.loans.LoanManagementScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

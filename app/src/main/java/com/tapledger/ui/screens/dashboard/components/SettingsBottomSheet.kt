@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
@@ -66,6 +67,7 @@ fun SettingsBottomSheet(
     onNavigateToSetup: () -> Unit,
     onNavigateToSavings: () -> Unit,
     onNavigateToSavingsGuideSettings: () -> Unit,
+    onNavigateToLoans: () -> Unit = {},
     onNavigateToBackup: () -> Unit,
     onNavigateToAppLockSettings: () -> Unit,
     onNavigateToDiagnostics: () -> Unit,
@@ -87,6 +89,14 @@ fun SettingsBottomSheet(
             iconTint = primaryColor,
             iconBgColor = primaryColor.copy(alpha = 0.12f),
             onClick = onNavigateToSetup
+        ),
+        SettingItem(
+            title = "Loans & EMIs",
+            subtitle = "Amortization, prepayments & EMI setup",
+            icon = Icons.Default.AccountBalance,
+            iconTint = primaryColor,
+            iconBgColor = primaryColor.copy(alpha = 0.12f),
+            onClick = onNavigateToLoans
         ),
         SettingItem(
             title = "Savings & Goals",

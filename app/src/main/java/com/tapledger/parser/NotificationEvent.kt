@@ -30,5 +30,6 @@ data class ParsedFinancialEvent(
     val occurredAt: Long,
     val isReversalOrRefund: Boolean = false,
     val rawPreviewRedacted: String,
-    val isSipOrAutoDebit: Boolean = false
+    val isSipOrAutoDebit: Boolean = false,
+    val isLoanEmi: Boolean = false
 )

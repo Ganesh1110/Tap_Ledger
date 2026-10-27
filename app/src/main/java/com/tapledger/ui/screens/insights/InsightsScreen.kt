@@ -21,13 +21,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Store
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
@@ -61,6 +61,7 @@ import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.ui.screens.categories.components.CategoryDonutCard
 import com.tapledger.ui.screens.dashboard.components.DashboardSixPeriodTrendCard
+import com.tapledger.ui.screens.insights.components.DebtToIncomeInsightsCard
 import com.tapledger.ui.screens.insights.components.TopMerchantsCard
 import com.tapledger.ui.screens.transactions.components.SpendingHeatmapCard
 import com.tapledger.ui.theme.Spacing
@@ -106,7 +107,7 @@ fun InsightsScreen(
         ) {
             // TabRow with 4 tabs
             val tabs = listOf(
-                "Cash Flow" to Icons.Default.TrendingUp,
+                "Cash Flow" to Icons.AutoMirrored.Filled.TrendingUp,
                 "Calendar" to Icons.Default.CalendarMonth,
                 "Merchants" to Icons.Default.Store,
                 "Categories" to Icons.Default.Category
@@ -142,11 +143,22 @@ fun InsightsScreen(
                 ) {
                     when (state.selectedTab) {
                         0 -> {
-                            // Tab 0: Cash Flow Trend (12 periods)
+                            // Tab 0: Cash Flow Trend (12 periods) & Debt/Loan Insights
                             DashboardSixPeriodTrendCard(
                                 trendState = state.cashFlowTrendState,
                                 title = "12-Period Cash Flow",
                                 subtitle = "Income, spent, & saved across up to 12 periods"
+                            )
+
+                            Spacer(modifier = Modifier.height(Spacing.md))
+
+                            DebtToIncomeInsightsCard(
+                                debtToIncomeBp = state.debtToIncomeBp,
+                                totalInterestPaidPaise = state.totalInterestPaidPaise,
+                                totalMonthlyDebtPaise = state.totalMonthlyDebtPaise,
+                                monthlyIncomePaise = state.monthlyIncomePaise,
+                                activeLoansCount = state.activeLoansCount,
+                                totalOutstandingLoanPrincipalPaise = state.totalOutstandingLoanPrincipalPaise
                             )
                         }
 

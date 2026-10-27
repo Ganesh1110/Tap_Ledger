@@ -152,6 +152,7 @@ fun DashboardScreen(
     onNavigateToAppLockSettings: () -> Unit = {},
     onNavigateToSavingsGuideSettings: () -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
+    onNavigateToLoans: () -> Unit = {},
     onShowWhatsNew: () -> Unit = {}
 ) {
 
@@ -834,6 +835,7 @@ fun DashboardScreen(
                     onNavigateToSetup = onNavigateToSetup,
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSavingsGuideSettings = onNavigateToSavingsGuideSettings,
+                    onNavigateToLoans = onNavigateToLoans,
                     onNavigateToBackup = onNavigateToBackup,
                     onNavigateToAppLockSettings = onNavigateToAppLockSettings,
                     onNavigateToDiagnostics = onNavigateToDiagnostics,
