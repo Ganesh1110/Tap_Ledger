@@ -341,7 +341,9 @@ class DashboardViewModel @Inject constructor(
                 if (alloc.transactionId in todayTxIds && alloc.categoryId !in savingsCategoryIds) {
                     val tx = periodTxs.find { it.id == alloc.transactionId }
                     if (tx != null) {
-                        if (tx.kind == com.tapledger.core.model.TransactionKind.EXPENSE || tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_CHARGED) {
+                        if (tx.kind == com.tapledger.core.model.TransactionKind.EXPENSE ||
+                            tx.kind == com.tapledger.core.model.TransactionKind.FEE ||
+                            tx.kind == com.tapledger.core.model.TransactionKind.INTEREST_CHARGED) {
                             todaySpentPaise += alloc.amountPaise
                         } else if (tx.kind == com.tapledger.core.model.TransactionKind.REFUND) {
                             todaySpentPaise -= alloc.amountPaise

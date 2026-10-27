@@ -890,4 +890,47 @@ class IngestionPipelineTest {
         val currentPlan = savingsTransferPlanDao.getById(3L)
         assertThat(currentPlan?.status).isEqualTo(TransferPlanStatus.MARKED_MOVED)
     }
+
+    @Test
+    fun testIncomeAlert_withAttributedAccount_isAutoConfirmed() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "HDFC Bank",
+            text = "Salary of Rs 75,000.00 credited to HDFC Bank A/C ending 1234 on 27-Oct-26. Avl Bal: Rs 1,50,000.00",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        assertThat(result).isInstanceOf(IngestionResult.Success::class.java)
+
+        val success = result as IngestionResult.Success
+        val tx = transactionDao.getById(success.transactionId)
+        assertThat(tx).isNotNull()
+        assertThat(tx!!.kind).isEqualTo(TransactionKind.INCOME)
+        assertThat(tx.status).isEqualTo(TransactionStatus.CONFIRMED)
+        assertThat(tx.accountId).isEqualTo(1L)
+    }
+
+    @Test
+    fun testIncomeAlert_withoutAttributedAccount_remainsPending() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        // Account last4 9999 does not exist in accountDao
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "Axis Bank",
+            text = "Salary of Rs 50,000.00 credited to Axis Bank A/C ending 9999 on 27-Oct-26. Avl Bal: Rs 50,000.00",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        assertThat(result).isInstanceOf(IngestionResult.Success::class.java)
+
+        val success = result as IngestionResult.Success
+        val tx = transactionDao.getById(success.transactionId)
+        assertThat(tx).isNotNull()
+        assertThat(tx!!.kind).isEqualTo(TransactionKind.INCOME)
+        assertThat(tx.accountId).isNull()
+        assertThat(tx.status).isEqualTo(TransactionStatus.PENDING)
+    }
 }

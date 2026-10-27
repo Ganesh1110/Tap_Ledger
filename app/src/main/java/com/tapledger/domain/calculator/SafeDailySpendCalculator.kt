@@ -53,13 +53,17 @@ object SafeDailySpendCalculator {
         val remainingBudgetPaise = heroBudgetPaise - heroSpentPaise
         val isOverBudget = remainingBudgetPaise <= 0L
 
-        val safeDailyPaise = if (isOverBudget || daysRemaining <= 0) {
+        val clampedTodaySpent = todaySpentPaise.coerceAtLeast(0L)
+        // Since heroSpentPaise already includes today's spend, the available budget
+        // at the start of today is (remainingBudgetPaise + clampedTodaySpent).
+        val budgetAvailableAtStartOfDay = (remainingBudgetPaise + clampedTodaySpent).coerceAtLeast(0L)
+
+        val safeDailyPaise = if (daysRemaining <= 0 || budgetAvailableAtStartOfDay <= 0L) {
             0L
         } else {
-            remainingBudgetPaise / daysRemaining
+            budgetAvailableAtStartOfDay / daysRemaining
         }
 
-        val clampedTodaySpent = todaySpentPaise.coerceAtLeast(0L)
         val todayRemainingPaise = if (safeDailyPaise > clampedTodaySpent) {
             safeDailyPaise - clampedTodaySpent
         } else {

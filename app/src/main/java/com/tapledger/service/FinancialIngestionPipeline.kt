@@ -22,6 +22,7 @@ import com.tapledger.parser.ParsedFinancialEvent
 import com.tapledger.core.database.dao.SavingsTransferPlanDao
 import com.tapledger.core.database.entity.toJsonSnapshot
 import com.tapledger.core.model.TransactionDirection
+import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransferPlanStatus
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -281,9 +282,19 @@ class FinancialIngestionPipeline @Inject constructor(
         // Ensure contiguous period exists for effectiveOccurredAt
         budgetRepository.getOrCreateBudgetPeriodForTimestamp(effectiveOccurredAt)
 
-        // 6. Room Atomic Insert: transactions (status = PENDING)
+        // 6. Room Atomic Insert: transactions (status = PENDING, or CONFIRMED for income with resolved account)
         val txId = try {
             transactionRunner.run {
+                val isIncomeWithAccount = resolvedAccountId != null && (
+                    parsed.kind == TransactionKind.INCOME ||
+                    parsed.kind == TransactionKind.INTEREST_EARNED
+                )
+                val initialStatus = if (isIncomeWithAccount) {
+                    TransactionStatus.CONFIRMED
+                } else {
+                    TransactionStatus.PENDING
+                }
+
                 val tx = TransactionEntity(
                     accountId = resolvedAccountId,
                     kind = parsed.kind,
@@ -296,7 +307,7 @@ class FinancialIngestionPipeline @Inject constructor(
                     originalOccurredAt = originalOccurredAt,
                     createdAt = now,
                     updatedAt = now,
-                    status = TransactionStatus.PENDING,
+                    status = initialStatus,
                     source = parsed.source,
                     sourceFingerprint = parsed.sourceFingerprint,
                     possibleDuplicateOfId = possibleDuplicateOfId,
@@ -309,7 +320,11 @@ class FinancialIngestionPipeline @Inject constructor(
                     AuditLogEntity(
                         transactionId = insertedId,
                         action = AuditAction.CREATED,
-                        reason = "Notification Ingestion from ${event.packageName}",
+                        reason = if (isIncomeWithAccount) {
+                            "Notification Ingestion from ${event.packageName} (Auto-confirmed income)"
+                        } else {
+                            "Notification Ingestion from ${event.packageName}"
+                        },
                         createdAt = now
                     )
                 )

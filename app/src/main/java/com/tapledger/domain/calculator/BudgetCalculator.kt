@@ -7,6 +7,7 @@ import com.tapledger.core.database.entity.BudgetPeriodEntity
 import com.tapledger.core.database.entity.TransactionAllocationEntity
 import com.tapledger.core.database.entity.TransactionEntity
 import com.tapledger.core.model.AdvanceDirection
+import com.tapledger.core.model.AdvancePolicy
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
@@ -144,7 +145,41 @@ object BudgetCalculator {
             bucketSpent[bucket] = 0L
         }
 
-        for (alloc in allocations) {
+        // Guard against orphan categories: categories that have recorded activity (expenses,
+        // refunds, adjustments, advances) but lack an explicit allocation row for this period.
+        val allocatedCategoryIds = allocations.map { it.categoryId }.toSet()
+        val orphanCategoryIds = (
+            expensePerCategory.keys +
+            refundPerCategory.keys +
+            savingsContribPerCategory.keys +
+            savingsWithdrawPerCategory.keys +
+            adjInPerCategory.keys +
+            adjOutPerCategory.keys +
+            advPosPerCategory.keys +
+            advNegPerCategory.keys
+        ) - allocatedCategoryIds
+
+        val syntheticAllocations = orphanCategoryIds.sorted().map { orphanCatId ->
+            val isSavingsCategory = savingsContribPerCategory.containsKey(orphanCatId) ||
+                savingsWithdrawPerCategory.containsKey(orphanCatId)
+            val bucket = if (isSavingsCategory) BudgetBucket.SAVINGS else BudgetBucket.WANTS
+            BudgetAllocationEntity(
+                id = -orphanCatId,
+                budgetPeriodId = period.id,
+                categoryId = orphanCatId,
+                categoryNameSnapshot = "Unbudgeted Category #$orphanCatId",
+                bucketSnapshot = bucket,
+                sortOrderSnapshot = Int.MAX_VALUE,
+                advancePolicySnapshot = AdvancePolicy.CARRY_TO_ADVANCE,
+                amountPaise = 0L,
+                createdAt = period.startAt,
+                updatedAt = period.startAt
+            )
+        }
+
+        val allAllocations = allocations + syntheticAllocations
+
+        for (alloc in allAllocations) {
             val catId = alloc.categoryId
             val baseBudget = alloc.amountPaise
             val adjIn = adjInPerCategory[catId] ?: 0L
