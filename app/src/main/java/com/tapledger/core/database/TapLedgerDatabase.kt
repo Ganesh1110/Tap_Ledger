@@ -34,6 +34,8 @@ import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.database.entity.CommitmentPaymentEntity
 import com.tapledger.core.database.entity.FixedDepositEntity
 import com.tapledger.core.database.entity.LoanEntity
+import com.tapledger.core.database.entity.LoanScheduleInstallmentEntity
+import com.tapledger.core.database.entity.LoanScheduleVersionEntity
 import com.tapledger.core.database.entity.MerchantMapEntity
 import com.tapledger.core.database.entity.MonthCloseEntity
 import com.tapledger.core.database.entity.RecurringCommitmentEntity
@@ -66,7 +68,9 @@ import com.tapledger.core.database.entity.UnparsedAlertEntity
         CommitmentPaymentEntity::class,
         FixedDepositEntity::class,
         SavingsTransferPlanEntity::class,
-        LoanEntity::class
+        LoanEntity::class,
+        LoanScheduleVersionEntity::class,
+        LoanScheduleInstallmentEntity::class
     ],
     version = TapLedgerDatabase.DATABASE_VERSION,
     exportSchema = true
@@ -97,7 +101,7 @@ abstract class TapLedgerDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "tapledger.db"
-        const val DATABASE_VERSION = 7
+        const val DATABASE_VERSION = 8
     }
 }
 

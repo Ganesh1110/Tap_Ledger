@@ -8,14 +8,21 @@ import com.tapledger.core.database.entity.LoanEntity
 import com.tapledger.core.model.AccountType
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.core.database.entity.LoanScheduleInstallmentEntity
+import com.tapledger.core.database.entity.LoanScheduleVersionEntity
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.BudgetRepository
 import com.tapledger.data.repository.EmiPaymentResult
+import com.tapledger.data.repository.ForeclosureExecutionResult
 import com.tapledger.data.repository.LoanRepository
+import com.tapledger.data.repository.PartPrepaymentExecutionResult
 import com.tapledger.domain.calculator.AmortizationInstallment
+import com.tapledger.domain.calculator.ForeclosureSettlement
+import com.tapledger.domain.calculator.InterestCalculationMethod
 import com.tapledger.domain.calculator.LoanAffordabilityResult
 import com.tapledger.domain.calculator.LoanCalculator
 import com.tapledger.domain.calculator.PrepaymentSimulationResult
+import com.tapledger.domain.calculator.PrepaymentStrategy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +39,8 @@ data class LoanUiState(
     val bankAccounts: List<AccountEntity> = emptyList(),
     val selectedLoan: LoanEntity? = null,
     val amortizationSchedule: List<AmortizationInstallment> = emptyList(),
+    val scheduleVersions: List<LoanScheduleVersionEntity> = emptyList(),
+    val selectedScheduleVersionId: Long? = null,
 
     // Setup Form
     val setupName: String = "",
@@ -39,20 +48,30 @@ data class LoanUiState(
     val setupAnnualRatePercent: String = "9.5",
     val setupTenureMonths: String = "24",
     val setupEmiDay: String = "5",
+    val setupCalculationMethod: InterestCalculationMethod = InterestCalculationMethod.MONTHLY_REDUCING,
     val setupBankAccountId: Long? = null,
     val liveCalculatedEmiPaise: Long = 0L,
 
     // Affordability Check
     val affordabilityMonthlyIncomeRupees: String = "75000",
+    val safeDtiThresholdPercent: String = "30",
+    val moderateDtiThresholdPercent: String = "45",
     val affordabilityResult: LoanAffordabilityResult? = null,
 
-    // Prepayment Simulator
+    // Prepayment Simulator & Execution
     val prepaymentAmountRupees: String = "25000",
+    val prepaymentFixedFeeRupees: String = "0",
+    val prepaymentPercentFeePercent: String = "0",
     val prepaymentSimulationResult: PrepaymentSimulationResult? = null,
 
+    // Foreclosure Settlement
+    val foreclosureSettlement: ForeclosureSettlement? = null,
+
     // Actions & Feedback
-    val isPayingEmi: Boolean = false,
+    val isExecutingAction: Boolean = false,
     val lastEmiPaymentResult: EmiPaymentResult? = null,
+    val lastPrepaymentResult: PartPrepaymentExecutionResult? = null,
+    val lastForeclosureResult: ForeclosureExecutionResult? = null,
     val successMessage: String? = null,
     val errorMessage: String? = null,
     val isLoading: Boolean = false
@@ -124,7 +143,51 @@ class LoanViewModel @Inject constructor(
 
     fun selectLoan(loan: LoanEntity) {
         _uiState.update { it.copy(selectedLoan = loan) }
+        loadVersionsForLoan(loan.id)
         updateAmortizationAndSimulation()
+    }
+
+    private fun loadVersionsForLoan(loanId: Long) {
+        viewModelScope.launch {
+            val versions = withContext(Dispatchers.Default) {
+                loanRepository.getScheduleVersionsForLoan(loanId)
+            }
+            _uiState.update {
+                it.copy(
+                    scheduleVersions = versions,
+                    selectedScheduleVersionId = versions.lastOrNull()?.id
+                )
+            }
+            loadInstallmentsForSelectedVersion()
+        }
+    }
+
+    fun selectScheduleVersion(versionId: Long) {
+        _uiState.update { it.copy(selectedScheduleVersionId = versionId) }
+        loadInstallmentsForSelectedVersion()
+    }
+
+    private fun loadInstallmentsForSelectedVersion() {
+        val versionId = _uiState.value.selectedScheduleVersionId ?: return
+        viewModelScope.launch {
+            val dbInstallments = withContext(Dispatchers.Default) {
+                loanRepository.getInstallmentsForVersion(versionId)
+            }
+            if (dbInstallments.isNotEmpty()) {
+                val schedule = dbInstallments.map { inst ->
+                    AmortizationInstallment(
+                        monthIndex = inst.monthIndex,
+                        dueDateMs = inst.dueDateMs,
+                        openingPrincipalPaise = inst.openingPrincipalPaise,
+                        emiPaise = inst.emiPaise,
+                        interestPaise = inst.interestPaise,
+                        principalPaidPaise = inst.principalPaidPaise,
+                        closingPrincipalPaise = inst.closingPrincipalPaise
+                    )
+                }
+                _uiState.update { it.copy(amortizationSchedule = schedule) }
+            }
+        }
     }
 
     fun onSetupFieldChanged(
@@ -133,6 +196,7 @@ class LoanViewModel @Inject constructor(
         ratePercent: String? = null,
         tenureMonths: String? = null,
         emiDay: String? = null,
+        calculationMethod: InterestCalculationMethod? = null,
         bankAccountId: Long? = null
     ) {
         _uiState.update { current ->
@@ -142,7 +206,18 @@ class LoanViewModel @Inject constructor(
                 setupAnnualRatePercent = ratePercent ?: current.setupAnnualRatePercent,
                 setupTenureMonths = tenureMonths ?: current.setupTenureMonths,
                 setupEmiDay = emiDay ?: current.setupEmiDay,
+                setupCalculationMethod = calculationMethod ?: current.setupCalculationMethod,
                 setupBankAccountId = bankAccountId ?: current.setupBankAccountId
+            )
+        }
+        recalculateLiveEmiAndAffordability()
+    }
+
+    fun onAffordabilityThresholdsChanged(safePercent: String, moderatePercent: String) {
+        _uiState.update {
+            it.copy(
+                safeDtiThresholdPercent = safePercent,
+                moderateDtiThresholdPercent = moderatePercent
             )
         }
         recalculateLiveEmiAndAffordability()
@@ -153,8 +228,18 @@ class LoanViewModel @Inject constructor(
         recalculateLiveEmiAndAffordability()
     }
 
-    fun onPrepaymentAmountChanged(amountRupees: String) {
-        _uiState.update { it.copy(prepaymentAmountRupees = amountRupees) }
+    fun onPrepaymentAmountChanged(
+        amountRupees: String,
+        fixedFeeRupees: String? = null,
+        percentFeePercent: String? = null
+    ) {
+        _uiState.update {
+            it.copy(
+                prepaymentAmountRupees = amountRupees,
+                prepaymentFixedFeeRupees = fixedFeeRupees ?: it.prepaymentFixedFeeRupees,
+                prepaymentPercentFeePercent = percentFeePercent ?: it.prepaymentPercentFeePercent
+            )
+        }
         updateAmortizationAndSimulation()
     }
 
@@ -177,13 +262,18 @@ class LoanViewModel @Inject constructor(
 
         val existingDebtPaise = state.activeLoans.sumOf { it.emiAmountPaise }
 
+        val safeBp = (state.safeDtiThresholdPercent.toIntOrNull() ?: 30) * 100
+        val modBp = (state.moderateDtiThresholdPercent.toIntOrNull() ?: 45) * 100
+
         val affResult = if (principalPaise > 0L && tenure > 0 && incomePaise > 0L) {
             loanCalculator.checkAffordability(
                 monthlyIncomePaise = incomePaise,
                 existingMonthlyDebtPaise = existingDebtPaise,
                 newPrincipalPaise = principalPaise,
                 annualRateBp = rateBp,
-                tenureMonths = tenure
+                tenureMonths = tenure,
+                safeDtiThresholdBp = safeBp,
+                moderateDtiThresholdBp = modBp
             )
         } else null
 
@@ -197,16 +287,22 @@ class LoanViewModel @Inject constructor(
 
     private fun updateAmortizationAndSimulation() {
         val loan = _uiState.value.selectedLoan ?: return
-        val schedule = loanCalculator.generateAmortizationSchedule(
-            principalPaise = loan.principalPaise,
-            annualRateBp = loan.annualInterestRateBp,
-            tenureMonths = loan.tenureMonths,
-            startDateMs = loan.startDateMs
-        )
 
         val prepayPaise = try {
             MoneyFormatter.parseRupeesStringToPaise(_uiState.value.prepaymentAmountRupees, allowZero = true)
         } catch (e: Exception) { 0L }
+
+        val fixedFeePaise = try {
+            MoneyFormatter.parseRupeesStringToPaise(_uiState.value.prepaymentFixedFeeRupees, allowZero = true)
+        } catch (e: Exception) { 0L }
+
+        val percentFeeBp = parseRateToBp(_uiState.value.prepaymentPercentFeePercent)
+
+        val calcMethod = try {
+            InterestCalculationMethod.valueOf(loan.calculationMethod)
+        } catch (e: Exception) {
+            InterestCalculationMethod.MONTHLY_REDUCING
+        }
 
         val simulation = if (prepayPaise > 0L) {
             loanCalculator.simulatePartPrepayment(
@@ -214,15 +310,103 @@ class LoanViewModel @Inject constructor(
                 annualRateBp = loan.annualInterestRateBp,
                 currentEmiPaise = loan.emiAmountPaise,
                 remainingTenureMonths = loan.tenureMonths,
-                prepaymentPaise = prepayPaise
+                prepaymentPaise = prepayPaise,
+                fixedFeePaise = fixedFeePaise,
+                percentageFeeBp = percentFeeBp,
+                method = calcMethod
             )
         } else null
 
+        val foreclosure = loanCalculator.calculateForeclosureSettlement(
+            outstandingPrincipalPaise = loan.principalPaise,
+            annualRateBp = loan.annualInterestRateBp,
+            daysElapsedSinceLastPayment = 0,
+            fixedFeePaise = fixedFeePaise,
+            percentageFeeBp = percentFeeBp,
+            method = calcMethod
+        )
+
         _uiState.update {
             it.copy(
-                amortizationSchedule = schedule,
-                prepaymentSimulationResult = simulation
+                prepaymentSimulationResult = simulation,
+                foreclosureSettlement = foreclosure
             )
+        }
+    }
+
+    fun applyPartPrepayment(loan: LoanEntity, fromAccountId: Long, strategy: PrepaymentStrategy) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExecutingAction = true, errorMessage = null) }
+            val prepayPaise = try {
+                MoneyFormatter.parseRupeesStringToPaise(_uiState.value.prepaymentAmountRupees)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isExecutingAction = false, errorMessage = "Invalid prepayment amount") }
+                return@launch
+            }
+            val fixedFeePaise = try {
+                MoneyFormatter.parseRupeesStringToPaise(_uiState.value.prepaymentFixedFeeRupees, allowZero = true)
+            } catch (e: Exception) { 0L }
+            val percentFeeBp = parseRateToBp(_uiState.value.prepaymentPercentFeePercent)
+
+            try {
+                val result = loanRepository.recordPartPrepayment(
+                    loanId = loan.id,
+                    fromAccountId = fromAccountId,
+                    totalPaymentPaise = prepayPaise,
+                    strategy = strategy,
+                    fixedFeePaise = fixedFeePaise,
+                    percentageFeeBp = percentFeeBp
+                )
+                _uiState.update {
+                    it.copy(
+                        isExecutingAction = false,
+                        lastPrepaymentResult = result,
+                        successMessage = "Part-payment applied! Principal reduced by ${MoneyFormatter.formatPaiseToRupees(result.allocation.principalReductionPaise)}. Schedule version ${result.scheduleVersionNumber} generated."
+                    )
+                }
+                loadVersionsForLoan(loan.id)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExecutingAction = false,
+                        errorMessage = e.message ?: "Failed to execute part-prepayment"
+                    )
+                }
+            }
+        }
+    }
+
+    fun forecloseLoan(loan: LoanEntity, fromAccountId: Long) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExecutingAction = true, errorMessage = null) }
+            val fixedFeePaise = try {
+                MoneyFormatter.parseRupeesStringToPaise(_uiState.value.prepaymentFixedFeeRupees, allowZero = true)
+            } catch (e: Exception) { 0L }
+            val percentFeeBp = parseRateToBp(_uiState.value.prepaymentPercentFeePercent)
+
+            try {
+                val result = loanRepository.recordForeclosure(
+                    loanId = loan.id,
+                    fromAccountId = fromAccountId,
+                    fixedFeePaise = fixedFeePaise,
+                    percentageFeeBp = percentFeeBp
+                )
+                _uiState.update {
+                    it.copy(
+                        isExecutingAction = false,
+                        lastForeclosureResult = result,
+                        successMessage = "Loan '${loan.name}' fully foreclosed and closed! Settlement of ${MoneyFormatter.formatPaiseToRupees(result.settlement.totalSettlementAmountPaise)} completed."
+                    )
+                }
+                loadVersionsForLoan(loan.id)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExecutingAction = false,
+                        errorMessage = e.message ?: "Failed to foreclose loan"
+                    )
+                }
+            }
         }
     }
 
@@ -253,7 +437,8 @@ class LoanViewModel @Inject constructor(
                     annualRateBp = rateBp,
                     tenureMonths = tenureMonths,
                     emiDay = emiDay,
-                    linkedBankAccountId = state.setupBankAccountId
+                    linkedBankAccountId = state.setupBankAccountId,
+                    calculationMethod = state.setupCalculationMethod
                 )
                 _uiState.update {
                     it.copy(
@@ -272,7 +457,7 @@ class LoanViewModel @Inject constructor(
 
     fun payEmi(loan: LoanEntity, fromAccountId: Long) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isPayingEmi = true, errorMessage = null) }
+            _uiState.update { it.copy(isExecutingAction = true, errorMessage = null) }
             try {
                 val result = loanRepository.payEmi(
                     loanId = loan.id,
@@ -280,7 +465,7 @@ class LoanViewModel @Inject constructor(
                 )
                 _uiState.update {
                     it.copy(
-                        isPayingEmi = false,
+                        isExecutingAction = false,
                         lastEmiPaymentResult = result,
                         successMessage = "EMI of ${MoneyFormatter.formatPaiseToRupees(result.totalPaidPaise)} paid! (${MoneyFormatter.formatPaiseToRupees(result.principalPaidPaise)} Principal + ${MoneyFormatter.formatPaiseToRupees(result.interestPaidPaise)} Interest recorded as Needs expense)"
                     )
@@ -288,7 +473,7 @@ class LoanViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        isPayingEmi = false,
+                        isExecutingAction = false,
                         errorMessage = e.message ?: "Failed to record EMI payment"
                     )
                 }

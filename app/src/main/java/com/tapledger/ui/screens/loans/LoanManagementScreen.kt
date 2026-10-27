@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Schedule
@@ -78,10 +79,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.database.entity.LoanEntity
+import com.tapledger.core.database.entity.LoanScheduleVersionEntity
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.domain.calculator.AffordabilityStatus
 import com.tapledger.domain.calculator.AmortizationInstallment
+import com.tapledger.domain.calculator.InterestCalculationMethod
+import com.tapledger.domain.calculator.PrepaymentStrategy
 import com.tapledger.ui.components.EmptyState
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
@@ -98,6 +102,8 @@ fun LoanManagementScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var loanToPay by remember { mutableStateOf<LoanEntity?>(null) }
+    var loanToPrepay by remember { mutableStateOf<Pair<LoanEntity, PrepaymentStrategy>?>(null) }
+    var loanToForeclose by remember { mutableStateOf<LoanEntity?>(null) }
     var selectedBankAccountId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(state.successMessage) {
@@ -173,6 +179,10 @@ fun LoanManagementScreen(
                             loanToPay = loan
                             selectedBankAccountId = loan.linkedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
                         },
+                        onForeclose = { loan ->
+                            loanToForeclose = loan
+                            selectedBankAccountId = loan.linkedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
+                        },
                         onSelectForSchedule = { loan ->
                             viewModel.selectLoan(loan)
                             viewModel.selectTab(2)
@@ -189,15 +199,26 @@ fun LoanManagementScreen(
                         loans = state.activeLoans,
                         selectedLoan = state.selectedLoan,
                         schedule = state.amortizationSchedule,
-                        onSelectLoan = viewModel::selectLoan
+                        versions = state.scheduleVersions,
+                        selectedVersionId = state.selectedScheduleVersionId,
+                        onSelectLoan = viewModel::selectLoan,
+                        onSelectVersion = viewModel::selectScheduleVersion
                     )
                     3 -> PrepaymentSimulatorTab(
                         loans = state.activeLoans,
                         selectedLoan = state.selectedLoan,
                         prepaymentAmount = state.prepaymentAmountRupees,
+                        fixedFee = state.prepaymentFixedFeeRupees,
+                        percentFee = state.prepaymentPercentFeePercent,
                         result = state.prepaymentSimulationResult,
                         onSelectLoan = viewModel::selectLoan,
-                        onPrepaymentAmountChange = viewModel::onPrepaymentAmountChanged
+                        onPrepaymentAmountChange = { viewModel.onPrepaymentAmountChanged(it) },
+                        onFixedFeeChange = { viewModel.onPrepaymentAmountChanged(state.prepaymentAmountRupees, fixedFeeRupees = it) },
+                        onPercentFeeChange = { viewModel.onPrepaymentAmountChanged(state.prepaymentAmountRupees, percentFeePercent = it) },
+                        onApplyPrepayment = { loan, strategy ->
+                            loanToPrepay = loan to strategy
+                            selectedBankAccountId = loan.linkedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
+                        }
                     )
                 }
             }
@@ -261,12 +282,165 @@ fun LoanManagementScreen(
             }
         )
     }
+
+    // Part-Prepayment Execution Dialog
+    if (loanToPrepay != null) {
+        val (loan, strategy) = loanToPrepay!!
+        val prepayPaise = try {
+            MoneyFormatter.parseRupeesStringToPaise(state.prepaymentAmountRupees)
+        } catch (e: Exception) { 0L }
+
+        AlertDialog(
+            onDismissRequest = { loanToPrepay = null },
+            title = { Text("Confirm Part-Payment: ${loan.name}", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    Text(
+                        text = "Payment: ${MoneyFormatter.formatPaiseToRupees(prepayPaise)}",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = IncomeGreen
+                    )
+                    Text(
+                        text = "Strategy: ${if (strategy == PrepaymentStrategy.REDUCE_TENURE) "Keep EMI same, reduce tenure" else "Reduce monthly EMI, keep tenure"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "This will atomically record fees/charges (if any), accrued interest as Needs expense, transfer principal to loan liability, and generate a new immutable schedule version.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Select Bank Account to pay from:", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+
+                    state.bankAccounts.forEach { bank ->
+                        FilterChip(
+                            selected = selectedBankAccountId == bank.id,
+                            onClick = { selectedBankAccountId = bank.id },
+                            label = { Text(bank.name) },
+                            leadingIcon = {
+                                Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val bankId = selectedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
+                        if (bankId != null) {
+                            viewModel.applyPartPrepayment(loan, bankId, strategy)
+                            loanToPrepay = null
+                        }
+                    },
+                    enabled = selectedBankAccountId != null || state.bankAccounts.isNotEmpty()
+                ) {
+                    Text("Confirm Payment")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { loanToPrepay = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Full Early Foreclosure Dialog
+    if (loanToForeclose != null) {
+        val loan = loanToForeclose!!
+        val settlement = state.foreclosureSettlement
+
+        AlertDialog(
+            onDismissRequest = { loanToForeclose = null },
+            title = { Text("Foreclose Loan: ${loan.name}", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    if (settlement != null) {
+                        Text(
+                            text = "Total Settlement: ${MoneyFormatter.formatPaiseToRupees(settlement.totalSettlementAmountPaise)}",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))
+                                .padding(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Outstanding Principal:", fontSize = 11.sp)
+                                Text(MoneyFormatter.formatPaiseToRupees(settlement.outstandingPrincipalPaise), fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Accrued Interest:", fontSize = 11.sp)
+                                Text(MoneyFormatter.formatPaiseToRupees(settlement.accruedInterestPaise), fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            }
+                            if (settlement.foreclosureFeePaise > 0L) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Foreclosure Charges:", fontSize = 11.sp)
+                                    Text(MoneyFormatter.formatPaiseToRupees(settlement.foreclosureFeePaise), fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "Foreclosure will pay off the remaining principal plus accrued interest and close the loan liability account.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Select Bank Account to pay settlement from:", fontWeight = FontWeight.Medium, fontSize = 12.sp)
+
+                    state.bankAccounts.forEach { bank ->
+                        FilterChip(
+                            selected = selectedBankAccountId == bank.id,
+                            onClick = { selectedBankAccountId = bank.id },
+                            label = { Text(bank.name) },
+                            leadingIcon = {
+                                Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val bankId = selectedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
+                        if (bankId != null) {
+                            viewModel.forecloseLoan(loan, bankId)
+                            loanToForeclose = null
+                        }
+                    },
+                    enabled = selectedBankAccountId != null || state.bankAccounts.isNotEmpty()
+                ) {
+                    Text("Settle & Foreclose")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { loanToForeclose = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun ActiveLoansTab(
     loans: List<LoanEntity>,
     onPayEmi: (LoanEntity) -> Unit,
+    onForeclose: (LoanEntity) -> Unit,
     onSelectForSchedule: (LoanEntity) -> Unit,
     onNavigateToSetup: () -> Unit
 ) {
@@ -369,7 +543,7 @@ private fun ActiveLoansTab(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                         ) {
                             OutlinedButton(
                                 onClick = { onSelectForSchedule(loan) },
@@ -378,9 +552,16 @@ private fun ActiveLoansTab(
                             ) {
                                 Text("Schedule")
                             }
+                            OutlinedButton(
+                                onClick = { onForeclose(loan) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Foreclose")
+                            }
                             Button(
                                 onClick = { onPayEmi(loan) },
-                                modifier = Modifier.weight(1.3f),
+                                modifier = Modifier.weight(1.2f),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text("Pay EMI")
@@ -401,7 +582,7 @@ private fun ActiveLoansTab(
 @Composable
 private fun LoanSetupAndAffordabilityTab(
     state: LoanUiState,
-    onFieldChange: (name: String?, principal: String?, rate: String?, tenure: String?, emiDay: String?, bankAccountId: Long?) -> Unit,
+    onFieldChange: (name: String?, principal: String?, rate: String?, tenure: String?, emiDay: String?, calculationMethod: InterestCalculationMethod?, bankAccountId: Long?) -> Unit,
     onIncomeChange: (String) -> Unit,
     onCreateLoan: () -> Unit
 ) {
@@ -416,7 +597,7 @@ private fun LoanSetupAndAffordabilityTab(
 
         OutlinedTextField(
             value = state.setupName,
-            onValueChange = { onFieldChange(it, null, null, null, null, null) },
+            onValueChange = { onFieldChange(it, null, null, null, null, null, null) },
             label = { Text("Loan Name (e.g. HDFC Home Loan, Car Loan)") },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
@@ -425,7 +606,7 @@ private fun LoanSetupAndAffordabilityTab(
 
         OutlinedTextField(
             value = state.setupPrincipalRupees,
-            onValueChange = { onFieldChange(null, it, null, null, null, null) },
+            onValueChange = { onFieldChange(null, it, null, null, null, null, null) },
             label = { Text("Loan Principal (₹)") },
             leadingIcon = { Text("₹", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -440,7 +621,7 @@ private fun LoanSetupAndAffordabilityTab(
         ) {
             OutlinedTextField(
                 value = state.setupAnnualRatePercent,
-                onValueChange = { onFieldChange(null, null, it, null, null, null) },
+                onValueChange = { onFieldChange(null, null, it, null, null, null, null) },
                 label = { Text("Interest Rate (%)") },
                 trailingIcon = { Text("%", fontWeight = FontWeight.Bold) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -451,7 +632,7 @@ private fun LoanSetupAndAffordabilityTab(
 
             OutlinedTextField(
                 value = state.setupTenureMonths,
-                onValueChange = { onFieldChange(null, null, null, it, null, null) },
+                onValueChange = { onFieldChange(null, null, null, it, null, null, null) },
                 label = { Text("Tenure (Months)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
@@ -462,13 +643,32 @@ private fun LoanSetupAndAffordabilityTab(
 
         OutlinedTextField(
             value = state.setupEmiDay,
-            onValueChange = { onFieldChange(null, null, null, null, it, null) },
+            onValueChange = { onFieldChange(null, null, null, null, it, null, null) },
             label = { Text("EMI Debit Day (1 - 31)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         )
+
+        Text("Interest Calculation Method", style = MaterialTheme.typography.labelMedium)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            FilterChip(
+                selected = state.setupCalculationMethod == InterestCalculationMethod.MONTHLY_REDUCING,
+                onClick = { onFieldChange(null, null, null, null, null, InterestCalculationMethod.MONTHLY_REDUCING, null) },
+                label = { Text("Monthly Reducing") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = state.setupCalculationMethod == InterestCalculationMethod.DAILY_REDUCING,
+                onClick = { onFieldChange(null, null, null, null, null, InterestCalculationMethod.DAILY_REDUCING, null) },
+                label = { Text("Daily Reducing") },
+                modifier = Modifier.weight(1f)
+            )
+        }
 
         // Live Calculated EMI Hero Banner
         if (state.liveCalculatedEmiPaise > 0L) {
@@ -591,7 +791,10 @@ private fun AmortizationScheduleTab(
     loans: List<LoanEntity>,
     selectedLoan: LoanEntity?,
     schedule: List<AmortizationInstallment>,
-    onSelectLoan: (LoanEntity) -> Unit
+    versions: List<LoanScheduleVersionEntity> = emptyList(),
+    selectedVersionId: Long? = null,
+    onSelectLoan: (LoanEntity) -> Unit,
+    onSelectVersion: (Long) -> Unit = {}
 ) {
     if (loans.isEmpty()) {
         EmptyState(
@@ -614,6 +817,32 @@ private fun AmortizationScheduleTab(
                         onClick = { onSelectLoan(loan) },
                         label = { Text(loan.name) }
                     )
+                }
+            }
+
+            // Schedule Version Selector Chips (if revisions exist)
+            if (versions.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = Spacing.md, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Version:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    versions.forEach { ver ->
+                        FilterChip(
+                            selected = selectedVersionId == ver.id,
+                            onClick = { onSelectVersion(ver.id) },
+                            label = {
+                                Text(
+                                    text = "v${ver.versionNumber}: ${ver.triggerType.replace("PART_PREPAYMENT_", "").lowercase().replaceFirstChar { it.uppercase() }}",
+                                    fontSize = 11.sp
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
@@ -680,9 +909,14 @@ private fun PrepaymentSimulatorTab(
     loans: List<LoanEntity>,
     selectedLoan: LoanEntity?,
     prepaymentAmount: String,
+    fixedFee: String = "0",
+    percentFee: String = "0",
     result: com.tapledger.domain.calculator.PrepaymentSimulationResult?,
     onSelectLoan: (LoanEntity) -> Unit,
-    onPrepaymentAmountChange: (String) -> Unit
+    onPrepaymentAmountChange: (String) -> Unit,
+    onFixedFeeChange: (String) -> Unit = {},
+    onPercentFeeChange: (String) -> Unit = {},
+    onApplyPrepayment: (LoanEntity, PrepaymentStrategy) -> Unit = { _, _ -> }
 ) {
     if (loans.isEmpty()) {
         EmptyState(
@@ -697,9 +931,9 @@ private fun PrepaymentSimulatorTab(
                 .padding(Spacing.md),
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            Text("Part-Prepayment Simulator", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Part-Prepayment Simulator & Execution", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                text = "Simulate how a lump-sum payment saves interest and cuts months off your loan.",
+                text = "Simulate how a lump-sum payment saves interest and cuts months off your loan, then apply the transaction directly.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -779,7 +1013,65 @@ private fun PrepaymentSimulatorTab(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // Optional Prepayment Fee Fields
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                OutlinedTextField(
+                    value = fixedFee,
+                    onValueChange = onFixedFeeChange,
+                    label = { Text("Processing Fee (₹)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
+                )
+
+                OutlinedTextField(
+                    value = percentFee,
+                    onValueChange = onPercentFeeChange,
+                    label = { Text("Fee Rate (%)") },
+                    trailingIcon = { Text("%", fontWeight = FontWeight.Bold) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             result?.let { sim ->
+                // Allocation Waterfall Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.sm), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Prepayment Allocation Breakdown", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Total Cash Outflow:", fontSize = 11.sp)
+                            Text(MoneyFormatter.formatPaiseToRupees(sim.prepaymentPaise), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                        if (sim.feeChargesPaise > 0L) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Applicable Charges / Fees:", fontSize = 11.sp)
+                                Text("- ${MoneyFormatter.formatPaiseToRupees(sim.feeChargesPaise)}", color = ExpenseRed, fontSize = 11.sp)
+                            }
+                        }
+                        if (sim.accruedInterestPaise > 0L) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Accrued Interest Settled:", fontSize = 11.sp)
+                                Text("- ${MoneyFormatter.formatPaiseToRupees(sim.accruedInterestPaise)}", color = ExpenseRed, fontSize = 11.sp)
+                            }
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Net Principal Reduction:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text(MoneyFormatter.formatPaiseToRupees(sim.netPrincipalReductionPaise), fontWeight = FontWeight.Bold, color = IncomeGreen, fontSize = 11.sp)
+                        }
+                    }
+                }
+
                 Text("Prepayment Impact Comparison", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
                 // Option 1: Reduce Tenure (Recommended)
@@ -890,6 +1182,15 @@ private fun PrepaymentSimulatorTab(
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(Spacing.md))
+                        Button(
+                            onClick = { selectedLoan?.let { onApplyPrepayment(it, PrepaymentStrategy.REDUCE_TENURE) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Apply Strategy 1 (Reduce Tenure)")
+                        }
                     }
                 }
 
@@ -999,6 +1300,15 @@ private fun PrepaymentSimulatorTab(
                                     )
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(Spacing.md))
+                        Button(
+                            onClick = { selectedLoan?.let { onApplyPrepayment(it, PrepaymentStrategy.REDUCE_EMI) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Apply Strategy 2 (Reduce Monthly EMI)")
                         }
                     }
                 }

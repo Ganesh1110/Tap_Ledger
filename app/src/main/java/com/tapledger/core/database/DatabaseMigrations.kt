@@ -668,6 +668,66 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+/**
+ * Migration from Database Version 7 to Version 8.
+ * - Adds `calculation_method` and `closed_at` columns to `loans` table.
+ * - Creates `loan_schedule_versions` table for immutable schedule versioning.
+ * - Creates `loan_schedule_installments` table for revised installment projections.
+ * - Runs PRAGMA integrity_check.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `loans` ADD COLUMN `calculation_method` TEXT NOT NULL DEFAULT 'MONTHLY_REDUCING'")
+        db.execSQL("ALTER TABLE `loans` ADD COLUMN `closed_at` INTEGER")
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `loan_schedule_versions` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `loan_id` INTEGER NOT NULL,
+                `version_number` INTEGER NOT NULL,
+                `trigger_type` TEXT NOT NULL,
+                `trigger_transaction_id` INTEGER,
+                `effective_date_ms` INTEGER NOT NULL,
+                `principal_paise` INTEGER NOT NULL,
+                `emi_paise` INTEGER NOT NULL,
+                `tenure_months` INTEGER NOT NULL,
+                `annual_interest_rate_bp` INTEGER NOT NULL,
+                `notes` TEXT,
+                `created_at` INTEGER NOT NULL,
+                FOREIGN KEY(`loan_id`) REFERENCES `loans`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`trigger_transaction_id`) REFERENCES `transactions`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_loan_schedule_versions_loan_id` ON `loan_schedule_versions` (`loan_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_loan_schedule_versions_trigger_transaction_id` ON `loan_schedule_versions` (`trigger_transaction_id`)")
+
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `loan_schedule_installments` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `schedule_version_id` INTEGER NOT NULL,
+                `month_index` INTEGER NOT NULL,
+                `due_date_ms` INTEGER NOT NULL,
+                `opening_principal_paise` INTEGER NOT NULL,
+                `emi_paise` INTEGER NOT NULL,
+                `interest_paise` INTEGER NOT NULL,
+                `principal_paid_paise` INTEGER NOT NULL,
+                `closing_principal_paise` INTEGER NOT NULL,
+                FOREIGN KEY(`schedule_version_id`) REFERENCES `loan_schedule_versions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_loan_schedule_installments_schedule_version_id` ON `loan_schedule_installments` (`schedule_version_id`)")
+
+        val cursor = db.query("PRAGMA integrity_check")
+        cursor.use {
+            if (it.moveToFirst()) {
+                val result = it.getString(0)
+                check(result == "ok") { "Database integrity check failed after migration 7 -> 8: $result" }
+            }
+        }
+    }
+}
+
+
 
 
 

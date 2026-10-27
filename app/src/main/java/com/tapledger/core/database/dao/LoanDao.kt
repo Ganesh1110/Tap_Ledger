@@ -7,6 +7,8 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.tapledger.core.database.entity.LoanEntity
+import com.tapledger.core.database.entity.LoanScheduleInstallmentEntity
+import com.tapledger.core.database.entity.LoanScheduleVersionEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -38,4 +40,25 @@ interface LoanDao {
 
     @Query("SELECT * FROM loans")
     suspend fun getAllSync(): List<LoanEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertScheduleVersion(version: LoanScheduleVersionEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertScheduleInstallments(installments: List<LoanScheduleInstallmentEntity>)
+
+    @Query("SELECT * FROM loan_schedule_versions WHERE loan_id = :loanId ORDER BY version_number ASC")
+    suspend fun getScheduleVersionsForLoan(loanId: Long): List<LoanScheduleVersionEntity>
+
+    @Query("SELECT * FROM loan_schedule_versions WHERE loan_id = :loanId ORDER BY version_number ASC")
+    fun observeScheduleVersionsForLoan(loanId: Long): Flow<List<LoanScheduleVersionEntity>>
+
+    @Query("SELECT * FROM loan_schedule_versions WHERE loan_id = :loanId ORDER BY version_number DESC LIMIT 1")
+    suspend fun getLatestScheduleVersion(loanId: Long): LoanScheduleVersionEntity?
+
+    @Query("SELECT * FROM loan_schedule_installments WHERE schedule_version_id = :versionId ORDER BY month_index ASC")
+    suspend fun getInstallmentsForVersion(versionId: Long): List<LoanScheduleInstallmentEntity>
+
+    @Query("SELECT * FROM loan_schedule_installments WHERE schedule_version_id = :versionId ORDER BY month_index ASC")
+    fun observeInstallmentsForVersion(versionId: Long): Flow<List<LoanScheduleInstallmentEntity>>
 }

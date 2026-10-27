@@ -48,8 +48,12 @@ data class LoanEntity(
     val linkedBankAccountId: Long? = null,
     @ColumnInfo(name = "start_date_ms")
     val startDateMs: Long,
+    @ColumnInfo(name = "calculation_method")
+    val calculationMethod: String = "MONTHLY_REDUCING",
     @ColumnInfo(name = "is_active")
     val isActive: Boolean = true,
+    @ColumnInfo(name = "closed_at")
+    val closedAt: Long? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long
 )
