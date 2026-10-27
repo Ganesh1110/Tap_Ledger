@@ -2,6 +2,7 @@ package com.tapledger.ui.screens.loans
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,9 +53,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -138,15 +140,22 @@ fun LoanManagementScreen(
                 "Prepayment" to Icons.AutoMirrored.Filled.TrendingDown
             )
 
-            SecondaryTabRow(
+            ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
+                edgePadding = Spacing.md,
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
                 tabs.forEachIndexed { index, (title, icon) ->
                     Tab(
                         selected = state.selectedTab == index,
                         onClick = { viewModel.selectTab(index) },
-                        text = { Text(title, maxLines = 1) },
+                        text = {
+                            Text(
+                                text = title,
+                                maxLines = 1,
+                                fontWeight = if (state.selectedTab == index) FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
                         icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) }
                     )
                 }
@@ -380,6 +389,10 @@ private fun ActiveLoansTab(
                     }
                 }
             }
+
+            item {
+                Spacer(modifier = Modifier.height(Spacing.listBottomPadding))
+            }
         }
     }
 }
@@ -568,6 +581,8 @@ private fun LoanSetupAndAffordabilityTab(
         ) {
             Text("Create Loan Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
+
+        Spacer(modifier = Modifier.height(Spacing.listBottomPadding))
     }
 }
 
@@ -585,10 +600,11 @@ private fun AmortizationScheduleTab(
         )
     } else {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Loan Selector Chips
+            // Loan Selector Chips (Horizontally Scrollable)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = Spacing.md, vertical = Spacing.sm),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
@@ -649,6 +665,10 @@ private fun AmortizationScheduleTab(
                             }
                         }
                     }
+
+                    item {
+                        Spacer(modifier = Modifier.height(Spacing.listBottomPadding))
+                    }
                 }
             }
         }
@@ -684,9 +704,11 @@ private fun PrepaymentSimulatorTab(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Loan Selector Chips
+            // Loan Selector Chips (Horizontally Scrollable)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
                 loans.forEach { loan ->
@@ -695,6 +717,54 @@ private fun PrepaymentSimulatorTab(
                         onClick = { onSelectLoan(loan) },
                         label = { Text(loan.name) }
                     )
+                }
+            }
+
+            // Selected Loan Overview Context Banner
+            selectedLoan?.let { loan ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.md)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(loan.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            val ratePercent = loan.annualInterestRateBp / 100
+                            val rateFrac = loan.annualInterestRateBp % 100
+                            val rateFormatted = if (rateFrac == 0) "$ratePercent%" else "$ratePercent.$rateFrac%"
+                            Text(
+                                text = "$rateFormatted p.a.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(Spacing.xs))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Principal Amount", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(MoneyFormatter.formatPaiseToRupees(loan.principalPaise), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Current EMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("Tenure", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${loan.tenureMonths} Mo", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -712,12 +782,12 @@ private fun PrepaymentSimulatorTab(
             result?.let { sim ->
                 Text("Prepayment Impact Comparison", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
-                // Option 1: Reduce Tenure
+                // Option 1: Reduce Tenure (Recommended)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, IncomeGreen.copy(alpha = 0.6f))
+                    border = BorderStroke(1.5.dp, IncomeGreen.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Row(
@@ -725,84 +795,216 @@ private fun PrepaymentSimulatorTab(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Option 1: Reduce Tenure (Recommended)", fontWeight = FontWeight.Bold, color = IncomeGreen)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(IncomeGreen.copy(alpha = 0.15f))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            Text(
+                                text = "Option 1: Reduce Tenure",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = IncomeGreen,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = IncomeGreen.copy(alpha = 0.15f)
                             ) {
-                                Text("Max Interest Saved", color = IncomeGreen, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                Text(
+                                    text = "★ Best Savings",
+                                    color = IncomeGreen,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
                             }
                         }
 
                         Spacer(modifier = Modifier.height(Spacing.xs))
                         Text(
-                            text = "Keep EMI same at ${MoneyFormatter.formatPaiseToRupees(sim.originalEmiPaise)} and close loan earlier.",
+                            text = "Keeps your monthly EMI at ${MoneyFormatter.formatPaiseToRupees(sim.originalEmiPaise)} and helps you become debt-free faster.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Spacer(modifier = Modifier.height(Spacing.md))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                         ) {
-                            Column {
-                                Text("Months Saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("${sim.tenureOptionMonthsSaved} Months", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = IncomeGreen)
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = IncomeGreen.copy(alpha = 0.08f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(Spacing.sm),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    Text(
+                                        text = "Time Saved",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${sim.tenureOptionMonthsSaved} Months",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp,
+                                        color = IncomeGreen
+                                    )
+                                    Text(
+                                        text = "New tenure: ${sim.tenureOptionNewTenureMonths} mo",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("Interest Saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    MoneyFormatter.formatPaiseToRupees(sim.tenureOptionInterestSavedPaise),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = IncomeGreen
-                                )
+
+                            Surface(
+                                modifier = Modifier.weight(1.2f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = IncomeGreen.copy(alpha = 0.08f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(Spacing.sm),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    Text(
+                                        text = "Total Interest Saved",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = MoneyFormatter.formatPaiseToRupees(sim.tenureOptionInterestSavedPaise),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp,
+                                        color = IncomeGreen
+                                    )
+                                    Text(
+                                        text = "Direct cash savings",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                // Option 2: Reduce EMI
+                // Option 2: Reduce Monthly EMI
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
-                        Text("Option 2: Reduce Monthly EMI", fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Option 2: Reduce Monthly EMI",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = "Cashflow Relief",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(Spacing.xs))
                         Text(
-                            text = "Keep remaining tenure same at ${sim.originalRemainingTenureMonths} months and lower monthly cash outflow.",
+                            text = "Retains current tenure of ${sim.originalRemainingTenureMonths} months and lowers your regular monthly payout.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Spacer(modifier = Modifier.height(Spacing.md))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                         ) {
-                            Column {
-                                Text("New EMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(MoneyFormatter.formatPaiseToRupees(sim.emiOptionNewEmiPaise), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainer
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(Spacing.sm),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    Text(
+                                        text = "New Monthly EMI",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = MoneyFormatter.formatPaiseToRupees(sim.emiOptionNewEmiPaise),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Was ${MoneyFormatter.formatPaiseToRupees(sim.originalEmiPaise)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("Monthly Cashflow Saved", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    "${MoneyFormatter.formatPaiseToRupees(sim.emiOptionMonthlySavingsPaise)} / mo",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+
+                            Surface(
+                                modifier = Modifier.weight(1.2f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainer
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(Spacing.sm),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    Text(
+                                        text = "Monthly Relief",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${MoneyFormatter.formatPaiseToRupees(sim.emiOptionMonthlySavingsPaise)}/mo",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 17.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Saved ${MoneyFormatter.formatPaiseToRupees(sim.emiOptionInterestSavedPaise)} int.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(Spacing.listBottomPadding))
         }
     }
 }
