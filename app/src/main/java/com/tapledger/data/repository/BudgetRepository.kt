@@ -256,6 +256,47 @@ class BudgetRepository @Inject constructor(
 
     suspend fun getBudgetPeriod(periodId: Long): BudgetPeriodEntity? = budgetPeriodDao.getById(periodId)
 
+    suspend fun updatePeriodIncomeAndRebalance(periodId: Long, newIncomePaise: Long) {
+        transactionRunner.run {
+            val period = budgetPeriodDao.getById(periodId)
+                ?: throw IllegalArgumentException("Budget period #$periodId not found")
+            if (period.status == BudgetPeriodStatus.CLOSED) {
+                throw IllegalStateException("Cannot update income for a closed budget period")
+            }
+            val now = DateTimeUtils.nowEpochMillis()
+            budgetPeriodDao.update(
+                period.copy(
+                    incomePaise = newIncomePaise,
+                    updatedAt = now
+                )
+            )
+
+            // Rebalance existing allocations proportionally to the new income
+            val allocations = budgetAllocationDao.getAllocationsForPeriodSync(periodId)
+            val oldAllocatedTotal = allocations.sumOf { it.amountPaise }
+            if (oldAllocatedTotal > 0L) {
+                var remainingPaise = newIncomePaise
+                for (i in allocations.indices) {
+                    val alloc = allocations[i]
+                    val isLast = i == allocations.size - 1
+                    val newAllocPaise = if (isLast) {
+                        remainingPaise.coerceAtLeast(0L)
+                    } else {
+                        val computed = (alloc.amountPaise * newIncomePaise) / oldAllocatedTotal
+                        remainingPaise -= computed
+                        computed
+                    }
+                    budgetAllocationDao.update(
+                        alloc.copy(
+                            amountPaise = newAllocPaise,
+                            updatedAt = now
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     suspend fun createCategory(
         name: String,
         defaultBucket: BudgetBucket,

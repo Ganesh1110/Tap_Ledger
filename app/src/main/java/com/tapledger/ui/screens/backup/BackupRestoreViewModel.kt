@@ -3,7 +3,12 @@ package com.tapledger.ui.screens.backup
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tapledger.core.database.dao.AccountDao
+import com.tapledger.core.database.dao.CategoryDao
+import com.tapledger.core.database.dao.TransactionAllocationDao
+import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.data.backup.BackupManager
+import com.tapledger.data.export.CsvExporter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +43,11 @@ data class BackupUiState(
 class BackupRestoreViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val backupManager: BackupManager,
-    val mpinManager: com.tapledger.core.security.MpinManager
+    val mpinManager: com.tapledger.core.security.MpinManager,
+    private val transactionDao: TransactionDao,
+    private val accountDao: AccountDao,
+    private val transactionAllocationDao: TransactionAllocationDao,
+    private val categoryDao: CategoryDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(BackupUiState())
@@ -163,6 +172,40 @@ class BackupRestoreViewModel @Inject constructor(
             } else {
                 _uiState.value = _uiState.value.copy(
                     message = "Failed to erase data: ${result.exceptionOrNull()?.message}",
+                    isError = true
+                )
+            }
+        }
+    }
+
+    fun exportCsv() {
+        _uiState.value = _uiState.value.copy(message = null)
+        viewModelScope.launch {
+            try {
+                val transactions = transactionDao.getAllTransactionsSync()
+                val accounts = accountDao.getAllAccountsSync().associateBy { it.id }
+                val allocations = transactionAllocationDao.getAllTransactionAllocationsSync().groupBy { it.transactionId }
+                val categories = categoryDao.getAllCategoriesSync().associateBy { it.id }
+
+                val csvContent = CsvExporter.exportTransactionsToCsv(
+                    transactions = transactions,
+                    accountsMap = accounts,
+                    allocationsMap = allocations,
+                    categoriesMap = categories
+                )
+
+                val exportDir = File(context.filesDir, "exports").apply { mkdirs() }
+                val dateStr = java.time.LocalDate.now().toString()
+                val exportFile = File(exportDir, "tapledger_transactions_$dateStr.csv")
+                exportFile.writeText(csvContent)
+
+                _uiState.value = _uiState.value.copy(
+                    message = "Exported ${transactions.size} transactions to ${exportFile.name} (${exportFile.length()} bytes)",
+                    isError = false
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    message = "CSV export failed: ${e.message}",
                     isError = true
                 )
             }

@@ -132,6 +132,16 @@ class PendingInboxViewModel @Inject constructor(
         }
     }
 
+    fun restoreTransaction(transactionId: Long) {
+        viewModelScope.launch {
+            try {
+                transactionRepository.restoreTransaction(transactionId, "Restored via Undo")
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Failed to restore transaction"
+            }
+        }
+    }
+
     fun clearErrorMessage() {
         _errorMessage.value = null
     }

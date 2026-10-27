@@ -324,10 +324,14 @@ fun PendingInboxScreen(
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     viewModel.voidTransaction(tx.id)
                                     coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(
+                                        val result = snackbarHostState.showSnackbar(
                                             message = "Transaction ignored",
+                                            actionLabel = "Undo",
                                             duration = SnackbarDuration.Short
                                         )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            viewModel.restoreTransaction(tx.id)
+                                        }
                                     }
                                     true
                                 }
@@ -404,6 +408,16 @@ fun PendingInboxScreen(
                             onVoid = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 viewModel.voidTransaction(tx.id)
+                                coroutineScope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = "Transaction ignored",
+                                        actionLabel = "Undo",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        viewModel.restoreTransaction(tx.id)
+                                    }
+                                }
                             }
                         )
                     }

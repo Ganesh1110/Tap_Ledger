@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
@@ -572,6 +573,52 @@ fun DashboardScreen(
                                 pendingSpendPaise = state.pendingSpendPaise
                             )
                         }
+
+                        // 1.3. Planned vs Actual Income Re-plan Banner
+                        val periodIdForSync = state.currentPeriodId
+                        if (state.showIncomeDiscrepancyBanner && periodIdForSync != null) {
+                            Spacer(modifier = Modifier.height(Spacing.xs))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(Spacing.xs))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Income Discrepancy",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Planned ${MoneyFormatter.formatPaiseToRupees(state.plannedIncomePaise)} • Actual ${MoneyFormatter.formatPaiseToRupees(state.actualIncomePaise)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(Spacing.xs))
+                                    Button(
+                                        onClick = { viewModel.syncPlannedIncomeToActual(periodIdForSync, state.actualIncomePaise) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 2.dp)
+                                    ) {
+                                        Text("Re-plan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -632,6 +679,48 @@ fun DashboardScreen(
                             actionText = "Manage",
                             onActionClick = onNavigateToCategories
                         )
+                    }
+
+                    if (state.paceAlerts.isNotEmpty()) {
+                        item(key = "category_pace_alerts") {
+                            Column(
+                                modifier = Modifier.padding(bottom = Spacing.xs),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                state.paceAlerts.forEach { alert ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (alert.isExceeded) ExpenseRed.copy(alpha = 0.12f) else WarningAmber.copy(alpha = 0.12f)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = if (alert.isExceeded) Icons.Default.Error else Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = if (alert.isExceeded) ExpenseRed else WarningAmber,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(Spacing.xs))
+                                            Text(
+                                                text = if (alert.isExceeded) {
+                                                    "${alert.categoryName}: Exceeded budget (${alert.percentageUsed}%)"
+                                                } else {
+                                                    "${alert.categoryName}: ${alert.percentageUsed}% used with ${alert.daysRemaining} days left"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     items(
