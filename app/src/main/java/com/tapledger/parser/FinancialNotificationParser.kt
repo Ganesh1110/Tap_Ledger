@@ -104,8 +104,30 @@ object FinancialNotificationParser {
         // 3. Debit vs Credit vs Reversal detection
         val lower = combinedText.lowercase()
         val isReversal = lower.contains("reversed") || lower.contains("credited back") || lower.contains("refund")
-        val isCredit = lower.contains("credited") || lower.contains("credit") || lower.contains("deposited") || lower.contains("received") || lower.contains("added") || isReversal
-        val isDebit = lower.contains("debited") || lower.contains("debit") || lower.contains("spent") || lower.contains("paid") || lower.contains("payment") || lower.contains("withdrawn") || lower.contains("sent") || lower.contains("transferred") || lower.contains("purchase")
+        val isDebit = lower.contains("debited") ||
+            lower.contains("debit") ||
+            lower.contains("spent") ||
+            lower.contains("paid") ||
+            (lower.contains("payment") && !lower.contains("received")) ||
+            lower.contains("withdrawn") ||
+            lower.contains("sent") ||
+            lower.contains("transferred") ||
+            lower.contains("purchase")
+
+        // Disambiguate credit: phrases like "credit card" or "credit limit" should not falsely classify expenses as credits
+        val textWithoutCardMentions = lower
+            .replace("credit card", "")
+            .replace("credit limit", "")
+            .replace("credit line", "")
+
+        val isCredit = textWithoutCardMentions.contains("credited") ||
+            textWithoutCardMentions.contains("deposited") ||
+            textWithoutCardMentions.contains("received") ||
+            textWithoutCardMentions.contains("added") ||
+            textWithoutCardMentions.contains("credit to") ||
+            textWithoutCardMentions.contains("credit a/c") ||
+            (!lower.contains("credit card") && textWithoutCardMentions.contains("credit")) ||
+            isReversal
 
         if (!isCredit && !isDebit) {
             return null
@@ -168,6 +190,9 @@ object FinancialNotificationParser {
 
         val kind = when {
             isReversal -> TransactionKind.REFUND
+            isDebit && !isCredit -> TransactionKind.EXPENSE
+            isCredit && !isDebit -> TransactionKind.INCOME
+            isDebit -> TransactionKind.EXPENSE // Debit indicators ("spent", "paid", etc.) beat credit card mentions
             isCredit -> TransactionKind.INCOME
             else -> TransactionKind.EXPENSE
         }

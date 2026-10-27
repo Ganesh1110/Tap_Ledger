@@ -50,10 +50,18 @@ object CsvExporter {
     }
 
     private fun escapeCsv(value: String): String {
-        return if (value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r')) {
-            "\"" + value.replace("\"", "\"\"") + "\""
+        // Guard against CSV / spreadsheet formula injection (CWE-1236)
+        var sanitized = value
+        if (sanitized.isNotEmpty()) {
+            val firstChar = sanitized[0]
+            if (firstChar == '=' || firstChar == '+' || firstChar == '-' || firstChar == '@' || firstChar == '\t' || firstChar == '\r') {
+                sanitized = "'$sanitized"
+            }
+        }
+        return if (sanitized.contains(',') || sanitized.contains('"') || sanitized.contains('\n') || sanitized.contains('\r')) {
+            "\"" + sanitized.replace("\"", "\"\"") + "\""
         } else {
-            value
+            sanitized
         }
     }
 }

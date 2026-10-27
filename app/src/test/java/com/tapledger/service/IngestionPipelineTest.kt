@@ -892,7 +892,7 @@ class IngestionPipelineTest {
     }
 
     @Test
-    fun testIncomeAlert_withAttributedAccount_isAutoConfirmed() = runBlocking {
+    fun testIncomeAlert_withAttributedAccount_landsAsPendingForInboxReview() = runBlocking {
         val now = DateTimeUtils.nowEpochMillis()
         val event = NotificationEvent(
             packageName = "com.google.android.apps.messaging",
@@ -908,8 +908,42 @@ class IngestionPipelineTest {
         val tx = transactionDao.getById(success.transactionId)
         assertThat(tx).isNotNull()
         assertThat(tx!!.kind).isEqualTo(TransactionKind.INCOME)
-        assertThat(tx.status).isEqualTo(TransactionStatus.CONFIRMED)
+        assertThat(tx.status).isEqualTo(TransactionStatus.PENDING)
         assertThat(tx.accountId).isEqualTo(1L)
+    }
+
+    @Test
+    fun testIncomeAlert_flaggedDuplicate_remainsPendingInInbox() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        val existingTx = TransactionEntity(
+            id = 100L,
+            accountId = 1L,
+            kind = TransactionKind.INCOME,
+            direction = TransactionDirection.IN,
+            amountPaise = 75_000_00L,
+            occurredAt = now - 60_000L,
+            createdAt = now - 60_000L,
+            updatedAt = now - 60_000L,
+            status = TransactionStatus.PENDING,
+            source = TransactionSource.SMS,
+            sourceFingerprint = "existing_fp"
+        )
+        transactionDao.insert(existingTx)
+
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "HDFC Bank",
+            text = "Salary of Rs 75,000.00 credited to HDFC Bank A/C ending 1234 on 27-Oct-26",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        assertThat(result).isInstanceOf(IngestionResult.Success::class.java)
+        val success = result as IngestionResult.Success
+        val tx = transactionDao.getById(success.transactionId)
+        assertThat(tx).isNotNull()
+        assertThat(tx!!.status).isEqualTo(TransactionStatus.PENDING)
+        assertThat(tx.possibleDuplicateOfId).isEqualTo(100L)
     }
 
     @Test

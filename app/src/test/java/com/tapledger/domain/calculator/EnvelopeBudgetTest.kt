@@ -499,4 +499,61 @@ class EnvelopeBudgetTest {
         assertThat(seeded.bucketSnapshot).isEqualTo(BudgetBucket.SAVINGS)
         assertThat(budgetAllocationDao.getAllocationsForPeriodSync(1)).hasSize(3)
     }
+
+    @Test
+    fun testUpdatePeriodIncomeAndRebalance_protectsPinnedAndSpentAmounts_rebalancesPerBucket() {
+        runBlocking {
+            categoryDao.insert(CategoryEntity(id = 10, name = "Rent", defaultBucket = BudgetBucket.NEEDS, defaultSortOrder = 1, isPinned = true))
+            categoryDao.insert(CategoryEntity(id = 11, name = "Groceries", defaultBucket = BudgetBucket.NEEDS, defaultSortOrder = 2, isPinned = false))
+
+            val rentAlloc = BudgetAllocationEntity(
+                id = 10,
+                budgetPeriodId = 1,
+                categoryId = 10,
+                categoryNameSnapshot = "Rent",
+                bucketSnapshot = BudgetBucket.NEEDS,
+                sortOrderSnapshot = 1,
+                advancePolicySnapshot = AdvancePolicy.EXPIRE,
+                amountPaise = 20_000_00L,
+                createdAt = 1000L,
+                updatedAt = 1000L
+            )
+            val grocAlloc = BudgetAllocationEntity(
+                id = 11,
+                budgetPeriodId = 1,
+                categoryId = 11,
+                categoryNameSnapshot = "Groceries",
+                bucketSnapshot = BudgetBucket.NEEDS,
+                sortOrderSnapshot = 2,
+                advancePolicySnapshot = AdvancePolicy.EXPIRE,
+                amountPaise = 5_000_00L,
+                createdAt = 1000L,
+                updatedAt = 1000L
+            )
+            budgetAllocationDao.insertAll(listOf(rentAlloc, grocAlloc))
+
+            // Income increases to ₹60,000 (Needs target pool becomes 50% = ₹30,000)
+            budgetRepository.updatePeriodIncomeAndRebalance(periodId = 1, newIncomePaise = 60_000_00L)
+
+            val updatedPeriod = budgetPeriodDao.getById(1)
+            assertThat(updatedPeriod?.incomePaise).isEqualTo(60_000_00L)
+
+            val updatedRent = budgetAllocationDao.getAllocation(1, 10L)
+            val updatedGroceries = budgetAllocationDao.getAllocation(1, 11L)
+
+            // Rent is pinned, so it MUST stay protected at ₹20,000
+            assertThat(updatedRent?.amountPaise).isEqualTo(20_000_00L)
+            // Groceries is flexible, so it absorbs the increase to reach the ₹30,000 Needs limit
+            assertThat(updatedGroceries?.amountPaise).isEqualTo(10_000_00L)
+            assertThat(updatedRent!!.amountPaise + updatedGroceries!!.amountPaise).isEqualTo(30_000_00L)
+
+            // Closed period rejection check
+            budgetPeriodDao.storage[1L] = updatedPeriod!!.copy(status = BudgetPeriodStatus.CLOSED)
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking {
+                    budgetRepository.updatePeriodIncomeAndRebalance(1, 70_000_00L)
+                }
+            }
+        }
+    }
 }

@@ -63,7 +63,8 @@ object BudgetCalculator {
         adjustments: List<BudgetAdjustmentEntity>,
         transactions: List<TransactionEntity>,
         allocationsForTransactions: List<TransactionAllocationEntity>,
-        advances: List<AdvanceLedgerEntity> = emptyList()
+        advances: List<AdvanceLedgerEntity> = emptyList(),
+        categoryNames: Map<Long, String> = emptyMap()
     ): BudgetPeriodSummary {
         val txMap = transactions.associateBy { it.id }
 
@@ -163,11 +164,12 @@ object BudgetCalculator {
             val isSavingsCategory = savingsContribPerCategory.containsKey(orphanCatId) ||
                 savingsWithdrawPerCategory.containsKey(orphanCatId)
             val bucket = if (isSavingsCategory) BudgetBucket.SAVINGS else BudgetBucket.WANTS
+            val name = categoryNames[orphanCatId] ?: "Unbudgeted Category #$orphanCatId"
             BudgetAllocationEntity(
                 id = -orphanCatId,
                 budgetPeriodId = period.id,
                 categoryId = orphanCatId,
-                categoryNameSnapshot = "Unbudgeted Category #$orphanCatId",
+                categoryNameSnapshot = name,
                 bucketSnapshot = bucket,
                 sortOrderSnapshot = Int.MAX_VALUE,
                 advancePolicySnapshot = AdvancePolicy.CARRY_TO_ADVANCE,

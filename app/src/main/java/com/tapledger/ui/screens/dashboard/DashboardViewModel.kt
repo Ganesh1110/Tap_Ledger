@@ -142,12 +142,15 @@ class DashboardViewModel @Inject constructor(
             val periodTxs = transactionDao.getTransactionsInPeriod(period.startAt, period.endAt)
             val periodAllocations = transactionAllocationDao.getAllocationsInPeriod(period.startAt, period.endAt)
 
+            val allCategories = categoryDao.getAllCategoriesSync()
+            val categoryNames = allCategories.associate { it.id to it.name }
             val budgetSummary = BudgetCalculator.calculateBudgetPeriodSummary(
                 period = period,
                 allocations = allocations,
                 adjustments = adjustments,
                 transactions = periodTxs,
-                allocationsForTransactions = periodAllocations
+                allocationsForTransactions = periodAllocations,
+                categoryNames = categoryNames
             )
 
             val accounts = accountRepository.getAllAccountsSync()
@@ -386,7 +389,10 @@ class DashboardViewModel @Inject constructor(
 
             val plannedIncome = period.incomePaise
             val actualIncome = budgetSummary.actualIncomePaise
-            val showDiscrepancy = period.status == BudgetPeriodStatus.OPEN && actualIncome > 0L && actualIncome != plannedIncome
+            // Only prompt to re-plan if actual differs from planned by more than 5% tolerance
+            val diffPaise = kotlin.math.abs(actualIncome - plannedIncome)
+            val hasSignificantDiscrepancy = plannedIncome > 0L && (diffPaise * 100L > plannedIncome * 5L)
+            val showDiscrepancy = period.status == BudgetPeriodStatus.OPEN && actualIncome > 0L && hasSignificantDiscrepancy
 
             val paceAlerts = if (isClosed || !safeDailySpend.isPeriodActive) {
                 emptyList()

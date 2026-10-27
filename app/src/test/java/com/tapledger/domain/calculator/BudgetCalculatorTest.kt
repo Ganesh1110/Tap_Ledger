@@ -217,5 +217,18 @@ class BudgetCalculatorTest {
         assertThat(orphanSummary!!.baseBudgetPaise).isEqualTo(0L)
         assertThat(orphanSummary.netSpentPaise).isEqualTo(750_00L)
         assertThat(orphanSummary.isExceeded).isTrue()
+        assertThat(orphanSummary.allocation.categoryNameSnapshot).isEqualTo("Unbudgeted Category #99")
+
+        // Also verify when real category name is provided via categoryNames map
+        val namedSummary = BudgetCalculator.calculateBudgetPeriodSummary(
+            period = period,
+            allocations = listOf(foodAllocation),
+            adjustments = emptyList(),
+            transactions = listOf(orphanTx),
+            allocationsForTransactions = listOf(orphanAlloc),
+            categoryNames = mapOf(99L to "Medical Emergency")
+        )
+        val namedOrphan = namedSummary.categorySummaries.find { it.allocation.categoryId == 99L }
+        assertThat(namedOrphan?.allocation?.categoryNameSnapshot).isEqualTo("Medical Emergency")
     }
 }

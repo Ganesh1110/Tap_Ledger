@@ -6,6 +6,8 @@ import com.tapledger.core.database.dao.BudgetAdjustmentDao
 import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.BudgetPeriodDao
 import com.tapledger.core.database.dao.CategoryDao
+import com.tapledger.core.database.dao.TransactionAllocationDao
+import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.database.entity.BudgetAdjustmentEntity
 import com.tapledger.core.database.entity.BudgetAllocationEntity
 import com.tapledger.core.database.entity.BudgetPeriodEntity
@@ -13,6 +15,9 @@ import com.tapledger.core.database.entity.CategoryEntity
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.BudgetPeriodStatus
 import com.tapledger.core.util.DateTimeUtils
+import com.tapledger.domain.calculator.BucketRebalanceCalculator
+import com.tapledger.domain.calculator.BudgetCalculator
+import com.tapledger.domain.calculator.CategoryRebalanceInput
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,8 +28,17 @@ class BudgetRepository @Inject constructor(
     private val categoryDao: CategoryDao,
     private val budgetPeriodDao: BudgetPeriodDao,
     private val budgetAllocationDao: BudgetAllocationDao,
-    private val budgetAdjustmentDao: BudgetAdjustmentDao
+    private val budgetAdjustmentDao: BudgetAdjustmentDao,
+    private val transactionDao: TransactionDao? = null,
+    private val transactionAllocationDao: TransactionAllocationDao? = null
 ) {
+    constructor(
+        transactionRunner: com.tapledger.core.database.DatabaseTransactionRunner,
+        categoryDao: CategoryDao,
+        budgetPeriodDao: BudgetPeriodDao,
+        budgetAllocationDao: BudgetAllocationDao,
+        budgetAdjustmentDao: BudgetAdjustmentDao
+    ) : this(transactionRunner, categoryDao, budgetPeriodDao, budgetAllocationDao, budgetAdjustmentDao, null, null)
     fun getAllActiveCategories(): Flow<List<CategoryEntity>> = categoryDao.getAllActiveCategories()
 
     suspend fun getAllCategoriesSync(): List<CategoryEntity> = categoryDao.getAllCategoriesSync()
@@ -271,27 +285,61 @@ class BudgetRepository @Inject constructor(
                 )
             )
 
-            // Rebalance existing allocations proportionally to the new income
+            // Rebalance 50/30/20 buckets using BucketRebalanceCalculator.
+            // This protects pinned categories, protects already-spent paise, and enforces clean rupee units without drift.
             val allocations = budgetAllocationDao.getAllocationsForPeriodSync(periodId)
-            val oldAllocatedTotal = allocations.sumOf { it.amountPaise }
-            if (oldAllocatedTotal > 0L) {
-                var remainingPaise = newIncomePaise
-                for (i in allocations.indices) {
-                    val alloc = allocations[i]
-                    val isLast = i == allocations.size - 1
-                    val newAllocPaise = if (isLast) {
-                        remainingPaise.coerceAtLeast(0L)
-                    } else {
-                        val computed = (alloc.amountPaise * newIncomePaise) / oldAllocatedTotal
-                        remainingPaise -= computed
-                        computed
-                    }
-                    budgetAllocationDao.update(
-                        alloc.copy(
-                            amountPaise = newAllocPaise,
-                            updatedAt = now
-                        )
+            val categories = categoryDao.getAllCategoriesSync().associateBy { it.id }
+
+            val spentPerCategory = mutableMapOf<Long, Long>()
+            if (transactionAllocationDao != null) {
+                val periodAllocations = transactionAllocationDao.getAllocationsInPeriod(period.startAt, period.endAt)
+                for (ta in periodAllocations) {
+                    spentPerCategory[ta.categoryId] = (spentPerCategory[ta.categoryId] ?: 0L) + ta.amountPaise
+                }
+            }
+
+            val targets = BudgetCalculator.calculate503020Targets(newIncomePaise)
+            val allocsByBucket = allocations.groupBy { it.bucketSnapshot }
+
+            for (bucket in listOf(BudgetBucket.NEEDS, BudgetBucket.WANTS, BudgetBucket.SAVINGS)) {
+                val bucketAllocs = allocsByBucket[bucket] ?: emptyList()
+                if (bucketAllocs.isEmpty()) continue
+
+                val bucketTargetPaise = when (bucket) {
+                    BudgetBucket.NEEDS -> targets.needsPaise
+                    BudgetBucket.WANTS -> targets.wantsPaise
+                    BudgetBucket.SAVINGS -> targets.savingsPaise
+                }
+
+                val inputs = bucketAllocs.map { alloc ->
+                    val cat = categories[alloc.categoryId]
+                    CategoryRebalanceInput(
+                        categoryId = alloc.categoryId,
+                        currentAllocationPaise = alloc.amountPaise,
+                        spentPaise = spentPerCategory[alloc.categoryId] ?: 0L,
+                        isPinned = cat?.isPinned ?: false
                     )
+                }
+
+                val rebalanceResult = BucketRebalanceCalculator.calculateRebalance(
+                    targetBucketLimitPaise = bucketTargetPaise,
+                    targetCategoryAllocationPaise = 0L,
+                    existingCategories = inputs,
+                    roundToRupees = true
+                )
+
+                if (rebalanceResult.success) {
+                    for (alloc in bucketAllocs) {
+                        val newAmount = rebalanceResult.adjustments[alloc.categoryId]
+                        if (newAmount != null && newAmount != alloc.amountPaise) {
+                            budgetAllocationDao.update(
+                                alloc.copy(
+                                    amountPaise = newAmount,
+                                    updatedAt = now
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }

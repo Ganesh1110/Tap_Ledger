@@ -62,15 +62,16 @@ class CategoryManagementViewModel @Inject constructor(
                     val periodAllocations = transactionAllocationDao.getAllocationsInPeriod(period.startAt, period.endAt)
                     val advances = advanceLedgerDao.getAppliedToPeriodSync(period.id)
 
+                    val categoryNames = categories.associate { it.id to it.name }
                     val summary = BudgetCalculator.calculateBudgetPeriodSummary(
                         period = period,
                         allocations = allocations,
                         adjustments = adjustments,
                         transactions = periodTxs,
-                        allocationsForTransactions = periodAllocations
+                        allocationsForTransactions = periodAllocations,
+                        categoryNames = categoryNames
                     )
 
-                    val categoryNames = categories.associate { it.id to it.name }
                     val advPosMap = advances.filter { it.direction == AdvanceDirection.POSITIVE }
                         .groupBy { it.categoryId }
                         .mapValues { (_, list) -> list.sumOf { it.amountPaise } }

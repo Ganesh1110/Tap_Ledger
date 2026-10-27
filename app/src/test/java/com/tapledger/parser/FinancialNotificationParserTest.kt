@@ -69,6 +69,51 @@ class FinancialNotificationParserTest {
     }
 
     @Test
+    fun parse_creditCardSpend_isClassifiedAsExpenseNotIncome() {
+        // Specifically verifies that "Credit Card" phrase does not get falsely parsed as credit/income
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "HDFC Bank Alert",
+            text = "₹2,000 spent on your HDFC Credit Card ending in 9012 at AMAZON on 08-OCT-26",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+        assertThat(result).isNotNull()
+        result?.let {
+            assertThat(it.amountPaise).isEqualTo(200000L)
+            assertThat(it.accountLast4).isEqualTo("9012")
+            assertThat(it.merchantRaw).isEqualTo("AMAZON")
+            assertThat(it.kind).isEqualTo(TransactionKind.EXPENSE)
+        }
+
+        val axisEvent = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "Axis Bank",
+            text = "Rs. 1,500.00 debited from Axis Bank Credit Card ending 4321 for Flipkart",
+            postTime = 1728374000000L
+        )
+        val axisResult = FinancialNotificationParser.parse(axisEvent)
+        assertThat(axisResult).isNotNull()
+        assertThat(axisResult!!.kind).isEqualTo(TransactionKind.EXPENSE)
+    }
+
+    @Test
+    fun parse_creditCardPaymentReceived_isClassifiedAsIncome() {
+        val event = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "SBI Card",
+            text = "Payment of Rs. 10,000.00 received for your SBI Credit Card ending 1234 on 08-OCT-26",
+            postTime = 1728374000000L
+        )
+
+        val result = FinancialNotificationParser.parse(event)
+        assertThat(result).isNotNull()
+        assertThat(result!!.kind).isEqualTo(TransactionKind.INCOME)
+        assertThat(result.amountPaise).isEqualTo(1000000L)
+    }
+
+    @Test
     fun parse_gpayPayment_extractsAmountAndMerchant() {
         val event = NotificationEvent(
             packageName = "com.google.android.apps.nbu.paisa.user",

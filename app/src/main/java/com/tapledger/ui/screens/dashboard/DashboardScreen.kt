@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Badge
@@ -68,10 +70,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -208,6 +212,10 @@ fun DashboardScreen(
             var showSettingsMenu by remember { mutableStateOf(false) }
             var showTransferPlanSheet by remember { mutableStateOf(false) }
             var showGoalAllocationSheet by remember { mutableStateOf(false) }
+            var showReplanDialog by remember { mutableStateOf(false) }
+            var replanIncomeInput by remember(state.actualIncomePaise) {
+                mutableStateOf(if (state.actualIncomePaise > 0L) (state.actualIncomePaise / 100L).toString() else "")
+            }
             var lastMovedInfo by remember { mutableStateOf<MovedTransferInfo?>(null) }
 
             LazyColumn(
@@ -610,7 +618,10 @@ fun DashboardScreen(
                                     }
                                     Spacer(modifier = Modifier.width(Spacing.xs))
                                     Button(
-                                        onClick = { viewModel.syncPlannedIncomeToActual(periodIdForSync, state.actualIncomePaise) },
+                                        onClick = {
+                                            replanIncomeInput = if (state.actualIncomePaise > 0L) (state.actualIncomePaise / 100L).toString() else ""
+                                            showReplanDialog = true
+                                        },
                                         shape = RoundedCornerShape(8.dp),
                                         contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 2.dp)
                                     ) {
@@ -835,6 +846,58 @@ fun DashboardScreen(
                     onDismissRequest = {
                         showGoalAllocationSheet = false
                         lastMovedInfo = null
+                    }
+                )
+            }
+
+            val currentPeriodId = state.currentPeriodId
+            if (showReplanDialog && currentPeriodId != null) {
+                AlertDialog(
+                    onDismissRequest = { showReplanDialog = false },
+                    title = { Text("Re-plan Monthly Budget", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            Text(
+                                text = "Current planned income is ${MoneyFormatter.formatPaiseToRupees(state.plannedIncomePaise)}, but confirmed income so far is ${MoneyFormatter.formatPaiseToRupees(state.actualIncomePaise)}.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "This will update your planned income and safely rebalance your 50/30/20 category envelopes while strictly protecting fixed bills and already-spent amounts.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = replanIncomeInput,
+                                onValueChange = { input ->
+                                    if (input.all { it.isDigit() }) {
+                                        replanIncomeInput = input
+                                    }
+                                },
+                                label = { Text("Target Planned Income (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val rupees = replanIncomeInput.toLongOrNull() ?: (state.actualIncomePaise / 100L)
+                                val paise = rupees * 100L
+                                if (paise > 0L) {
+                                    viewModel.syncPlannedIncomeToActual(currentPeriodId, paise)
+                                }
+                                showReplanDialog = false
+                            }
+                        ) {
+                            Text("Confirm & Rebalance")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showReplanDialog = false }) {
+                            Text("Cancel")
+                        }
                     }
                 )
             }
