@@ -72,14 +72,14 @@ fun DashboardHeroRingCard(
                 val nwText = if (netWorthPaise != null) ". Net worth: ${MoneyFormatter.formatPaiseToRupees(netWorthPaise)}" else ""
                 contentDescription = summaryLine + nwText
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(20.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        shape = RoundedCornerShape(14.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.lg)
+                .padding(Spacing.md)
         ) {
             // Summary Line & Net Worth Header
             Row(
@@ -89,14 +89,16 @@ fun DashboardHeroRingCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Net Worth",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "NET WORTH",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp,
+                        letterSpacing = 0.8.sp
                     )
                     if (netWorthPaise != null) {
                         MoneyText(
                             amountPaise = netWorthPaise,
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                             semantic = if (netWorthPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
                         )
                     }
@@ -117,38 +119,38 @@ fun DashboardHeroRingCard(
                         imageVector = statusIcon,
                         contentDescription = null,
                         tint = statusColor,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
 
             if (heroRingState is ChartState.Data) {
-                Spacer(modifier = Modifier.height(Spacing.xs))
+                Spacer(modifier = Modifier.height(Spacing.xxs))
                 Text(
                     text = summaryLine,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            Spacer(modifier = Modifier.height(Spacing.md))
+            Spacer(modifier = Modifier.height(Spacing.sm))
 
             when (heroRingState) {
                 is ChartState.Loading -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(180.dp),
+                            .height(160.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(32.dp))
                     }
                 }
                 is ChartState.Empty -> {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(140.dp),
+                            .height(130.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -163,7 +165,7 @@ fun DashboardHeroRingCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(Spacing.md),
+                            .padding(Spacing.sm),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -182,8 +184,8 @@ fun DashboardHeroRingCard(
                         else -> MaterialTheme.colorScheme.primary
                     }
 
-                    val ringSize = if (isCompact) 140.dp else 150.dp
-                    val ringStroke = if (isCompact) 18.dp else 14.dp
+                    val ringSize = if (isCompact) 130.dp else 140.dp
+                    val ringStroke = if (isCompact) 16.dp else 13.dp
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -201,18 +203,23 @@ fun DashboardHeroRingCard(
                             centerContent = {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        text = if (data.remainingPaise >= 0L) "Left" else "Over",
+                                        text = if (data.remainingPaise >= 0L) "LEFT" else "OVER",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.sp,
+                                        letterSpacing = 0.5.sp
                                     )
                                     Text(
                                         text = MoneyFormatter.formatCompactIndian(data.remainingPaise),
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                            fontWeight = FontWeight.Bold
+                                        ),
                                         color = if (data.remainingPaise >= 0L) IncomeGreen else ExpenseRed
                                     )
                                     Text(
                                         text = "${ChartMath.formatBasisPoints(data.percentageBp)} used",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                         color = ringColor,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -229,26 +236,30 @@ fun DashboardHeroRingCard(
                         ) {
                             Column {
                                 Text(
-                                    text = "Spent (Needs + Wants)",
+                                    text = "SPENT",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp,
+                                    letterSpacing = 0.6.sp
                                 )
                                 Text(
                                     text = MoneyFormatter.formatPaiseToRupees(data.spentPaise),
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
 
                             Column {
                                 Text(
-                                    text = "Budget Target",
+                                    text = "BUDGET TARGET",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp,
+                                    letterSpacing = 0.6.sp
                                 )
                                 Text(
                                     text = MoneyFormatter.formatPaiseToRupees(data.budgetPaise),
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Normal),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Normal),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -265,7 +276,7 @@ fun DashboardHeroRingCard(
                                         imageVector = Icons.Default.Error,
                                         contentDescription = "Budget Exceeded",
                                         tint = ExpenseRed,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
                                 } else if (data.isWarning) {
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -273,16 +284,18 @@ fun DashboardHeroRingCard(
                                         imageVector = Icons.Default.Warning,
                                         contentDescription = "Budget Warning",
                                         tint = WarningAmber,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
                                 }
                             }
 
                             if (data.paceBp != null) {
                                 Text(
-                                    text = "Pace: ${ChartMath.formatBasisPoints(data.paceBp)}",
+                                    text = "PACE: ${ChartMath.formatBasisPoints(data.paceBp)}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp,
+                                    letterSpacing = 0.4.sp
                                 )
                             }
                         }

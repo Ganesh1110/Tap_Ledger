@@ -159,7 +159,13 @@ fun LoanManagementScreen(
             ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
                 edgePadding = Spacing.md,
-                containerColor = MaterialTheme.colorScheme.surface
+                containerColor = MaterialTheme.colorScheme.surface,
+                divider = {
+                    androidx.compose.material3.HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    )
+                }
             ) {
                 tabs.forEachIndexed { index, (title, icon) ->
                     Tab(
@@ -169,10 +175,13 @@ fun LoanManagementScreen(
                             Text(
                                 text = title,
                                 maxLines = 1,
-                                fontWeight = if (state.selectedTab == index) FontWeight.Bold else FontWeight.Medium
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (state.selectedTab == index) FontWeight.Bold else FontWeight.Medium,
+                                    letterSpacing = 0.3.sp
+                                )
                             )
                         },
-                        icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) }
                     )
                 }
             }
@@ -551,9 +560,9 @@ private fun ActiveLoansTab(
                 val isSettled = !loan.isActive || loan.principalPaise == 0L
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Row(
@@ -562,7 +571,14 @@ private fun ActiveLoansTab(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(loan.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = loan.name,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp
+                                    )
+                                )
                                 val ratePercent = loan.annualInterestRateBp / 100
                                 val rateFrac = loan.annualInterestRateBp % 100
                                 val rateFormatted = if (rateFrac == 0) "$ratePercent%" else "$ratePercent.$rateFrac%"
@@ -575,18 +591,19 @@ private fun ActiveLoansTab(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .clip(RoundedCornerShape(6.dp))
                                         .background(
                                             if (isSettled) IncomeGreen.copy(alpha = 0.12f)
-                                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            else MaterialTheme.colorScheme.surfaceContainerHigh
                                         )
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
-                                        text = if (isSettled) "Settled" else "Due on ${loan.emiDay}th",
+                                        text = if (isSettled) "SETTLED" else "DUE ON ${loan.emiDay}TH",
                                         color = if (isSettled) IncomeGreen else MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp
+                                        fontSize = 10.sp,
+                                        letterSpacing = 0.5.sp
                                     )
                                 }
                                 IconButton(
@@ -610,11 +627,27 @@ private fun ActiveLoansTab(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text("Remaining Principal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(MoneyFormatter.formatPaiseToRupees(loan.principalPaise), fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = "REMAINING PRINCIPAL",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp,
+                                    letterSpacing = 0.6.sp
+                                )
+                                Text(
+                                    text = MoneyFormatter.formatPaiseToRupees(loan.principalPaise),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text("Monthly EMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = "MONTHLY EMI",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 9.sp,
+                                    letterSpacing = 0.6.sp
+                                )
                                 Text(
                                     text = if (isSettled) "₹0" else MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise),
                                     fontWeight = FontWeight.Bold,
@@ -633,7 +666,7 @@ private fun ActiveLoansTab(
                             OutlinedButton(
                                 onClick = { onSelectForSchedule(loan) },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text("Schedule")
                             }
@@ -641,14 +674,14 @@ private fun ActiveLoansTab(
                                 OutlinedButton(
                                     onClick = { onForeclose(loan) },
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text("Foreclose")
                                 }
                                 Button(
                                     onClick = { onPayEmi(loan) },
                                     modifier = Modifier.weight(1.2f),
-                                    shape = RoundedCornerShape(12.dp)
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text("Pay EMI")
                                 }
@@ -948,35 +981,36 @@ private fun AmortizationScheduleTab(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(6.dp))
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Mo", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.width(28.dp))
-                            Text("EMI", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                            Text("Principal", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                            Text("Interest", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                            Text("Balance", fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Text("MO", fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
+                            Text("EMI", fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            Text("PRINCIPAL", fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            Text("INTEREST", fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                            Text("BALANCE", fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                         }
                     }
 
                     items(schedule, key = { it.monthIndex }) { inst ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                            shape = RoundedCornerShape(8.dp)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(6.dp)
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("#${inst.monthIndex}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(28.dp))
+                                Text("#${inst.monthIndex}", fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
                                 Text(MoneyFormatter.formatPaiseToRupees(inst.emiPaise), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                                Text(MoneyFormatter.formatPaiseToRupees(inst.principalPaidPaise), fontSize = 11.sp, color = IncomeGreen, modifier = Modifier.weight(1f))
-                                Text(MoneyFormatter.formatPaiseToRupees(inst.interestPaise), fontSize = 11.sp, color = ExpenseRed, modifier = Modifier.weight(1f))
+                                Text(MoneyFormatter.formatPaiseToRupees(inst.principalPaidPaise), fontSize = 11.sp, color = IncomeGreen, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                Text(MoneyFormatter.formatPaiseToRupees(inst.interestPaise), fontSize = 11.sp, color = ExpenseRed, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                                 Text(MoneyFormatter.formatPaiseToRupees(inst.closingPrincipalPaise), fontSize = 11.sp, modifier = Modifier.weight(1f))
                             }
                         }
@@ -1164,9 +1198,9 @@ private fun PrepaymentSimulatorTab(
                 // Option 1: Reduce Tenure (Recommended)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.5.dp, IncomeGreen.copy(alpha = 0.5f))
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.5.dp, IncomeGreen.copy(alpha = 0.6f))
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Row(
@@ -1176,13 +1210,15 @@ private fun PrepaymentSimulatorTab(
                         ) {
                             Text(
                                 text = "Option 1: Reduce Tenure",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                    fontWeight = FontWeight.Bold
+                                ),
                                 color = IncomeGreen,
                                 modifier = Modifier.weight(1f)
                             )
                             Surface(
-                                shape = RoundedCornerShape(20.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = IncomeGreen.copy(alpha = 0.15f)
                             ) {
                                 Text(
@@ -1191,7 +1227,7 @@ private fun PrepaymentSimulatorTab(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
                                     maxLines = 1,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
                         }
@@ -1211,7 +1247,7 @@ private fun PrepaymentSimulatorTab(
                         ) {
                             Surface(
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = IncomeGreen.copy(alpha = 0.08f)
                             ) {
                                 Column(
@@ -1219,15 +1255,17 @@ private fun PrepaymentSimulatorTab(
                                     horizontalAlignment = Alignment.Start
                                 ) {
                                     Text(
-                                        text = "Time Saved",
+                                        text = "TIME SAVED",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.sp,
+                                        letterSpacing = 0.5.sp
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = "${sim.tenureOptionMonthsSaved} Months",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp,
+                                        fontSize = 16.sp,
                                         color = IncomeGreen
                                     )
                                     Text(
@@ -1241,7 +1279,7 @@ private fun PrepaymentSimulatorTab(
 
                             Surface(
                                 modifier = Modifier.weight(1.2f),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = IncomeGreen.copy(alpha = 0.08f)
                             ) {
                                 Column(
@@ -1249,15 +1287,17 @@ private fun PrepaymentSimulatorTab(
                                     horizontalAlignment = Alignment.Start
                                 ) {
                                     Text(
-                                        text = "Total Interest Saved",
+                                        text = "TOTAL INTEREST SAVED",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.sp,
+                                        letterSpacing = 0.5.sp
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = MoneyFormatter.formatPaiseToRupees(sim.tenureOptionInterestSavedPaise),
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp,
+                                        fontSize = 16.sp,
                                         color = IncomeGreen
                                     )
                                     Text(
@@ -1274,7 +1314,7 @@ private fun PrepaymentSimulatorTab(
                         Button(
                             onClick = { selectedLoan?.let { onApplyPrepayment(it, PrepaymentStrategy.REDUCE_TENURE) } },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Apply Strategy 1 (Reduce Tenure)")
                         }
@@ -1284,9 +1324,9 @@ private fun PrepaymentSimulatorTab(
                 // Option 2: Reduce Monthly EMI
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Row(
@@ -1296,12 +1336,14 @@ private fun PrepaymentSimulatorTab(
                         ) {
                             Text(
                                 text = "Option 2: Reduce Monthly EMI",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                    fontWeight = FontWeight.Bold
+                                ),
                                 modifier = Modifier.weight(1f)
                             )
                             Surface(
-                                shape = RoundedCornerShape(20.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                             ) {
                                 Text(
@@ -1310,7 +1352,7 @@ private fun PrepaymentSimulatorTab(
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 11.sp,
                                     maxLines = 1,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
                         }
@@ -1330,7 +1372,7 @@ private fun PrepaymentSimulatorTab(
                         ) {
                             Surface(
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainer
                             ) {
                                 Column(
@@ -1338,15 +1380,17 @@ private fun PrepaymentSimulatorTab(
                                     horizontalAlignment = Alignment.Start
                                 ) {
                                     Text(
-                                        text = "New Monthly EMI",
+                                        text = "NEW MONTHLY EMI",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.sp,
+                                        letterSpacing = 0.5.sp
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = MoneyFormatter.formatPaiseToRupees(sim.emiOptionNewEmiPaise),
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp,
+                                        fontSize = 16.sp,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(
@@ -1360,7 +1404,7 @@ private fun PrepaymentSimulatorTab(
 
                             Surface(
                                 modifier = Modifier.weight(1.2f),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainer
                             ) {
                                 Column(
@@ -1368,15 +1412,17 @@ private fun PrepaymentSimulatorTab(
                                     horizontalAlignment = Alignment.Start
                                 ) {
                                     Text(
-                                        text = "Monthly Relief",
+                                        text = "MONTHLY RELIEF",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 9.sp,
+                                        letterSpacing = 0.5.sp
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = "${MoneyFormatter.formatPaiseToRupees(sim.emiOptionMonthlySavingsPaise)}/mo",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp,
+                                        fontSize = 16.sp,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
@@ -1393,7 +1439,7 @@ private fun PrepaymentSimulatorTab(
                         Button(
                             onClick = { selectedLoan?.let { onApplyPrepayment(it, PrepaymentStrategy.REDUCE_EMI) } },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("Apply Strategy 2 (Reduce Monthly EMI)")
                         }

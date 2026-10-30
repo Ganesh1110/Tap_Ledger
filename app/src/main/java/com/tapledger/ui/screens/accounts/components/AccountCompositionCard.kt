@@ -87,9 +87,9 @@ fun AccountCompositionCard(
             .semantics(mergeDescendants = true) {
                 contentDescription = summaryLine
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(20.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -98,8 +98,10 @@ fun AccountCompositionCard(
         ) {
             Text(
                 text = "Account Composition",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                    fontWeight = FontWeight.Bold
+                )
             )
             Text(
                 text = summaryLine,

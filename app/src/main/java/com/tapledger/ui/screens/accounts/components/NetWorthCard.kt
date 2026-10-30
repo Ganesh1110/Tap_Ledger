@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.ui.charts.builder.NetWorthRange
 import com.tapledger.ui.charts.model.ChartState
@@ -114,9 +115,9 @@ fun NetWorthCard(
             .semantics(mergeDescendants = true) {
                 contentDescription = summaryLine
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        shape = RoundedCornerShape(20.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -133,13 +134,17 @@ fun NetWorthCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "TOTAL NET WORTH",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp,
+                                fontSize = 10.sp
+                            ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         if (scrubbedPoint != null) {
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.primaryContainer
                             ) {
                                 Text(
@@ -156,7 +161,7 @@ fun NetWorthCard(
                             val badgeColor = if (isPos) IncomeGreen else if (isNeg) ExpenseRed else MaterialTheme.colorScheme.onSurfaceVariant
                             val badgeBg = if (isPos) IncomeGreen.copy(alpha = 0.12f) else if (isNeg) ExpenseRed.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHigh
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(4.dp),
                                 color = badgeBg
                             ) {
                                 val text = if (isPos) "▲ +${MoneyFormatter.formatPaiseToRupees(trendInfo)}"
@@ -164,7 +169,7 @@ fun NetWorthCard(
                                 else "— Stable"
                                 Text(
                                     text = text,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                     color = badgeColor,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -175,7 +180,7 @@ fun NetWorthCard(
                     Spacer(modifier = Modifier.height(2.dp))
                     MoneyText(
                         amountPaise = activeNetWorth,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                         semantic = if (activeNetWorth >= 0) MoneySemantic.Income else MoneySemantic.Expense
                     )
                     Text(
@@ -208,8 +213,9 @@ fun NetWorthCard(
 
             // 2. Structured Breakdown: Assets & Liabilities in a Clean Balanced Capsule
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -223,18 +229,20 @@ fun NetWorthCard(
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
-                                .background(IncomeGreen, RoundedCornerShape(4.dp))
+                                .background(IncomeGreen, RoundedCornerShape(2.dp))
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Column {
                             Text(
-                                text = "Total Assets",
+                                text = "TOTAL ASSETS",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.sp,
+                                letterSpacing = 0.5.sp
                             )
                             MoneyText(
                                 amountPaise = activeAssets,
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 semantic = MoneySemantic.Income
                             )
                         }
@@ -244,19 +252,21 @@ fun NetWorthCard(
                         modifier = Modifier
                             .width(1.dp)
                             .height(24.dp)
-                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                     )
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "Total Liabilities",
+                                text = "TOTAL LIABILITIES",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.sp,
+                                letterSpacing = 0.5.sp
                             )
                             MoneyText(
                                 amountPaise = activeLiabilities,
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 semantic = MoneySemantic.Debt,
                                 indicator = MoneyIndicator.Owed
                             )
@@ -265,7 +275,7 @@ fun NetWorthCard(
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
-                                .background(ExpenseRed, RoundedCornerShape(4.dp))
+                                .background(ExpenseRed, RoundedCornerShape(2.dp))
                         )
                     }
                 }

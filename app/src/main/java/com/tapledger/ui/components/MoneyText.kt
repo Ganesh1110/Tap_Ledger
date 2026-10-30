@@ -94,7 +94,6 @@ fun MoneyText(
     }
 
     val tabularStyle = style.copy(
-        fontFamily = FontFamily.Default,
         fontFeatureSettings = "tnum"
     )
 
@@ -115,8 +114,9 @@ fun MoneyText(
             Text(
                 text = tag,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 10.sp
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.5.sp
                 ),
                 color = resolvedColor
             )

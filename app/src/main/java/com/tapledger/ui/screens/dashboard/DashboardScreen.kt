@@ -128,6 +128,7 @@ import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
+import com.tapledger.ui.theme.WarningAmberContainer
 
 private data class MovedTransferInfo(
     val movedPaise: Long,
@@ -260,8 +261,11 @@ fun DashboardScreen(
                                 ) { (year, month) ->
                                     Text(
                                         text = DateTimeUtils.formatMonthYear(year, month),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleLarge.copy(
+                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 22.sp
+                                        ),
                                         modifier = Modifier.padding(horizontal = Spacing.xs)
                                     )
                                 }
@@ -396,11 +400,11 @@ fun DashboardScreen(
                             Surface(
                                 onClick = onNavigateToPending,
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerLow,
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (state.pendingCount > 0) WarningAmberContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface,
                                 border = BorderStroke(
                                     1.dp,
-                                    if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                    if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
                                 )
                             ) {
                                 Row(
@@ -417,7 +421,7 @@ fun DashboardScreen(
                                             Icon(
                                                 Icons.Default.NotificationsActive,
                                                 contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
+                                                modifier = Modifier.size(15.dp),
                                                 tint = WarningAmber
                                             )
                                         }
@@ -425,14 +429,16 @@ fun DashboardScreen(
                                         Icon(
                                             Icons.Default.NotificationsActive,
                                             contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = Modifier.size(15.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "Pending",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            letterSpacing = 0.3.sp
+                                        ),
                                         fontWeight = if (state.pendingCount > 0) FontWeight.Bold else FontWeight.Medium,
                                         color = if (state.pendingCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1
@@ -444,9 +450,9 @@ fun DashboardScreen(
                             Surface(
                                 onClick = onNavigateToMonthClose,
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
@@ -456,13 +462,15 @@ fun DashboardScreen(
                                     Icon(
                                         imageVector = Icons.Default.PointOfSale,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
+                                        modifier = Modifier.size(15.dp),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = "Close Month",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            letterSpacing = 0.3.sp
+                                        ),
                                         fontWeight = FontWeight.Medium,
                                         maxLines = 1
                                     )
@@ -473,9 +481,9 @@ fun DashboardScreen(
                             Surface(
                                 onClick = onNavigateToInsights,
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
@@ -485,13 +493,15 @@ fun DashboardScreen(
                                     Icon(
                                         imageVector = Icons.Default.PieChart,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
+                                        modifier = Modifier.size(15.dp),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = "Insights",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            letterSpacing = 0.3.sp
+                                        ),
                                         fontWeight = FontWeight.Medium,
                                         maxLines = 1
                                     )

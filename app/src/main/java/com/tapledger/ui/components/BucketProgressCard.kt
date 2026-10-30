@@ -82,12 +82,12 @@ fun BucketProgressCard(
             .semantics(mergeDescendants = true) {
                 contentDescription = "$bucketTitle: spent ${spentPaise / 100} of ${allocatedPaise / 100} rupees, status: $statusText"
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             1.dp,
-            if (isOverBudget) ExpenseRed.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            if (isOverBudget) ExpenseRed.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -101,8 +101,10 @@ fun BucketProgressCard(
             ) {
                 Text(
                     text = bucketTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                        fontWeight = FontWeight.Bold
+                    )
                 )
 
                 Row(
@@ -112,13 +114,14 @@ fun BucketProgressCard(
                     Icon(
                         imageVector = statusIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(13.dp),
                         tint = progressColor
                     )
                     Text(
-                        text = statusText,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        text = statusText.uppercase(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
                         color = progressColor
                     )
                 }
@@ -130,11 +133,11 @@ fun BucketProgressCard(
             ProgressBarRender(
                 percentageBp = percentageBp,
                 color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
             )
 
             Spacer(modifier = Modifier.height(Spacing.sm))
@@ -146,9 +149,11 @@ fun BucketProgressCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Spent: ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "SPENT ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        letterSpacing = 0.5.sp
                     )
                     MoneyText(
                         amountPaise = spentPaise,
@@ -156,9 +161,11 @@ fun BucketProgressCard(
                         semantic = MoneySemantic.Expense
                     )
                     Text(
-                        text = " of ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = " OF ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        letterSpacing = 0.5.sp
                     )
                     MoneyText(
                         amountPaise = allocatedPaise,
@@ -169,9 +176,11 @@ fun BucketProgressCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = if (remainingPaise >= 0) "Left: " else "Exceeded: ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = if (remainingPaise >= 0) "LEFT " else "OVER ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        letterSpacing = 0.5.sp
                     )
                     MoneyText(
                         amountPaise = kotlin.math.abs(remainingPaise),

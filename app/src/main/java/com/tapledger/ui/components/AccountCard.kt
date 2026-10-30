@@ -1,6 +1,7 @@
 package com.tapledger.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,16 +60,12 @@ fun AccountCard(
         AccountType.WALLET -> Icons.Default.Payments
     }
 
-    val containerColor = if (isCreditCard && summary.currentBalancePaise < 0) {
-        MaterialTheme.colorScheme.surfaceContainerLow
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerLow
-    }
+    val containerColor = MaterialTheme.colorScheme.surface
 
     val border = if (isCreditCard && summary.currentBalancePaise < 0) {
         BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.35f))
     } else {
-        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
     }
 
     Card(
@@ -77,12 +74,12 @@ fun AccountCard(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         border = border,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.md),
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -92,12 +89,11 @@ fun AccountCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .then(
-                            if (isCreditCard) {
-                                Modifier.clip(CircleShape)
-                            } else Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isCreditCard) ExpenseRedContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceContainerHigh
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -105,7 +101,7 @@ fun AccountCard(
                         imageVector = icon,
                         contentDescription = summary.account.type.name,
                         tint = if (isCreditCard) ExpenseRed else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -140,10 +136,11 @@ fun AccountCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (isLiability) "Outstanding" else "Available",
+                    text = if (isLiability) "OUTSTANDING" else "AVAILABLE",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp
+                    fontSize = 9.sp,
+                    letterSpacing = 0.6.sp
                 )
                 if (isLiability) {
                     if (summary.currentBalancePaise < 0 && onPayBill != null) {
@@ -151,6 +148,7 @@ fun AccountCard(
                         FilledTonalButton(
                             onClick = onPayBill,
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.height(26.dp)
                         ) {
                             Text(

@@ -1,6 +1,7 @@
 package com.tapledger.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -75,9 +76,10 @@ fun StatusBadge(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(6.dp))
             .background(containerColor)
-            .padding(horizontal = Spacing.xs, vertical = 2.dp)
+            .border(1.dp, contentColor.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+            .padding(horizontal = Spacing.xs, vertical = 3.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = "Status: $label"
             },
@@ -86,14 +88,15 @@ fun StatusBadge(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(11.dp),
             tint = contentColor
         )
         Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
+            text = label.uppercase(),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp,
             color = contentColor
         )
     }

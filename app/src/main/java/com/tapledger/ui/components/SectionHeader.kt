@@ -32,7 +32,7 @@ fun SectionHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = Spacing.xs),
+            .padding(top = Spacing.sm, bottom = Spacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -43,8 +43,11 @@ fun SectionHeader(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                ),
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (subtitle != null) {
@@ -57,10 +60,13 @@ fun SectionHeader(
         }
 
         if (actionText != null && onActionClick != null) {
+            val displayText = if (actionText.endsWith("→") || actionText.endsWith(">")) actionText else "$actionText →"
             Text(
-                text = actionText,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
+                text = displayText,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                ),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .clickable(
