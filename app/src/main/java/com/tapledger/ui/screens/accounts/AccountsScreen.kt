@@ -218,25 +218,16 @@ fun AccountsScreen(
                         items = assets,
                         key = { "asset_${it.account.id}" }
                     ) { summary ->
-                        Column {
-                            AccountCard(
-                                summary = summary,
-                                onClick = {
-                                    selectedSummary = summary
-                                    coroutineScope.launch {
-                                        isStartingLocked = viewModel.isOpeningBalanceLocked(summary.account)
-                                    }
-                                    showActionDialog = true
+                        AccountCard(
+                            summary = summary,
+                            onClick = {
+                                selectedSummary = summary
+                                coroutineScope.launch {
+                                    isStartingLocked = viewModel.isOpeningBalanceLocked(summary.account)
                                 }
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Tap for options • Correct balance or edit opening balance",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(start = Spacing.sm)
-                            )
-                        }
+                                showActionDialog = true
+                            }
+                        )
                     }
                 }
 
@@ -255,50 +246,35 @@ fun AccountsScreen(
                     ) { summary ->
                         val isCard = summary.account.type == AccountType.CREDIT_CARD
                         val hasOutstanding = summary.currentBalancePaise < 0
-                        Column {
-                            AccountCard(
-                                summary = summary,
-                                onClick = {
-                                    selectedSummary = summary
-                                    coroutineScope.launch {
-                                        isStartingLocked = viewModel.isOpeningBalanceLocked(summary.account)
-                                    }
-                                    showActionDialog = true
-                                },
-                                onPayBill = if (isCard && hasOutstanding) {
-                                    {
-                                        preselectedFromAccountId = null
-                                        preselectedToAccountId = summary.account.id
-                                        preselectedAmountRupees = (kotlin.math.abs(summary.currentBalancePaise) / 100).toString()
-                                        transferDialogTitle = "Pay ${summary.account.name} Bill"
-                                        prefilledTransferNote = "Credit Card Bill Payment"
-                                        showTransferDialog = true
-                                    }
-                                } else if (summary.account.type == AccountType.LOAN && hasOutstanding) {
-                                    {
-                                        preselectedFromAccountId = null
-                                        preselectedToAccountId = summary.account.id
-                                        preselectedAmountRupees = (kotlin.math.abs(summary.currentBalancePaise) / 100).toString()
-                                        transferDialogTitle = "Pay ${summary.account.name} EMI"
-                                        prefilledTransferNote = "Loan EMI Payment"
-                                        showTransferDialog = true
-                                    }
-                                } else null
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (isCard && hasOutstanding) {
-                                    "Tap 'Pay Bill' to clear dues from Bank • Tap card for options"
-                                } else if (summary.account.type == AccountType.LOAN && hasOutstanding) {
-                                    "Tap 'Pay EMI' to record EMI payment • Tap card for options"
-                                } else {
-                                    "Tap for options • Correct balance or edit opening balance"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.padding(start = Spacing.sm)
-                            )
-                        }
+                        AccountCard(
+                            summary = summary,
+                            onClick = {
+                                selectedSummary = summary
+                                coroutineScope.launch {
+                                    isStartingLocked = viewModel.isOpeningBalanceLocked(summary.account)
+                                }
+                                showActionDialog = true
+                            },
+                            onPayBill = if (isCard && hasOutstanding) {
+                                {
+                                    preselectedFromAccountId = null
+                                    preselectedToAccountId = summary.account.id
+                                    preselectedAmountRupees = (kotlin.math.abs(summary.currentBalancePaise) / 100).toString()
+                                    transferDialogTitle = "Pay ${summary.account.name} Bill"
+                                    prefilledTransferNote = "Credit Card Bill Payment"
+                                    showTransferDialog = true
+                                }
+                            } else if (summary.account.type == AccountType.LOAN && hasOutstanding) {
+                                {
+                                    preselectedFromAccountId = null
+                                    preselectedToAccountId = summary.account.id
+                                    preselectedAmountRupees = (kotlin.math.abs(summary.currentBalancePaise) / 100).toString()
+                                    transferDialogTitle = "Pay ${summary.account.name} EMI"
+                                    prefilledTransferNote = "Loan EMI Payment"
+                                    showTransferDialog = true
+                                }
+                            } else null
+                        )
                     }
                 }
             }

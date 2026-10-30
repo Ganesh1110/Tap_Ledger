@@ -1,6 +1,7 @@
 package com.tapledger.ui.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -8,7 +9,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -23,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -46,8 +50,9 @@ data class BottomNavItem(
 val BOTTOM_NAV_ITEMS = listOf(
     BottomNavItem(Screen.Dashboard.route, "Home", Icons.Default.AccountBalanceWallet),
     BottomNavItem(Screen.Transactions.route, "Transactions", Icons.AutoMirrored.Filled.ReceiptLong),
-    BottomNavItem(Screen.CategoryManagement.route, "Budget", Icons.Default.PieChart),
-    BottomNavItem(Screen.Accounts.route, "Accounts", Icons.Default.AccountBalance)
+    BottomNavItem(Screen.Accounts.route, "Accounts", Icons.Default.AccountBalance),
+    BottomNavItem(Screen.Loans.route, "Loans", Icons.Default.Payments),
+    BottomNavItem(Screen.Insights.route, "Insights", Icons.Default.PieChart)
 )
 
 @Composable
@@ -154,36 +159,46 @@ fun MainScaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (isPrimaryDestination && !isKeyboardOpen) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ) {
-                    BOTTOM_NAV_ITEMS.forEach { item ->
-                        val selected = currentRoute == item.route
-                        NavigationBarItem(
-                            selected = selected,
-                            alwaysShowLabel = true,
-                            onClick = {
-                                if (currentRoute != item.route) {
-                                    navController.navigate(item.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
+                Column {
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    )
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ) {
+                        BOTTOM_NAV_ITEMS.forEach { item ->
+                            val selected = currentRoute == item.route
+                            NavigationBarItem(
+                                selected = selected,
+                                alwaysShowLabel = true,
+                                onClick = {
+                                    if (currentRoute != item.route) {
+                                        navController.navigate(item.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
                                     }
+                                },
+                                icon = { Icon(item.icon, contentDescription = item.title) },
+                                label = {
+                                    Text(
+                                        text = item.title,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontSize = 10.sp,
+                                            fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium,
+                                            letterSpacing = 0.2.sp
+                                        )
+                                    )
                                 }
-                            },
-                            icon = { Icon(item.icon, contentDescription = item.title) },
-                            label = {
-                                Text(
-                                    text = item.title,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp)
-                                )
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }

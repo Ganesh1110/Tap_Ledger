@@ -1,5 +1,6 @@
 package com.tapledger.ui.screens.saving
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -540,9 +541,10 @@ private fun GoalCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        shape = RoundedCornerShape(14.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
@@ -555,13 +557,15 @@ private fun GoalCard(
                 percentageUsedBp = summary.progressBp,
                 ringColor = ringColor,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                size = 64.dp,
+                size = 60.dp,
                 strokeWidth = 6.dp,
                 centerContent = {
                     Text(
                         text = "$percentInt%",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFeatureSettings = "tnum"
+                        )
                     )
                 }
             )
@@ -576,8 +580,10 @@ private fun GoalCard(
                 ) {
                     Text(
                         text = goal.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                            fontWeight = FontWeight.Bold
+                        ),
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     Surface(
@@ -586,7 +592,10 @@ private fun GoalCard(
                     ) {
                         Text(
                             text = "P${goal.priority}",
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp
+                            ),
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
@@ -595,9 +604,11 @@ private fun GoalCard(
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = "${MoneyFormatter.formatPaiseToRupees(summary.balancePaise)} / ${MoneyFormatter.formatPaiseToRupees(goal.targetPaise)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                    text = "${MoneyFormatter.formatPaiseToRupees(summary.balancePaise)} of ${MoneyFormatter.formatPaiseToRupees(goal.targetPaise)}",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontFeatureSettings = "tnum"
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))

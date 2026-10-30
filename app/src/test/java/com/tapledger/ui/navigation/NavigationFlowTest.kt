@@ -7,30 +7,33 @@ class NavigationFlowTest {
 
     @Test
     fun testNavigationGraph() {
-        // 1. Verify 4 Core Pillars in Bottom Navigation per Flow.md §15
+        // 1. Verify 5 Core Pillars in Bottom Navigation
         val bottomNavRoutes = BOTTOM_NAV_ITEMS.map { it.route }
         assertThat(bottomNavRoutes).containsExactly(
             Screen.Dashboard.route,
             Screen.Transactions.route,
-            Screen.CategoryManagement.route,
-            Screen.Accounts.route
+            Screen.Accounts.route,
+            Screen.Loans.route,
+            Screen.Insights.route
         ).inOrder()
 
         val bottomNavTitles = BOTTOM_NAV_ITEMS.map { it.title }
         assertThat(bottomNavTitles).containsExactly(
             "Home",
             "Transactions",
-            "Budget",
-            "Accounts"
+            "Accounts",
+            "Loans",
+            "Insights"
         ).inOrder()
 
-        // 2. Verify all 11 sub-screens and workflow destinations exist per Flow.md §15
+        // 2. Verify all workflow destinations exist
         val screens = listOf(
             Screen.Dashboard,
             Screen.Transactions,
             Screen.ManualEntry,
             Screen.PendingInbox,
             Screen.Accounts,
+            Screen.Loans,
             Screen.BackupRestore,
             Screen.Setup,
             Screen.CategoryManagement,
@@ -45,6 +48,7 @@ class NavigationFlowTest {
         assertThat(routes).contains("manual_entry")
         assertThat(routes).contains("pending_inbox")
         assertThat(routes).contains("accounts")
+        assertThat(routes).contains("loans")
         assertThat(routes).contains("backup_restore")
         assertThat(routes).contains("setup")
         assertThat(routes).contains("categories")

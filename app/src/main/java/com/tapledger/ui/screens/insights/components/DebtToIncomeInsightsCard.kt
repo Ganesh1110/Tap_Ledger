@@ -58,9 +58,9 @@ fun DebtToIncomeInsightsCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
     ) {
         Column(
             modifier = Modifier
@@ -131,31 +131,36 @@ fun DebtToIncomeInsightsCard(
             // Two Hero Stat Blocks
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
                 // Metric 1: DTI
                 Card(
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.padding(Spacing.sm)) {
                         Text(
-                            text = "Debt-to-Income",
+                            text = "DEBT-TO-INCOME",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.sp,
+                            letterSpacing = 0.5.sp
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = dtiFormatted,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                fontWeight = FontWeight.Bold
+                            ),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "${MoneyFormatter.formatPaiseToRupees(totalMonthlyDebtPaise)} / mo",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "${MoneyFormatter.formatPaiseToRupees(totalMonthlyDebtPaise)}/mo",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -164,20 +169,25 @@ fun DebtToIncomeInsightsCard(
                 // Metric 2: Total Interest Paid
                 Card(
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 ) {
                     Column(modifier = Modifier.padding(Spacing.sm)) {
                         Text(
-                            text = "Total Interest Paid",
+                            text = "TOTAL INTEREST PAID",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 9.sp,
+                            letterSpacing = 0.5.sp
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = MoneyFormatter.formatPaiseToRupees(totalInterestPaidPaise),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                                fontWeight = FontWeight.Bold
+                            ),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(2.dp))

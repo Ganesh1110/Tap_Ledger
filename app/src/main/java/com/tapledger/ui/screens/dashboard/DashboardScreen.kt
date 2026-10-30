@@ -391,120 +391,175 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(Spacing.xs))
 
-                        // Quick Actions (Fixed row that doesn't clip)
-                        Row(
+                        // Quick-Action Modular Grid (2x2 Grid)
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                         ) {
-                            // 1. Pending Button
-                            Surface(
-                                onClick = onNavigateToPending,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (state.pendingCount > 0) WarningAmberContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
-                                )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                // 1. Pending Inbox Tile
+                                Surface(
+                                    onClick = onNavigateToPending,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (state.pendingCount > 0) WarningAmberContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                                    )
                                 ) {
-                                    if (state.pendingCount > 0) {
-                                        BadgedBox(
-                                            badge = {
-                                                Badge { Text("${state.pendingCount}") }
-                                            }
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerHigh),
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(
-                                                Icons.Default.NotificationsActive,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(15.dp),
-                                                tint = WarningAmber
+                                            if (state.pendingCount > 0) {
+                                                BadgedBox(badge = { Badge { Text("${state.pendingCount}") } }) {
+                                                    Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp), tint = WarningAmber)
+                                                }
+                                            } else {
+                                                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(Spacing.xs))
+                                        Column {
+                                            Text(
+                                                text = "Pending",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp)
+                                            )
+                                            Text(
+                                                text = if (state.pendingCount > 0) "${state.pendingCount} to review" else "All caught up",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
                                             )
                                         }
-                                    } else {
-                                        Icon(
-                                            Icons.Default.NotificationsActive,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(15.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                        )
                                     }
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Pending",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            letterSpacing = 0.3.sp
-                                        ),
-                                        fontWeight = if (state.pendingCount > 0) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (state.pendingCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
-                                    )
+                                }
+
+                                // 2. Add Entry Tile
+                                Surface(
+                                    onClick = onNavigateToManualEntry,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                        Spacer(modifier = Modifier.width(Spacing.xs))
+                                        Column {
+                                            Text(
+                                                text = "Add Entry",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp)
+                                            )
+                                            Text(
+                                                text = "Quick record",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
-                            // 2. Close Month Button
-                            Surface(
-                                onClick = onNavigateToMonthClose,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                // 3. Savings Tile
+                                Surface(
+                                    onClick = onNavigateToSavings,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PointOfSale,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(15.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Close Month",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            letterSpacing = 0.3.sp
-                                        ),
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Savings, contentDescription = null, modifier = Modifier.size(16.dp), tint = IncomeGreen)
+                                        }
+                                        Spacer(modifier = Modifier.width(Spacing.xs))
+                                        Column {
+                                            Text(
+                                                text = "Savings",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp)
+                                            )
+                                            Text(
+                                                text = "Goals & targets",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
                                 }
-                            }
 
-                            // 4. Insights Button
-                            Surface(
-                                onClick = onNavigateToInsights,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                // 4. Close Month Tile
+                                Surface(
+                                    onClick = onNavigateToMonthClose,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.PieChart,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(15.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Insights",
-                                        style = MaterialTheme.typography.labelMedium.copy(
-                                            letterSpacing = 0.3.sp
-                                        ),
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.PointOfSale, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                        Spacer(modifier = Modifier.width(Spacing.xs))
+                                        Column {
+                                            Text(
+                                                text = "Close Month",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp)
+                                            )
+                                            Text(
+                                                text = "Surplus transfer",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
