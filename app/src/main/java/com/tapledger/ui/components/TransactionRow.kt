@@ -65,9 +65,9 @@ fun TransactionRow(
     val displayAmountPaise = if (isIncome) tx.amountPaise else -tx.amountPaise
 
     val containerColor = when (tx.status) {
-        TransactionStatus.VOIDED -> MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.5f)
-        TransactionStatus.PENDING -> MaterialTheme.colorScheme.surfaceContainerLow
-        else -> MaterialTheme.colorScheme.surface
+        TransactionStatus.VOIDED -> MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+        TransactionStatus.PENDING -> MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.80f)
+        else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
     }
 
     Card(
@@ -75,8 +75,8 @@ fun TransactionRow(
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-        shape = RoundedCornerShape(10.dp)
+        border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f)),
+        shape = RoundedCornerShape(14.dp)
     ) {
         Row(
             modifier = Modifier

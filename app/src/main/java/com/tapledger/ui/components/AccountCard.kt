@@ -60,12 +60,12 @@ fun AccountCard(
         AccountType.WALLET -> Icons.Default.Payments
     }
 
-    val containerColor = MaterialTheme.colorScheme.surface
+    val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
 
     val border = if (isCreditCard && summary.currentBalancePaise < 0) {
         BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.35f))
     } else {
-        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+        BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f))
     }
 
     Card(
@@ -74,7 +74,7 @@ fun AccountCard(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         border = border,
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
             modifier = Modifier
@@ -89,11 +89,11 @@ fun AccountCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(
-                            if (isCreditCard) ExpenseRedContainer.copy(alpha = 0.5f)
-                            else MaterialTheme.colorScheme.surfaceContainerHigh
+                            if (isCreditCard) ExpenseRedContainer.copy(alpha = 0.6f)
+                            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -101,7 +101,7 @@ fun AccountCard(
                         imageVector = icon,
                         contentDescription = summary.account.type.name,
                         tint = if (isCreditCard) ExpenseRed else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
 

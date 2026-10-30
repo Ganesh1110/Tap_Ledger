@@ -110,6 +110,7 @@ fun AccountsScreen(
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             LargeTopAppBar(
                 title = {
@@ -142,8 +143,8 @@ fun AccountsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                    scrolledContainerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f)
                 ),
                 scrollBehavior = scrollBehavior
             )

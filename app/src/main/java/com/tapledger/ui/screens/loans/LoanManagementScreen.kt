@@ -139,7 +139,7 @@ fun LoanManagementScreen(
                         Icon(imageVector = Icons.Default.Tune, contentDescription = "Loan Settings")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f))
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -159,11 +159,11 @@ fun LoanManagementScreen(
             ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
                 edgePadding = Spacing.md,
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f),
                 divider = {
                     androidx.compose.material3.HorizontalDivider(
                         thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f)
                     )
                 }
             ) {
@@ -560,9 +560,10 @@ private fun ActiveLoansTab(
                 val isSettled = !loan.isActive || loan.principalPaise == 0L
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.88f)),
+                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Row(
@@ -574,7 +575,6 @@ private fun ActiveLoansTab(
                                 Text(
                                     text = loan.name,
                                     style = MaterialTheme.typography.titleMedium.copy(
-                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 18.sp
                                     )
@@ -1198,9 +1198,10 @@ private fun PrepaymentSimulatorTab(
                 // Option 1: Reduce Tenure (Recommended)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.5.dp, IncomeGreen.copy(alpha = 0.6f))
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.88f)),
+                    border = BorderStroke(1.5.dp, IncomeGreen.copy(alpha = 0.6f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Row(
@@ -1211,7 +1212,6 @@ private fun PrepaymentSimulatorTab(
                             Text(
                                 text = "Option 1: Reduce Tenure",
                                 style = MaterialTheme.typography.titleMedium.copy(
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                                     fontWeight = FontWeight.Bold
                                 ),
                                 color = IncomeGreen,
@@ -1324,9 +1324,10 @@ private fun PrepaymentSimulatorTab(
                 // Option 2: Reduce Monthly EMI
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.88f)),
+                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(Spacing.md)) {
                         Row(
@@ -1337,7 +1338,6 @@ private fun PrepaymentSimulatorTab(
                             Text(
                                 text = "Option 2: Reduce Monthly EMI",
                                 style = MaterialTheme.typography.titleMedium.copy(
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                                     fontWeight = FontWeight.Bold
                                 ),
                                 modifier = Modifier.weight(1f)

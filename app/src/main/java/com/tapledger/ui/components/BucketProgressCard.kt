@@ -82,12 +82,12 @@ fun BucketProgressCard(
             .semantics(mergeDescendants = true) {
                 contentDescription = "$bucketTitle: spent ${spentPaise / 100} of ${allocatedPaise / 100} rupees, status: $statusText"
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)),
         border = BorderStroke(
             1.dp,
-            if (isOverBudget) ExpenseRed.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+            if (isOverBudget) ExpenseRed.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f)
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -102,7 +102,6 @@ fun BucketProgressCard(
                 Text(
                     text = bucketTitle,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                         fontWeight = FontWeight.Bold
                     )
                 )

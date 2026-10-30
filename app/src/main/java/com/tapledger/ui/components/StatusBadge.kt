@@ -76,9 +76,9 @@ fun StatusBadge(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(containerColor)
-            .border(1.dp, contentColor.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+            .border(1.dp, contentColor.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
             .padding(horizontal = Spacing.xs, vertical = 3.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = "Status: $label"

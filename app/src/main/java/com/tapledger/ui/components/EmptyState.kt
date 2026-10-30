@@ -47,8 +47,8 @@ fun EmptyState(
         Box(
             modifier = Modifier
                 .size(64.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -62,7 +62,6 @@ fun EmptyState(
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium.copy(
-                fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             ),
@@ -80,7 +79,7 @@ fun EmptyState(
             Spacer(modifier = Modifier.height(Spacing.md))
             Button(
                 onClick = onActionClick,
-                shape = RoundedCornerShape(8.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Text(actionLabel)
             }

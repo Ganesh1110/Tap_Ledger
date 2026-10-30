@@ -8,56 +8,56 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Editorial Typography for TapLedger.
+ * Modern Gradient Glass Light Typography for TapLedger.
  *
- * Combines authoritative Serif headlines and mastheads (for editorial distinction and financial weight)
- * with sharp, proportional system sans and tabular figures (tnum) for numeric stability and clean data legibility.
+ * Uses crisp, modern sans-serif typography with strong structural weights, tight tracking,
+ * and tabular figures (tnum) for financial numeric precision across translucent glass surfaces.
  */
 private val defaultPlatformStyle = PlatformTextStyle(includeFontPadding = false)
 
 val Typography = Typography(
     displayLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
-        fontWeight = FontWeight.Normal,
-        fontSize = 52.sp,
-        lineHeight = 60.sp,
-        letterSpacing = (-0.5).sp,
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 48.sp,
+        lineHeight = 56.sp,
+        letterSpacing = (-1.0).sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),
     headlineLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
-        lineHeight = 40.sp,
-        letterSpacing = (-0.25).sp,
+        lineHeight = 38.sp,
+        letterSpacing = (-0.5).sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),
     headlineMedium = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 26.sp,
-        lineHeight = 34.sp,
-        letterSpacing = (-0.15).sp,
+        fontSize = 24.sp,
+        lineHeight = 30.sp,
+        letterSpacing = (-0.3).sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),
     headlineSmall = TextStyle(
-        fontFamily = FontFamily.Serif,
+        fontFamily = FontFamily.Default,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp,
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
+        letterSpacing = (-0.2).sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),
     titleLarge = TextStyle(
-        fontFamily = FontFamily.Serif,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        lineHeight = 26.sp,
-        letterSpacing = 0.sp,
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        lineHeight = 24.sp,
+        letterSpacing = (-0.1).sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),
@@ -65,8 +65,8 @@ val Typography = Typography(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.SemiBold,
         fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.15.sp,
+        lineHeight = 22.sp,
+        letterSpacing = 0.sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),
@@ -75,16 +75,16 @@ val Typography = Typography(
         fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
         lineHeight = 20.sp,
-        letterSpacing = 0.1.sp,
+        letterSpacing = 0.sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.25.sp,
+        fontSize = 15.sp,
+        lineHeight = 22.sp,
+        letterSpacing = 0.15.sp,
         fontFeatureSettings = "tnum",
         platformStyle = defaultPlatformStyle
     ),

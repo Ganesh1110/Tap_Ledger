@@ -46,8 +46,8 @@ fun ErrorState(
         Box(
             modifier = Modifier
                 .size(64.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(ExpenseRedContainer.copy(alpha = 0.5f)),
+                .clip(RoundedCornerShape(16.dp))
+                .background(ExpenseRedContainer.copy(alpha = 0.6f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -61,7 +61,6 @@ fun ErrorState(
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium.copy(
-                fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             ),
@@ -79,7 +78,7 @@ fun ErrorState(
             Spacer(modifier = Modifier.height(Spacing.md))
             Button(
                 onClick = onRetry,
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error
                 )

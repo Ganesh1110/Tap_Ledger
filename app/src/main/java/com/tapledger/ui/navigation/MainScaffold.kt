@@ -1,5 +1,6 @@
 package com.tapledger.ui.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -16,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -155,17 +157,20 @@ fun MainScaffold(
     val isKeyboardOpen = isKeyboardVisible()
 
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(com.tapledger.ui.theme.RadiantAppCanvasGradient),
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (isPrimaryDestination && !isKeyboardOpen) {
                 Column {
                     HorizontalDivider(
                         thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f)
                     )
                     NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface
+                        containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.92f)
                     ) {
                         BOTTOM_NAV_ITEMS.forEach { item ->
                             val selected = currentRoute == item.route
@@ -183,6 +188,13 @@ fun MainScaffold(
                                         }
                                     }
                                 },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = com.tapledger.ui.theme.GlassPrimary,
+                                    selectedTextColor = com.tapledger.ui.theme.GlassPrimary,
+                                    indicatorColor = com.tapledger.ui.theme.GlassPrimaryContainer.copy(alpha = 0.85f),
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
                                 icon = { Icon(item.icon, contentDescription = item.title) },
                                 label = {
                                     Text(

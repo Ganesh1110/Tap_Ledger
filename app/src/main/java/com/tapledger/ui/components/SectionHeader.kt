@@ -44,9 +44,9 @@ fun SectionHeader(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
+                    fontSize = 17.sp,
+                    letterSpacing = (-0.2).sp
                 ),
                 color = MaterialTheme.colorScheme.onSurface
             )

@@ -126,6 +126,7 @@ import com.tapledger.ui.screens.dashboard.components.SafeDailySpendPill
 import com.tapledger.ui.screens.dashboard.components.TransferPlanCard
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
+import com.tapledger.ui.theme.IncomeGreenContainer
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
 import com.tapledger.ui.theme.WarningAmberContainer
@@ -262,9 +263,9 @@ fun DashboardScreen(
                                     Text(
                                         text = DateTimeUtils.formatMonthYear(year, month),
                                         style = MaterialTheme.typography.titleLarge.copy(
-                                            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 22.sp
+                                            fontSize = 21.sp,
+                                            letterSpacing = (-0.3).sp
                                         ),
                                         modifier = Modifier.padding(horizontal = Spacing.xs)
                                     )
@@ -391,7 +392,7 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(Spacing.xs))
 
-                        // Quick-Action Modular Grid (2x2 Grid)
+                        // Quick-Action Modular Grid (2x2 Glass Grid)
                         Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(Spacing.xs)
@@ -404,11 +405,11 @@ fun DashboardScreen(
                                 Surface(
                                     onClick = onNavigateToPending,
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (state.pendingCount > 0) WarningAmberContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = if (state.pendingCount > 0) WarningAmberContainer.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
                                     border = BorderStroke(
                                         1.dp,
-                                        if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                                        if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f)
                                     )
                                 ) {
                                     Row(
@@ -417,9 +418,9 @@ fun DashboardScreen(
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerHigh),
+                                                .size(34.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             if (state.pendingCount > 0) {
@@ -427,7 +428,7 @@ fun DashboardScreen(
                                                     Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp), tint = WarningAmber)
                                                 }
                                             } else {
-                                                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(Spacing.xs))
@@ -450,9 +451,9 @@ fun DashboardScreen(
                                 Surface(
                                     onClick = onNavigateToManualEntry,
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f))
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
@@ -460,12 +461,12 @@ fun DashboardScreen(
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                                .size(34.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                                         }
                                         Spacer(modifier = Modifier.width(Spacing.xs))
                                         Column {
@@ -492,9 +493,9 @@ fun DashboardScreen(
                                 Surface(
                                     onClick = onNavigateToSavings,
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f))
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
@@ -502,12 +503,12 @@ fun DashboardScreen(
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                                .size(34.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(IncomeGreenContainer.copy(alpha = 0.6f)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(Icons.Default.Savings, contentDescription = null, modifier = Modifier.size(16.dp), tint = IncomeGreen)
+                                            Icon(Icons.Default.Savings, contentDescription = null, modifier = Modifier.size(18.dp), tint = IncomeGreen)
                                         }
                                         Spacer(modifier = Modifier.width(Spacing.xs))
                                         Column {
@@ -529,9 +530,9 @@ fun DashboardScreen(
                                 Surface(
                                     onClick = onNavigateToMonthClose,
                                     modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f))
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
@@ -539,12 +540,12 @@ fun DashboardScreen(
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                                .size(34.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(Icons.Default.PointOfSale, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                            Icon(Icons.Default.PointOfSale, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary)
                                         }
                                         Spacer(modifier = Modifier.width(Spacing.xs))
                                         Column {

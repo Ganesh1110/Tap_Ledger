@@ -352,7 +352,7 @@ fun PendingInboxScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(16.dp))
                                     .background(color)
                                     .padding(horizontal = Spacing.lg),
                                 contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd)
@@ -559,9 +559,10 @@ private fun PendingTransactionCard(
             .semantics(mergeDescendants = true) {
                 contentDescription = "Pending transaction: ${tx.merchantRaw ?: "Transaction"} of ${tx.amountPaise / 100} rupees"
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.88f)),
+        border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f)),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
@@ -578,7 +579,6 @@ private fun PendingTransactionCard(
                     Text(
                         text = tx.merchantRaw ?: if (isIncome) "Captured Income" else "Captured Expense",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
                             fontWeight = FontWeight.Bold
                         )
                     )
