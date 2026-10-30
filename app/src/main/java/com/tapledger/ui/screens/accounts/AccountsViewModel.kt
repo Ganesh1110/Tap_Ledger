@@ -9,6 +9,7 @@ import com.tapledger.core.database.entity.AccountEntity
 import com.tapledger.core.model.AccountType
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.core.model.TransactionStatus
+import com.tapledger.core.preferences.LoanPreferences
 import com.tapledger.core.util.DateTimeUtils
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.TransactionRepository
@@ -38,7 +39,8 @@ class AccountsViewModel @Inject constructor(
     private val transactionRepository: TransactionRepository,
     private val transactionDao: TransactionDao,
     private val monthCloseDao: MonthCloseDao,
-    private val budgetPeriodDao: BudgetPeriodDao
+    private val budgetPeriodDao: BudgetPeriodDao,
+    private val loanPreferences: LoanPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountsUiState())
@@ -51,6 +53,11 @@ class AccountsViewModel @Inject constructor(
                 loadData()
             }
         }
+        viewModelScope.launch {
+            loanPreferences.configFlow.collect {
+                loadData()
+            }
+        }
     }
 
     fun loadData() {
@@ -59,8 +66,9 @@ class AccountsViewModel @Inject constructor(
                 val accounts = accountRepository.getAllAccountsSync()
                 val allTxs = transactionDao.getAllTransactionsSync()
                 val nowIST = DateTimeUtils.nowEpochMillis()
+                val loanConfig = loanPreferences.getConfig()
 
-                val accountSummaries = accounts.map { account ->
+                val allSummaries = accounts.map { account ->
                     val txs = transactionDao.getBalanceTransactionsForAccount(account.id, 0L)
                     val earliestTx = txs.filter { it.status != TransactionStatus.IGNORED && it.status != TransactionStatus.VOIDED }.minOfOrNull { it.occurredAt }
                     val effectiveOpeningDate = if (earliestTx != null && earliestTx < account.openingBalanceDate) {
@@ -76,8 +84,16 @@ class AccountsViewModel @Inject constructor(
                     AccountBalanceCalculator.calculateAccountBalance(effectiveAccount, txs, asOfEpochMillis = nowIST)
                 }
 
+                val accountSummaries = if (loanConfig.loanTrackerEnabled) {
+                    allSummaries
+                } else {
+                    allSummaries.filter { it.account.type != AccountType.LOAN }
+                }
+
                 val assets = accountSummaries.filter { it.account.type != AccountType.CREDIT_CARD && it.account.type != AccountType.LOAN }
-                val liabilities = accountSummaries.filter { it.account.type == AccountType.CREDIT_CARD || it.account.type == AccountType.LOAN }
+                val liabilities = accountSummaries.filter {
+                    it.account.type == AccountType.CREDIT_CARD || (loanConfig.includeLoansInNetWorth && it.account.type == AccountType.LOAN)
+                }
                 val totalAssets = assets.sumOf { it.currentBalancePaise }
                 val totalLiabilities = liabilities.sumOf { abs(it.currentBalancePaise) }
                 val netWorth = Math.subtractExact(totalAssets, totalLiabilities)
@@ -86,17 +102,24 @@ class AccountsViewModel @Inject constructor(
                 val periods = budgetPeriodDao.getAllPeriodsSync()
                 val range = _uiState.value.selectedRange
 
+                val effectiveAccounts = accounts.filter {
+                    when (it.type) {
+                        AccountType.LOAN -> loanConfig.loanTrackerEnabled && loanConfig.includeLoansInNetWorth
+                        else -> true
+                    }
+                }
+
                 val (netWorthChart, composition) = withContext(Dispatchers.Default) {
                     val nw = AccountsChartBuilder.buildNetWorthChart(
                         range = range,
-                        accounts = accounts,
+                        accounts = effectiveAccounts,
                         allTransactions = allTxs,
                         monthCloses = monthCloses,
                         periods = periods,
                         asOfNow = nowIST
                     )
                     val comp = AccountsChartBuilder.buildAccountComposition(
-                        accounts = accounts,
+                        accounts = effectiveAccounts,
                         allTransactions = allTxs,
                         asOfNow = nowIST
                     )

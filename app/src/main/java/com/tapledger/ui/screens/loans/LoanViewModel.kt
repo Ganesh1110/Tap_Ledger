@@ -12,6 +12,8 @@ import com.tapledger.core.database.entity.LoanScheduleInstallmentEntity
 import com.tapledger.core.database.entity.LoanScheduleVersionEntity
 import com.tapledger.data.repository.AccountRepository
 import com.tapledger.data.repository.BudgetRepository
+import com.tapledger.core.preferences.LoanPreferences
+import com.tapledger.core.preferences.LoanPreferencesConfig
 import com.tapledger.data.repository.EmiPaymentResult
 import com.tapledger.data.repository.ForeclosureExecutionResult
 import com.tapledger.data.repository.LoanRepository
@@ -28,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,6 +44,10 @@ data class LoanUiState(
     val amortizationSchedule: List<AmortizationInstallment> = emptyList(),
     val scheduleVersions: List<LoanScheduleVersionEntity> = emptyList(),
     val selectedScheduleVersionId: Long? = null,
+
+    // Settings & Preferences
+    val preferencesConfig: LoanPreferencesConfig = LoanPreferencesConfig(),
+    val showSettingsSheet: Boolean = false,
 
     // Setup Form
     val setupName: String = "",
@@ -83,7 +90,8 @@ class LoanViewModel @Inject constructor(
     private val accountRepository: AccountRepository,
     private val budgetRepository: BudgetRepository,
     private val budgetPeriodDao: BudgetPeriodDao,
-    private val loanCalculator: LoanCalculator
+    private val loanCalculator: LoanCalculator,
+    private val loanPreferences: LoanPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoanUiState())
@@ -96,12 +104,20 @@ class LoanViewModel @Inject constructor(
 
     private fun observeLoans() {
         viewModelScope.launch {
-            loanRepository.observeAllActiveLoans().collect { loans ->
+            combine(loanPreferences.configFlow, loanRepository.observeAllLoans()) { pref, allLoans ->
+                pref to allLoans
+            }.collect { (pref, allLoans) ->
+                val displayLoans = if (pref.hideClosedLoans) {
+                    allLoans.filter { it.isActive && it.principalPaise > 0L }
+                } else {
+                    allLoans
+                }
                 _uiState.update { current ->
-                    val selected = current.selectedLoan?.let { sel -> loans.find { it.id == sel.id } } ?: loans.firstOrNull()
+                    val selected = current.selectedLoan?.let { sel -> displayLoans.find { it.id == sel.id } } ?: displayLoans.firstOrNull()
                     current.copy(
-                        activeLoans = loans,
-                        selectedLoan = selected
+                        activeLoans = displayLoans,
+                        selectedLoan = selected,
+                        preferencesConfig = pref
                     )
                 }
                 updateAmortizationAndSimulation()
@@ -508,6 +524,34 @@ class LoanViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun setShowSettingsSheet(show: Boolean) {
+        _uiState.update { it.copy(showSettingsSheet = show) }
+    }
+
+    fun setLoanTrackerEnabled(enabled: Boolean) {
+        loanPreferences.setLoanTrackerEnabled(enabled)
+    }
+
+    fun setIncludeLoansInNetWorth(include: Boolean) {
+        loanPreferences.setIncludeLoansInNetWorth(include)
+    }
+
+    fun setHideClosedLoans(hide: Boolean) {
+        loanPreferences.setHideClosedLoans(hide)
+    }
+
+    fun setAutoDetectEmiSms(autoDetect: Boolean) {
+        loanPreferences.setAutoDetectEmiSms(autoDetect)
+    }
+
+    fun setEmiBalanceGuardEnabled(enabled: Boolean) {
+        loanPreferences.setEmiBalanceGuardEnabled(enabled)
+    }
+
+    fun setEmiBalanceGuardDaysPrior(days: Int) {
+        loanPreferences.setEmiBalanceGuardDaysPrior(days)
     }
 
     private fun parseRateToBp(rateString: String): Int {

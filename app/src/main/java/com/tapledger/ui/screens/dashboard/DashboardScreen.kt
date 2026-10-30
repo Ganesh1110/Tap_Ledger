@@ -836,6 +836,7 @@ fun DashboardScreen(
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSavingsGuideSettings = onNavigateToSavingsGuideSettings,
                     onNavigateToLoans = onNavigateToLoans,
+                    isLoanTrackerEnabled = state.isLoanTrackerEnabled,
                     onNavigateToBackup = onNavigateToBackup,
                     onNavigateToAppLockSettings = onNavigateToAppLockSettings,
                     onNavigateToDiagnostics = onNavigateToDiagnostics,

@@ -32,10 +32,12 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -132,6 +134,11 @@ fun LoanManagementScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { viewModel.setShowSettingsSheet(true) }) {
+                        Icon(imageVector = Icons.Default.Tune, contentDescription = "Loan Settings")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
@@ -178,6 +185,8 @@ fun LoanManagementScreen(
                 when (state.selectedTab) {
                     0 -> ActiveLoansTab(
                         loans = state.activeLoans,
+                        hideClosedLoans = state.preferencesConfig.hideClosedLoans,
+                        onToggleHideClosedLoans = viewModel::setHideClosedLoans,
                         onPayEmi = { loan ->
                             loanToPay = loan
                             selectedBankAccountId = loan.linkedBankAccountId ?: state.bankAccounts.firstOrNull()?.id
@@ -441,6 +450,19 @@ fun LoanManagementScreen(
         )
     }
 
+    if (state.showSettingsSheet) {
+        LoanSettingsSheet(
+            config = state.preferencesConfig,
+            onDismissRequest = { viewModel.setShowSettingsSheet(false) },
+            onToggleTrackerEnabled = viewModel::setLoanTrackerEnabled,
+            onToggleNetWorthInclusion = viewModel::setIncludeLoansInNetWorth,
+            onToggleHideClosedLoans = viewModel::setHideClosedLoans,
+            onToggleAutoDetectEmiSms = viewModel::setAutoDetectEmiSms,
+            onToggleEmiBalanceGuard = viewModel::setEmiBalanceGuardEnabled,
+            onSelectDaysPrior = viewModel::setEmiBalanceGuardDaysPrior
+        )
+    }
+
     if (loanToDelete != null) {
         val loan = loanToDelete!!
         AlertDialog(
@@ -472,6 +494,8 @@ fun LoanManagementScreen(
 @Composable
 private fun ActiveLoansTab(
     loans: List<LoanEntity>,
+    hideClosedLoans: Boolean,
+    onToggleHideClosedLoans: (Boolean) -> Unit,
     onPayEmi: (LoanEntity) -> Unit,
     onForeclose: (LoanEntity) -> Unit,
     onDeleteLoan: (LoanEntity) -> Unit,
@@ -498,22 +522,33 @@ private fun ActiveLoansTab(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${loans.size} Active Loans",
+                        text = "${loans.size} Loans",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    FilledTonalButton(
-                        onClick = onNavigateToSetup,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Loan")
+                        FilterChip(
+                            selected = !hideClosedLoans,
+                            onClick = { onToggleHideClosedLoans(!hideClosedLoans) },
+                            label = { Text(if (hideClosedLoans) "Show Settled" else "Hide Settled", fontSize = 11.sp) }
+                        )
+                        FilledTonalButton(
+                            onClick = onNavigateToSetup,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add Loan")
+                        }
                     }
                 }
             }
 
             items(loans, key = { it.id }) { loan ->
+                val isSettled = !loan.isActive || loan.principalPaise == 0L
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -541,12 +576,15 @@ private fun ActiveLoansTab(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                        .background(
+                                            if (isSettled) IncomeGreen.copy(alpha = 0.12f)
+                                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                        )
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
-                                        text = "Due on ${loan.emiDay}th",
-                                        color = MaterialTheme.colorScheme.primary,
+                                        text = if (isSettled) "Settled" else "Due on ${loan.emiDay}th",
+                                        color = if (isSettled) IncomeGreen else MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp
                                     )
@@ -572,15 +610,15 @@ private fun ActiveLoansTab(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text("Original Principal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Remaining Principal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(MoneyFormatter.formatPaiseToRupees(loan.principalPaise), fontWeight = FontWeight.SemiBold)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("Monthly EMI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
-                                    text = MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise),
+                                    text = if (isSettled) "₹0" else MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise),
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = if (isSettled) IncomeGreen else MaterialTheme.colorScheme.primary,
                                     fontSize = 16.sp
                                 )
                             }
@@ -599,19 +637,21 @@ private fun ActiveLoansTab(
                             ) {
                                 Text("Schedule")
                             }
-                            OutlinedButton(
-                                onClick = { onForeclose(loan) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Foreclose")
-                            }
-                            Button(
-                                onClick = { onPayEmi(loan) },
-                                modifier = Modifier.weight(1.2f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text("Pay EMI")
+                            if (!isSettled) {
+                                OutlinedButton(
+                                    onClick = { onForeclose(loan) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Foreclose")
+                                }
+                                Button(
+                                    onClick = { onPayEmi(loan) },
+                                    modifier = Modifier.weight(1.2f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Pay EMI")
+                                }
                             }
                         }
                     }

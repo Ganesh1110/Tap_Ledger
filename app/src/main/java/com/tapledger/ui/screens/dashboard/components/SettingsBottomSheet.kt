@@ -68,6 +68,7 @@ fun SettingsBottomSheet(
     onNavigateToSavings: () -> Unit,
     onNavigateToSavingsGuideSettings: () -> Unit,
     onNavigateToLoans: () -> Unit = {},
+    isLoanTrackerEnabled: Boolean = true,
     onNavigateToBackup: () -> Unit,
     onNavigateToAppLockSettings: () -> Unit,
     onNavigateToDiagnostics: () -> Unit,
@@ -81,7 +82,7 @@ fun SettingsBottomSheet(
     val tertiaryColor = MaterialTheme.colorScheme.tertiary
     val errorColor = MaterialTheme.colorScheme.error
 
-    val settingItems = listOf(
+    val settingItems = listOfNotNull(
         SettingItem(
             title = "Auto-Capture & Permissions",
             subtitle = "SMS reader, notifications & background battery",
@@ -90,14 +91,16 @@ fun SettingsBottomSheet(
             iconBgColor = primaryColor.copy(alpha = 0.12f),
             onClick = onNavigateToSetup
         ),
-        SettingItem(
-            title = "Loans & EMIs",
-            subtitle = "Amortization, prepayments & EMI setup",
-            icon = Icons.Default.AccountBalance,
-            iconTint = primaryColor,
-            iconBgColor = primaryColor.copy(alpha = 0.12f),
-            onClick = onNavigateToLoans
-        ),
+        if (isLoanTrackerEnabled) {
+            SettingItem(
+                title = "Loans & EMIs",
+                subtitle = "Amortization, prepayments & EMI setup",
+                icon = Icons.Default.AccountBalance,
+                iconTint = primaryColor,
+                iconBgColor = primaryColor.copy(alpha = 0.12f),
+                onClick = onNavigateToLoans
+            )
+        } else null,
         SettingItem(
             title = "Savings & Goals",
             subtitle = "Track targets, emergency funds & progress",

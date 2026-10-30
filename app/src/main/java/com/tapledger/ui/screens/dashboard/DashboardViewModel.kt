@@ -45,6 +45,8 @@ import com.tapledger.core.model.SavingsContributionSource
 import com.tapledger.core.model.SavingsGoalStatus
 import com.tapledger.core.model.TransferPlanKind
 import com.tapledger.core.model.TransferPlanStatus
+import com.tapledger.core.preferences.LoanPreferences
+import com.tapledger.core.preferences.LoanPreferencesConfig
 import com.tapledger.core.preferences.SavingsGuidePreferences
 import com.tapledger.data.repository.SavingsRepository
 import com.tapledger.data.repository.TransferPlanRepository
@@ -90,7 +92,9 @@ data class DashboardUiState(
     val plannedIncomePaise: Long = 0L,
     val actualIncomePaise: Long = 0L,
     val currentPeriodId: Long? = null,
-    val paceAlerts: List<CategoryPaceAlert> = emptyList()
+    val paceAlerts: List<CategoryPaceAlert> = emptyList(),
+    val isLoanTrackerEnabled: Boolean = true,
+    val loanConfig: LoanPreferencesConfig = LoanPreferencesConfig()
 )
 
 @HiltViewModel
@@ -104,6 +108,7 @@ class DashboardViewModel @Inject constructor(
     private val monthCloseDao: MonthCloseDao,
     private val transferPlanRepository: TransferPlanRepository,
     private val savingsGuidePreferences: SavingsGuidePreferences,
+    private val loanPreferences: LoanPreferences,
     private val spareCalculator: SpareCalculator,
     private val goalApportionmentCalculator: GoalApportionmentCalculator,
     private val savingsRepository: SavingsRepository,
@@ -125,6 +130,11 @@ class DashboardViewModel @Inject constructor(
 
             // Reactively refresh dashboard whenever transactions change
             transactionRepository.observeAllTransactions().collect {
+                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+            }
+        }
+        viewModelScope.launch {
+            loanPreferences.configFlow.collect {
                 loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
             }
         }
@@ -169,7 +179,13 @@ class DashboardViewModel @Inject constructor(
                 }
                 AccountBalanceCalculator.calculateAccountBalance(effectiveAccount, txs)
             }
-            val netWorth = AccountBalanceCalculator.calculateNetWorth(accountSummaries)
+            val loanConfig = loanPreferences.getConfig()
+            val effectiveSummaries = if (loanConfig.loanTrackerEnabled && loanConfig.includeLoansInNetWorth) {
+                accountSummaries
+            } else {
+                accountSummaries.filter { it.account.type != AccountType.LOAN }
+            }
+            val netWorth = AccountBalanceCalculator.calculateNetWorth(effectiveSummaries)
             val pendingCount = transactionDao.getPendingCountSync()
 
             val recentTxs = periodTxs.sortedByDescending { it.occurredAt }.take(5)
@@ -439,7 +455,9 @@ class DashboardViewModel @Inject constructor(
                 plannedIncomePaise = plannedIncome,
                 actualIncomePaise = actualIncome,
                 currentPeriodId = period.id,
-                paceAlerts = paceAlerts
+                paceAlerts = paceAlerts,
+                isLoanTrackerEnabled = loanConfig.loanTrackerEnabled,
+                loanConfig = loanConfig
             )
         }
     }

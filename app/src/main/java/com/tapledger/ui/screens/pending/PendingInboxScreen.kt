@@ -680,6 +680,36 @@ private fun PendingTransactionCard(
                     )
                 }
             } else {
+                val isLoanEmiDebit = tx.notes?.contains("Loan EMI") == true
+                if (isLoanEmiDebit) {
+                    Spacer(modifier = Modifier.height(Spacing.xs))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalance,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.xs))
+                            Text(
+                                text = "Auto-Detected Loan EMI Debit (Suggested: Loan Transfer)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
+
                 // 1-Tap Suggested Category Apply Button (if suggestion exists)
                 if (suggestedCategory != null) {
                     Spacer(modifier = Modifier.height(Spacing.xs))

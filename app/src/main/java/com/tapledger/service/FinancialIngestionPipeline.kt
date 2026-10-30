@@ -24,6 +24,7 @@ import com.tapledger.core.database.entity.toJsonSnapshot
 import com.tapledger.core.model.TransactionDirection
 import com.tapledger.core.model.TransactionKind
 import com.tapledger.core.model.TransferPlanStatus
+import com.tapledger.core.preferences.LoanPreferences
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -60,7 +61,8 @@ class FinancialIngestionPipeline @Inject constructor(
     private val budgetRepository: BudgetRepository,
     private val unparsedAlertDao: UnparsedAlertDao,
     private val auditLogDao: AuditLogDao,
-    private val savingsTransferPlanDao: SavingsTransferPlanDao
+    private val savingsTransferPlanDao: SavingsTransferPlanDao,
+    private val loanPreferences: LoanPreferences? = null
 ) {
 
     // 60-second in-memory circular/TTL cache for raw system events
@@ -285,8 +287,10 @@ class FinancialIngestionPipeline @Inject constructor(
         // 6. Room Atomic Insert: transactions land as PENDING in Pending Inbox for user safety
         val txId = try {
             transactionRunner.run {
-                val initialKind = if (parsed.isLoanEmi) TransactionKind.TRANSFER else parsed.kind
-                val initialNotes = if (parsed.isLoanEmi) "Loan EMI Debit (Suggested: Loan Transfer)" else null
+                val autoDetect = loanPreferences?.getConfig()?.let { it.autoDetectEmiSms && it.loanTrackerEnabled } ?: true
+                val isLoanEmi = parsed.isLoanEmi && autoDetect
+                val initialKind = if (isLoanEmi) TransactionKind.TRANSFER else parsed.kind
+                val initialNotes = if (isLoanEmi) "Loan EMI Debit (Suggested: Loan Transfer)" else null
                 val tx = TransactionEntity(
                     accountId = resolvedAccountId,
                     kind = initialKind,

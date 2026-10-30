@@ -11,9 +11,13 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.tapledger.core.database.dao.AccountDao
 import com.tapledger.core.database.dao.LoanDao
 import com.tapledger.core.database.dao.RecurringCommitmentDao
+import com.tapledger.core.database.dao.TransactionDao
 import com.tapledger.core.model.MoneyFormatter
+import com.tapledger.core.preferences.LoanPreferences
+import com.tapledger.domain.calculator.AccountBalanceCalculator
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -35,6 +39,9 @@ class CommitmentReminderWorker(
     interface CommitmentWorkerEntryPoint {
         fun recurringCommitmentDao(): RecurringCommitmentDao
         fun loanDao(): LoanDao
+        fun accountDao(): AccountDao
+        fun transactionDao(): TransactionDao
+        fun loanPreferences(): LoanPreferences
     }
 
     override suspend fun doWork(): Result {
@@ -44,15 +51,26 @@ class CommitmentReminderWorker(
         )
         val commitmentDao = entryPoint.recurringCommitmentDao()
         val loanDao = entryPoint.loanDao()
+        val accountDao = entryPoint.accountDao()
+        val transactionDao = entryPoint.transactionDao()
+        val loanPreferences = entryPoint.loanPreferences()
+
+        val loanConfig = loanPreferences.getConfig()
+        val isLoanTrackerEnabled = loanConfig.loanTrackerEnabled
+        val emiGuardEnabled = loanConfig.emiBalanceGuardEnabled
+        val daysPrior = loanConfig.emiBalanceGuardDaysPrior.coerceIn(1, 7)
 
         val tomorrowDay = LocalDate.now().plusDays(1).dayOfMonth
+        val guardTargetDay = LocalDate.now().plusDays(daysPrior.toLong()).dayOfMonth
+
         val activeCommitments = commitmentDao.getAllActiveSync()
         val dueTomorrow = activeCommitments.filter { it.dueDay == tomorrowDay }
 
-        val activeLoans = loanDao.getAllActiveSync()
-        val loansDueTomorrow = activeLoans.filter { it.emiDay == tomorrowDay }
+        val activeLoans = if (isLoanTrackerEnabled) loanDao.getAllActiveSync() else emptyList()
+        val targetDayForLoan = if (emiGuardEnabled) guardTargetDay else tomorrowDay
+        val loansDue = activeLoans.filter { it.emiDay == targetDayForLoan && it.isActive && it.principalPaise > 0L }
 
-        if (dueTomorrow.isNotEmpty() || loansDueTomorrow.isNotEmpty()) {
+        if (dueTomorrow.isNotEmpty() || loansDue.isNotEmpty()) {
             val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val channelId = CHANNEL_ID
 
@@ -83,13 +101,34 @@ class CommitmentReminderWorker(
                 )
             }
 
-            for (loan in loansDueTomorrow) {
-                val formattedAmount = MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise)
+            for (loan in loansDue) {
+                val formattedEmi = MoneyFormatter.formatPaiseToRupees(loan.emiAmountPaise)
+                val bankAccount = loan.linkedBankAccountId?.let { accountDao.getById(it) }
+
+                val (title, content) = if (emiGuardEnabled && bankAccount != null) {
+                    val txs = transactionDao.getBalanceTransactionsForAccount(bankAccount.id, 0L)
+                    val balanceSummary = AccountBalanceCalculator.calculateAccountBalance(bankAccount, txs)
+                    val balancePaise = balanceSummary.currentBalancePaise
+
+                    if (balancePaise >= loan.emiAmountPaise) {
+                        "EMI Balance Guard: ${loan.name}" to
+                                "Your $formattedEmi EMI is due in $daysPrior day${if (daysPrior > 1) "s" else ""}. Current balance in ${bankAccount.name}: ${MoneyFormatter.formatPaiseToRupees(balancePaise)} (Sufficient funds)"
+                    } else {
+                        val shortfallPaise = loan.emiAmountPaise - balancePaise
+                        "⚠️ Low Balance Alert: ${loan.name} EMI" to
+                                "Your $formattedEmi EMI is due in $daysPrior day${if (daysPrior > 1) "s" else ""}, but balance in ${bankAccount.name} is only ${MoneyFormatter.formatPaiseToRupees(balancePaise)}. Add ${MoneyFormatter.formatPaiseToRupees(shortfallPaise)} to prevent NACH bounce fees."
+                    }
+                } else {
+                    val dayText = if (daysPrior == 1 || !emiGuardEnabled) "tomorrow" else "in $daysPrior days"
+                    "Upcoming Loan EMI Reminder" to "${loan.name}: $formattedEmi EMI is due $dayText"
+                }
+
                 val notification = NotificationCompat.Builder(applicationContext, channelId)
                     .setSmallIcon(android.R.drawable.ic_dialog_info)
-                    .setContentTitle("Upcoming Loan EMI Reminder")
-                    .setContentText("${loan.name}: $formattedAmount EMI is due tomorrow")
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setContentTitle(title)
+                    .setContentText(content)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setAutoCancel(true)
                     .build()
 
