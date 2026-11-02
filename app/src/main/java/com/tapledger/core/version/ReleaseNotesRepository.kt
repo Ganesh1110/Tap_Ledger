@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Sync
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,6 +25,45 @@ interface ReleaseNotesRepository {
 class ReleaseNotesRepositoryImpl @Inject constructor() : ReleaseNotesRepository {
 
     private val releases: List<AppVersionInfo> = listOf(
+        AppVersionInfo(
+            versionCode = 3L,
+            versionName = "1.2.0",
+            releaseDate = "November 2026",
+            title = "Live Category Sync & Smart Notification Shield",
+            summary = "Instant Home screen updates when creating or editing custom categories, intelligent shielding against chat media/message counts, product deal filtering, and enhanced notification branding.",
+            highlights = listOf(
+                ReleaseHighlight(
+                    title = "Live Category & Budget Sync",
+                    description = "Custom categories and budget adjustments now reflect instantly on the Home screen envelopes and 50/30/20 rings the moment you save them.",
+                    category = ReleaseCategory.NEW_FEATURE,
+                    icon = Icons.Default.Sync
+                ),
+                ReleaseHighlight(
+                    title = "Chat Media Count Shield",
+                    description = "Advanced lookahead regex prevents non-financial notifications like 'Rahul sent 2 photos' from erroneously being captured as expense transactions.",
+                    category = ReleaseCategory.SECURITY,
+                    icon = Icons.Default.Security
+                ),
+                ReleaseHighlight(
+                    title = "Shopping & Deal Filter",
+                    description = "Automated filter rejects promotional messages, e-commerce discounts, and shopping deals from entering your Pending Inbox.",
+                    category = ReleaseCategory.IMPROVEMENT,
+                    icon = Icons.Default.CheckCircle
+                ),
+                ReleaseHighlight(
+                    title = "High-Contrast Dark & Light Themes",
+                    description = "Fully calibrated color tokens across Accounts, Loans, and Category Envelopes for crisp readability in both Dark and Light display modes.",
+                    category = ReleaseCategory.IMPROVEMENT,
+                    icon = Icons.Default.Speed
+                ),
+                ReleaseHighlight(
+                    title = "Monochrome Status Bar Branding",
+                    description = "Native monochrome notification icon adhering to Android 13+ material guidelines for clean, square-free status bar alerts.",
+                    category = ReleaseCategory.IMPROVEMENT,
+                    icon = Icons.Default.NotificationsActive
+                )
+            )
+        ),
         AppVersionInfo(
             versionCode = 2L,
             versionName = "1.1.0",
