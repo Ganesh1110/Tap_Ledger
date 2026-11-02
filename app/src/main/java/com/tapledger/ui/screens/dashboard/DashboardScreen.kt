@@ -96,6 +96,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.util.DateTimeUtils
@@ -160,6 +162,11 @@ fun DashboardScreen(
 
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Reload dashboard on resume (e.g. returning from Category Management or other screens)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.loadDashboard()
+    }
 
     // Request POST_NOTIFICATIONS runtime permission on Android 13+ (API 33)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

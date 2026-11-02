@@ -155,7 +155,12 @@ class CategoryManagementViewModel @Inject constructor(
                     0L
                 }
 
-                val periodId = _uiState.value.currentPeriodId
+                val periodId = if (_uiState.value.currentPeriodId > 0L) {
+                    _uiState.value.currentPeriodId
+                } else {
+                    val today = LocalDate.now(DateTimeUtils.IST_ZONE)
+                    budgetRepository.getOrCreateBudgetPeriod(today.year, today.monthValue).id
+                }
                 val rebalanceAdjustments = if (autoAdjustOthers && periodId > 0L && amountPaise > 0L) {
                     val period = budgetRepository.getBudgetPeriod(periodId)
                     val incomePaise = period?.incomePaise ?: _uiState.value.plannedIncomePaise
@@ -231,7 +236,12 @@ class CategoryManagementViewModel @Inject constructor(
                     0L
                 }
 
-                val periodId = _uiState.value.currentPeriodId
+                val periodId = if (_uiState.value.currentPeriodId > 0L) {
+                    _uiState.value.currentPeriodId
+                } else {
+                    val today = LocalDate.now(DateTimeUtils.IST_ZONE)
+                    budgetRepository.getOrCreateBudgetPeriod(today.year, today.monthValue).id
+                }
                 val rebalanceAdjustments = if (autoAdjustOthers && periodId > 0L) {
                     val period = budgetRepository.getBudgetPeriod(periodId)
                     val incomePaise = period?.incomePaise ?: _uiState.value.plannedIncomePaise

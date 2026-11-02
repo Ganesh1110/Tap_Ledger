@@ -82,6 +82,9 @@ abstract class BudgetAllocationDao {
     @Query("SELECT * FROM budget_allocations")
     abstract suspend fun getAllAllocationsSync(): List<BudgetAllocationEntity>
 
+    @Query("SELECT * FROM budget_allocations")
+    open fun observeAllAllocations(): Flow<List<BudgetAllocationEntity>> = kotlinx.coroutines.flow.emptyFlow()
+
     @Query("SELECT * FROM budget_allocations WHERE budget_period_id = :periodId AND category_id = :categoryId LIMIT 1")
     abstract suspend fun getAllocation(periodId: Long, categoryId: Long): BudgetAllocationEntity?
 

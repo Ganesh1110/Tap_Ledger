@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.CommitmentPaymentDao
 import com.tapledger.core.database.dao.RecurringCommitmentDao
@@ -117,6 +118,7 @@ class DashboardViewModel @Inject constructor(
     private val recurringCommitmentDao: RecurringCommitmentDao,
     private val commitmentPaymentDao: CommitmentPaymentDao,
     private val categoryDao: CategoryDao,
+    private val budgetAllocationDao: BudgetAllocationDao,
     private val savingsTransferPlanDao: SavingsTransferPlanDao
 ) : ViewModel() {
 
@@ -135,6 +137,16 @@ class DashboardViewModel @Inject constructor(
         }
         viewModelScope.launch {
             loanPreferences.configFlow.collect {
+                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+            }
+        }
+        viewModelScope.launch {
+            categoryDao.getAllActiveCategories().collect {
+                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+            }
+        }
+        viewModelScope.launch {
+            budgetAllocationDao.observeAllAllocations().collect {
                 loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
             }
         }

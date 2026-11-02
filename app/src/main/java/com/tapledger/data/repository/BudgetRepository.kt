@@ -450,6 +450,19 @@ class BudgetRepository @Inject constructor(
                         updatedAt = now
                     )
                     budgetAllocationDao.update(updatedAlloc)
+                } else if (openPeriod.id == periodId && newAmountPaise != null) {
+                    val newAlloc = BudgetAllocationEntity(
+                        budgetPeriodId = openPeriod.id,
+                        categoryId = category.id,
+                        categoryNameSnapshot = updated.name.trim(),
+                        bucketSnapshot = updated.defaultBucket,
+                        sortOrderSnapshot = updated.defaultSortOrder,
+                        advancePolicySnapshot = updated.defaultAdvancePolicy,
+                        amountPaise = newAmountPaise,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                    budgetAllocationDao.insert(newAlloc)
                 }
 
                 if (openPeriod.id == periodId) {
@@ -543,6 +556,7 @@ class BudgetRepository @Inject constructor(
         if (period.status != com.tapledger.core.model.BudgetPeriodStatus.OPEN) return
         val categories = categoryDao.getAllCategoriesSync().associateBy { it.id }
         val allocations = budgetAllocationDao.getAllocationsForPeriodSync(periodId)
+        val allocatedCategoryIds = allocations.map { it.categoryId }.toSet()
         val now = DateTimeUtils.nowEpochMillis()
         for (alloc in allocations) {
             val cat = categories[alloc.categoryId] ?: continue
@@ -554,6 +568,23 @@ class BudgetRepository @Inject constructor(
                         bucketSnapshot = cat.defaultBucket,
                         categoryNameSnapshot = cat.name.trim(),
                         advancePolicySnapshot = cat.defaultAdvancePolicy,
+                        updatedAt = now
+                    )
+                )
+            }
+        }
+        for ((catId, cat) in categories) {
+            if (cat.isActive && !allocatedCategoryIds.contains(catId)) {
+                budgetAllocationDao.insert(
+                    BudgetAllocationEntity(
+                        budgetPeriodId = periodId,
+                        categoryId = catId,
+                        categoryNameSnapshot = cat.name.trim(),
+                        bucketSnapshot = cat.defaultBucket,
+                        sortOrderSnapshot = cat.defaultSortOrder,
+                        advancePolicySnapshot = cat.defaultAdvancePolicy,
+                        amountPaise = 0L,
+                        createdAt = now,
                         updatedAt = now
                     )
                 )
