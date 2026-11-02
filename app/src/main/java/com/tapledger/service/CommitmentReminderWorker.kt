@@ -88,7 +88,8 @@ class CommitmentReminderWorker(
             for (commitment in dueTomorrow) {
                 val formattedAmount = MoneyFormatter.formatPaiseToRupees(commitment.amountPaise)
                 val notification = NotificationCompat.Builder(applicationContext, channelId)
-                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setSmallIcon(com.tapledger.R.drawable.ic_notification)
+                    .setColor(0xFF4F46E5.toInt())
                     .setContentTitle("Upcoming ${commitment.type} Reminder")
                     .setContentText("${commitment.name}: $formattedAmount is due tomorrow")
                     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -124,7 +125,8 @@ class CommitmentReminderWorker(
                 }
 
                 val notification = NotificationCompat.Builder(applicationContext, channelId)
-                    .setSmallIcon(android.R.drawable.ic_dialog_info)
+                    .setSmallIcon(com.tapledger.R.drawable.ic_notification)
+                    .setColor(0xFF4F46E5.toInt())
                     .setContentTitle(title)
                     .setContentText(content)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(content))

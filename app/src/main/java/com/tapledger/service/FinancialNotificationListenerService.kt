@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -262,8 +263,18 @@ class FinancialNotificationListenerService : NotificationListenerService() {
             parsed.accountLast4?.let { "A/C **$it" } ?: "Account"
         }
 
+        val largeIcon = try {
+            BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+        } catch (e: Exception) {
+            null
+        }
+
         val notification = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
+            .apply {
+                if (largeIcon != null) setLargeIcon(largeIcon)
+            }
+            .setColor(0xFF4F46E5.toInt())
             .setContentTitle("New Transaction Captured")
             .setContentText("$amountFormatted at $merchant. $accountDisplay")
             .setStyle(
