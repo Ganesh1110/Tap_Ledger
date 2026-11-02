@@ -11,7 +11,12 @@ object FinancialNotificationParser {
 
     private val AMOUNT_PATTERN = Pattern.compile(
         "(?:(?:Rs\\.?|INR|₹)\\s*([0-9,]+(?:\\.[0-9]{1,2})?(?:/-)?))|" +
-        "(?:(?:debited|credited|paid|payment|spent|sent|received|transferred|withdrawn|refunded)\\s+(?:by|for|of|with)?\\s*(?:Rs\\.?|INR|₹)?\\s*([0-9,]+(?:\\.[0-9]{1,2})?(?:/-)?))",
+        "(?:(?:debited|credited|paid|payment|spent|sent|received|transferred|withdrawn|refunded)\\s+(?:by|for|of|with)?\\s*(?:Rs\\.?|INR|₹)?\\s*([0-9,]+(?:\\.[0-9]{1,2})?(?:/-)?)(?!\\s*(?:photos?|images?|pics?|videos?|messages?|files?|stickers?|audios?|voice|contacts?|attachments?|items?|unread|calls?|mins?|minutes?|hours?|hrs?|days?|weeks?|months?|years?|pts?|points?|stars?)))",
+        Pattern.CASE_INSENSITIVE
+    )
+
+    private val MEDIA_OR_CHAT_COUNT_PATTERN = Pattern.compile(
+        "\\b[0-9]+\\s*(?:new\\s*)?(?:photos?|images?|pics?|videos?|messages?|files?|stickers?|audios?|voice\\s*notes?|contacts?|attachments?|items?|missed\\s*calls?|unread)\\b",
         Pattern.CASE_INSENSITIVE
     )
 
@@ -113,6 +118,12 @@ object FinancialNotificationParser {
     fun isPotentialFinancialAlert(text: String): Boolean {
         if (PURE_OTP_PATTERN.matcher(text).find()) return false
         if (PRODUCT_OR_CART_PATTERN.matcher(text).find()) return false
+        if (MEDIA_OR_CHAT_COUNT_PATTERN.matcher(text).find()) {
+            val hasExplicitCurrency = text.contains("₹") ||
+                text.contains("Rs.", ignoreCase = true) ||
+                text.contains("INR", ignoreCase = true)
+            if (!hasExplicitCurrency) return false
+        }
         return FINANCIAL_HINT_PATTERNS.all { it.matcher(text).find() }
     }
 
@@ -136,6 +147,16 @@ object FinancialNotificationParser {
         // 2. Product pitch, cart reminders, or shopping CTA alerts are never financial records
         if (PRODUCT_OR_CART_PATTERN.matcher(combinedText).find()) {
             return null
+        }
+
+        // 2.5 Media or chat attachment counts (e.g. "2 photos", "3 messages", "sent 2 photos") are never financial records
+        if (MEDIA_OR_CHAT_COUNT_PATTERN.matcher(combinedText).find()) {
+            val hasExplicitCurrency = combinedText.contains("₹") ||
+                combinedText.contains("Rs.", ignoreCase = true) ||
+                combinedText.contains("INR", ignoreCase = true)
+            if (!hasExplicitCurrency) {
+                return null
+            }
         }
 
         // 3. Amount extraction using zero-float MoneyFormatter

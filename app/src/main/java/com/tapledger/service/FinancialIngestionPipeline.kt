@@ -115,6 +115,11 @@ class FinancialIngestionPipeline @Inject constructor(
             return IngestionResult.IgnoredNonFinancial
         }
 
+        // Drop chat/social messaging notifications (WhatsApp, Telegram, etc.) unless carrying explicit payment verification
+        if (isChatOrMessagingPackage(event.packageName) && parsed.upiReference == null && parsed.accountLast4 == null) {
+            return IngestionResult.IgnoredNonFinancial
+        }
+
         // 3. Step 1: Resolve Account Attribution (Flow.md §3.1)
         val resolvedAccountId = resolveAccount(parsed)
 
@@ -414,7 +419,34 @@ class FinancialIngestionPipeline @Inject constructor(
             lowerPkg.contains("ajio")
     }
 
+    private fun isChatOrMessagingPackage(packageName: String): Boolean {
+        val lowerPkg = packageName.lowercase()
+        if (lowerPkg.contains("google.android.apps.messaging") || lowerPkg.contains("mms") || lowerPkg.contains("sms")) {
+            return false
+        }
+        return CHAT_OR_MESSAGING_PACKAGES.contains(lowerPkg) ||
+            lowerPkg.contains("whatsapp") ||
+            lowerPkg.contains("telegram") ||
+            lowerPkg.contains("instagram") ||
+            lowerPkg.contains("facebook.orca") ||
+            lowerPkg.contains("snapchat") ||
+            lowerPkg.contains("discord") ||
+            lowerPkg.contains("signal")
+    }
+
     companion object {
+        private val CHAT_OR_MESSAGING_PACKAGES = setOf(
+            "com.whatsapp",
+            "com.whatsapp.w4b",
+            "org.telegram.messenger",
+            "org.telegram.plus",
+            "com.instagram.android",
+            "com.facebook.orca",
+            "com.snapchat.android",
+            "com.discord",
+            "org.thoughtcrime.securesms"
+        )
+
         private val SHOPPING_OR_MERCHANT_PACKAGES = setOf(
             "com.amazon.mshop.android.shopping",
             "com.amazon.appmanager",

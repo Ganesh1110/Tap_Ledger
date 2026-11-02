@@ -338,4 +338,42 @@ class FinancialNotificationParserTest {
         )
         assertThat(FinancialNotificationParser.parse(paymentPendingEvent)).isNull()
     }
+
+    @Test
+    fun parse_chatAndMediaAttachmentNotifications_areIgnored() {
+        // WhatsApp media alerts: "sent 2 photos", "2 photos", "received 3 messages"
+        val whatsappPhotosEvent1 = NotificationEvent(
+            packageName = "com.whatsapp",
+            title = "John",
+            text = "sent 2 photos",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(whatsappPhotosEvent1)).isNull()
+        assertThat(FinancialNotificationParser.isPotentialFinancialAlert(whatsappPhotosEvent1.text)).isFalse()
+
+        val whatsappPhotosEvent2 = NotificationEvent(
+            packageName = "com.whatsapp",
+            title = "Family Group",
+            text = "2 photos",
+            messages = listOf("John: sent a photo", "John: sent a photo"),
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(whatsappPhotosEvent2)).isNull()
+
+        val telegramMessagesEvent = NotificationEvent(
+            packageName = "org.telegram.messenger",
+            title = "Channel",
+            text = "received 3 new messages and 4 files",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(telegramMessagesEvent)).isNull()
+
+        val instagramEvent = NotificationEvent(
+            packageName = "com.instagram.android",
+            title = "Direct",
+            text = "sent 5 videos",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(instagramEvent)).isNull()
+    }
 }

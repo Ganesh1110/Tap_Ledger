@@ -983,4 +983,20 @@ class IngestionPipelineTest {
         // Verify no pending transaction is created
         assertThat(transactionDao.getPendingCountSync()).isEqualTo(0)
     }
+
+    @Test
+    fun testChatApp_mediaAndMessageNotifications_areIgnoredAsNonFinancial() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        val event = NotificationEvent(
+            packageName = "com.whatsapp",
+            title = "Rahul",
+            text = "sent 2 photos",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        assertThat(result).isInstanceOf(IngestionResult.IgnoredNonFinancial::class.java)
+        // Verify no pending transaction is created
+        assertThat(transactionDao.getPendingCountSync()).isEqualTo(0)
+    }
 }
