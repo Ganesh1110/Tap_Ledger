@@ -126,6 +126,7 @@ fun LoanManagementScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Loans & EMIs", fontWeight = FontWeight.Bold) },
@@ -139,7 +140,12 @@ fun LoanManagementScreen(
                         Icon(imageVector = Icons.Default.Tune, contentDescription = "Loan Settings")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f))
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -159,11 +165,12 @@ fun LoanManagementScreen(
             ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
                 edgePadding = Spacing.md,
-                containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f),
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.primary,
                 divider = {
-                    androidx.compose.material3.HorizontalDivider(
+                    HorizontalDivider(
                         thickness = 1.dp,
-                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.90f)
+                        color = MaterialTheme.colorScheme.outlineVariant
                     )
                 }
             ) {
@@ -171,6 +178,8 @@ fun LoanManagementScreen(
                     Tab(
                         selected = state.selectedTab == index,
                         onClick = { viewModel.selectTab(index) },
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         text = {
                             Text(
                                 text = title,

@@ -157,20 +157,18 @@ fun MainScaffold(
     val isKeyboardOpen = isKeyboardVisible()
 
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(com.tapledger.ui.theme.RadiantAppCanvasGradient),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (isPrimaryDestination && !isKeyboardOpen) {
                 Column {
                     HorizontalDivider(
                         thickness = 1.dp,
-                        color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.9f)
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     NavigationBar(
-                        containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.92f)
+                        containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         BOTTOM_NAV_ITEMS.forEach { item ->
                             val selected = currentRoute == item.route
@@ -189,9 +187,9 @@ fun MainScaffold(
                                     }
                                 },
                                 colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = com.tapledger.ui.theme.GlassPrimary,
-                                    selectedTextColor = com.tapledger.ui.theme.GlassPrimary,
-                                    indicatorColor = com.tapledger.ui.theme.GlassPrimaryContainer.copy(alpha = 0.85f),
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 ),
