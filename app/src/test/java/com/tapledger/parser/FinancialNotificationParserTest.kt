@@ -293,4 +293,49 @@ class FinancialNotificationParserTest {
             assertThat(it.isLoanEmi).isTrue()
         }
     }
+
+    @Test
+    fun parse_promotionalAndProductDealNotifications_areIgnored() {
+        // "200 rupee for this product" / deal / promotion
+        val productDealEvent1 = NotificationEvent(
+            packageName = "com.amazon.mShop.android.shopping",
+            title = "Deal Alert",
+            text = "Special deal: 200 rupee for this product! Buy now before stock ends.",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(productDealEvent1)).isNull()
+        assertThat(FinancialNotificationParser.isPotentialFinancialAlert(productDealEvent1.text)).isFalse()
+
+        val productDealEvent2 = NotificationEvent(
+            packageName = "com.application.zomato",
+            title = "Craving something?",
+            text = "₹200 for this product. Order now to get free delivery!",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(productDealEvent2)).isNull()
+
+        val cartEvent = NotificationEvent(
+            packageName = "com.flipkart.android",
+            title = "Cart Reminder",
+            text = "Items waiting in your cart: Rs. 200 for this product. Complete your payment now.",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(cartEvent)).isNull()
+
+        val discountEvent = NotificationEvent(
+            packageName = "com.google.android.apps.messaging",
+            title = "Brand Offer",
+            text = "Flat 200 off on this product! Use code SAVE200 on your next purchase.",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(discountEvent)).isNull()
+
+        val paymentPendingEvent = NotificationEvent(
+            packageName = "in.swiggy.android",
+            title = "Swiggy",
+            text = "Payment is pending for your order of Rs. 200. Complete payment now.",
+            postTime = 1728374000000L
+        )
+        assertThat(FinancialNotificationParser.parse(paymentPendingEvent)).isNull()
+    }
 }

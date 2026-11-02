@@ -967,4 +967,20 @@ class IngestionPipelineTest {
         assertThat(tx.accountId).isNull()
         assertThat(tx.status).isEqualTo(TransactionStatus.PENDING)
     }
+
+    @Test
+    fun testShoppingApp_productOrDealNotification_isIgnoredAsNonFinancial() = runBlocking {
+        val now = DateTimeUtils.nowEpochMillis()
+        val event = NotificationEvent(
+            packageName = "in.swiggy.android",
+            title = "Swiggy Deals",
+            text = "Special deal: 200 rupee for this product! Buy now before offer ends.",
+            postTime = now
+        )
+
+        val result = pipeline.processEvent(event)
+        assertThat(result).isInstanceOf(IngestionResult.IgnoredNonFinancial::class.java)
+        // Verify no pending transaction is created
+        assertThat(transactionDao.getPendingCountSync()).isEqualTo(0)
+    }
 }

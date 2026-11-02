@@ -110,6 +110,11 @@ class FinancialIngestionPipeline @Inject constructor(
             return IngestionResult.IgnoredNonFinancial
         }
 
+        // Drop merchant/shopping app notifications that do not carry payment reference or bank account proof
+        if (isShoppingOrMerchantPackage(event.packageName) && parsed.upiReference == null && parsed.accountLast4 == null) {
+            return IngestionResult.IgnoredNonFinancial
+        }
+
         // 3. Step 1: Resolve Account Attribution (Flow.md §3.1)
         val resolvedAccountId = resolveAccount(parsed)
 
@@ -390,5 +395,40 @@ class FinancialIngestionPipeline @Inject constructor(
                 iterator.remove()
             }
         }
+    }
+
+    private fun isShoppingOrMerchantPackage(packageName: String): Boolean {
+        val lowerPkg = packageName.lowercase()
+        return SHOPPING_OR_MERCHANT_PACKAGES.contains(lowerPkg) ||
+            lowerPkg.contains("amazon") ||
+            lowerPkg.contains("flipkart") ||
+            lowerPkg.contains("swiggy") ||
+            lowerPkg.contains("zomato") ||
+            lowerPkg.contains("zepto") ||
+            lowerPkg.contains("blinkit") ||
+            lowerPkg.contains("grofers") ||
+            lowerPkg.contains("myntra") ||
+            lowerPkg.contains("meesho") ||
+            lowerPkg.contains("bigbasket") ||
+            lowerPkg.contains("dunzo") ||
+            lowerPkg.contains("ajio")
+    }
+
+    companion object {
+        private val SHOPPING_OR_MERCHANT_PACKAGES = setOf(
+            "com.amazon.mshop.android.shopping",
+            "com.amazon.appmanager",
+            "com.flipkart.android",
+            "in.swiggy.android",
+            "com.application.zomato",
+            "com.grofers.customerapp",
+            "com.zeptonow.android",
+            "com.myntra.android",
+            "com.meesho.supply",
+            "com.ril.ajio",
+            "com.tatadigital.tcp",
+            "com.bigbasket.mobileapp",
+            "com.dunzo.user"
+        )
     }
 }

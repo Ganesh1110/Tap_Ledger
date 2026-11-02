@@ -50,6 +50,44 @@ object FinancialNotificationParser {
         Pattern.CASE_INSENSITIVE
     )
 
+    private val PRODUCT_OR_CART_PATTERN = Pattern.compile(
+        "\\b(?:" +
+        "(?:for|on|buy|get)\\s+this\\s+product|this\\s+product\\s+for|product\\s+at\\s+(?:rs\\.?|inr|₹)?|" +
+        "in\\s*(?:your\\s*)?cart|cart\\s*reminder|items?\\s*(?:in|waiting\\s*in)\\s*cart|wishlist|" +
+        "price\\s*drop(?:ped)?|price\\s*slash|" +
+        "buy\\s*now|order\\s*now|shop\\s*now|grab\\s*now|order\\s*today|book\\s*now|" +
+        "recommended\\s*(?:for\\s*you)?|picked\\s*for\\s*you" +
+        ")\\b",
+        Pattern.CASE_INSENSITIVE
+    )
+
+    private val ACTION_REQUIRED_OR_PENDING_PATTERN = Pattern.compile(
+        "\\b(?:" +
+        "payment\\s*(?:is\\s*)?pending|payment\\s*request(?:ed)?|requested\\s*(?:a\\s*)?payment|" +
+        "make\\s*(?:the\\s*|a\\s*)?payment|complete\\s*(?:your\\s*)?payment|complete\\s*order|" +
+        "pay\\s*now|pay\\s*later|payment\\s*due|bill\\s*(?:is\\s*)?due|" +
+        "statement\\s*is\\s*ready|minimum\\s*(?:amount\\s*)?due|" +
+        "pre-debit\\s*notification|mandate\\s*(?:registered|requested)|" +
+        "credit\\s*limit\\s*(?:increased|is)|" +
+        "payment\\s*failed|transaction\\s*failed" +
+        ")\\b",
+        Pattern.CASE_INSENSITIVE
+    )
+
+    private val PROMOTIONAL_OR_OFFER_PATTERN = Pattern.compile(
+        "\\b(?:" +
+        "pre-approved|apply\\s*now|instant\\s*loan|credit\\s*line|" +
+        "claim\\s*(?:your\\s*)?offer|exclusive\\s*deal|congratulations!?\\s*you\\s*(?:have\\s*)?won|you\\s*won|" +
+        "deal\\s*of\\s*the\\s*day|limited\\s*time\\s*(?:offer|deal)|mega\\s*sale|flash\\s*sale|sale\\s*is\\s*live|" +
+        "starting\\s*(?:at|from)|starts\\s*at|as\\s*low\\s*as|hurry\\b|" +
+        "(?:flat|extra|upto|up\\s*to)?\\s*(?:rs\\.?|inr|₹)?\\s*[0-9]+(?:\\.[0-9]{1,2})?\\s*off|" +
+        "[0-9]+%\\s*off|discount|cashback\\s*(?:up\\s*to|of\\s*up\\s*to)|" +
+        "coupon\\s*(?:code)?|promo\\s*(?:code)?|use\\s*code|voucher|" +
+        "free\\s*delivery|free\\s*shipping" +
+        ")\\b",
+        Pattern.CASE_INSENSITIVE
+    )
+
     private val NON_FINANCIAL_PATTERNS = listOf(
         Pattern.compile("\\b(?:pre-approved|apply\\s*now|claim\\s*your\\s*offer|exclusive\\s*deal|congratulations!\\s*you\\s*won|instant\\s*loan)\\b", Pattern.CASE_INSENSITIVE),
         Pattern.compile("\\b(?:bill\\s*(?:is\\s*)?due|statement\\s*is\\s*ready|minimum\\s*(?:amount\\s*)?due)\\b", Pattern.CASE_INSENSITIVE),
@@ -73,6 +111,8 @@ object FinancialNotificationParser {
     )
 
     fun isPotentialFinancialAlert(text: String): Boolean {
+        if (PURE_OTP_PATTERN.matcher(text).find()) return false
+        if (PRODUCT_OR_CART_PATTERN.matcher(text).find()) return false
         return FINANCIAL_HINT_PATTERNS.all { it.matcher(text).find() }
     }
 
@@ -93,7 +133,12 @@ object FinancialNotificationParser {
             return null
         }
 
-        // 2. Amount extraction using zero-float MoneyFormatter
+        // 2. Product pitch, cart reminders, or shopping CTA alerts are never financial records
+        if (PRODUCT_OR_CART_PATTERN.matcher(combinedText).find()) {
+            return null
+        }
+
+        // 3. Amount extraction using zero-float MoneyFormatter
         val amountMatcher = AMOUNT_PATTERN.matcher(combinedText)
         if (!amountMatcher.find()) {
             return null
@@ -106,18 +151,63 @@ object FinancialNotificationParser {
         }
         if (amountPaise <= 0L) return null
 
-        // 3. Debit vs Credit vs Reversal detection
         val lower = combinedText.lowercase()
         val isReversal = lower.contains("reversed") || lower.contains("credited back") || lower.contains("refund")
-        val isDebit = lower.contains("debited") ||
-            lower.contains("debit") ||
+
+        // Extract account identifiers early to evaluate confirmed transaction proof
+        val acctMatcher = ACCOUNT_LAST4_PATTERN.matcher(combinedText)
+        var last4 = if (acctMatcher.find()) acctMatcher.group(1) else null
+        if (last4 == null) {
+            val fallbackMatcher = MASKED_ACCOUNT_FALLBACK_PATTERN.matcher(combinedText)
+            if (fallbackMatcher.find()) {
+                last4 = fallbackMatcher.group(1)
+            }
+        }
+
+        val isCard = CARD_MENTION_PATTERN.matcher(combinedText).find()
+
+        val upiMatcher = UPI_REF_PATTERN.matcher(combinedText)
+        val upiRef = if (upiMatcher.find()) upiMatcher.group(1) else null
+
+        // Check for confirmed debit proof
+        val hasConfirmedDebitProof = (last4 != null || upiRef != null) &&
+            (lower.contains("debited") || lower.contains("spent") || lower.contains("sent") || lower.contains("successful"))
+
+        // 4. Action-required or pending payment check (drop payment requests, bill reminders, failed alerts)
+        if (ACTION_REQUIRED_OR_PENDING_PATTERN.matcher(combinedText).find()) {
+            val isConfirmedBillPayment = (lower.contains("bill payment") || lower.contains("payment")) &&
+                (lower.contains("successful") || lower.contains("debited")) &&
+                (last4 != null || upiRef != null)
+            if (!isConfirmedBillPayment && !isReversal) {
+                return null
+            }
+        }
+
+        // 5. Promotional / Offer checks: drop unless it is a confirmed transaction with account proof
+        if (PROMOTIONAL_OR_OFFER_PATTERN.matcher(combinedText).find()) {
+            if (!hasConfirmedDebitProof) {
+                return null
+            }
+        }
+
+        for (pattern in NON_FINANCIAL_PATTERNS) {
+            if (pattern.matcher(combinedText).find()) {
+                if (!hasConfirmedDebitProof || lower.contains("pre-debit") || lower.contains("is due") || lower.contains("statement is ready") || lower.contains("apply now")) {
+                    return null
+                }
+            }
+        }
+
+        // 6. Debit vs Credit vs Reversal detection
+        val isDebit = (lower.contains("debited") && !lower.contains("pre-debit")) ||
+            (lower.contains("debit") && !lower.contains("pre-debit")) ||
             lower.contains("spent") ||
-            lower.contains("paid") ||
-            (lower.contains("payment") && !lower.contains("received")) ||
+            (lower.contains("paid") && !lower.contains("not paid") && !lower.contains("haven't paid") && !lower.contains("to be paid") && !lower.contains("get paid")) ||
+            (lower.contains("payment") && (lower.contains("successful") || lower.contains("done") || lower.contains("completed") || lower.contains("debited") || lower.contains(" to ") || lower.contains(" for ")) && !lower.contains("received") && !lower.contains("make payment") && !lower.contains("payment pending") && !lower.contains("payment request") && !lower.contains("payment due") && !lower.contains("complete payment")) ||
             lower.contains("withdrawn") ||
-            lower.contains("sent") ||
+            (lower.contains("sent") && (lower.contains("to") || lower.contains("from") || lower.contains("via") || lower.contains("rs") || lower.contains("₹"))) ||
             lower.contains("transferred") ||
-            lower.contains("purchase")
+            (lower.contains("purchase") && (isCard || last4 != null || lower.contains("card") || lower.contains("a/c") || lower.contains("account")))
 
         // Disambiguate credit: phrases like "credit card" or "credit limit" should not falsely classify expenses as credits
         val textWithoutCardMentions = lower
@@ -137,31 +227,6 @@ object FinancialNotificationParser {
         if (!isCredit && !isDebit) {
             return null
         }
-
-        // 4. Non-financial advisory check: drop pure promotional or bill reminders (unless confirmed transaction)
-        for (pattern in NON_FINANCIAL_PATTERNS) {
-            if (pattern.matcher(combinedText).find()) {
-                if (lower.contains("pre-debit") || lower.contains("is due") || lower.contains("statement is ready") || lower.contains("apply now")) {
-                    return null
-                }
-            }
-        }
-
-        // Account last 4
-        val acctMatcher = ACCOUNT_LAST4_PATTERN.matcher(combinedText)
-        var last4 = if (acctMatcher.find()) acctMatcher.group(1) else null
-        if (last4 == null) {
-            val fallbackMatcher = MASKED_ACCOUNT_FALLBACK_PATTERN.matcher(combinedText)
-            if (fallbackMatcher.find()) {
-                last4 = fallbackMatcher.group(1)
-            }
-        }
-
-        val isCard = CARD_MENTION_PATTERN.matcher(combinedText).find()
-
-        // UPI Reference
-        val upiMatcher = UPI_REF_PATTERN.matcher(combinedText)
-        val upiRef = if (upiMatcher.find()) upiMatcher.group(1) else null
 
         // Checkpoint Balance
         var checkpointBalance: Long? = null
