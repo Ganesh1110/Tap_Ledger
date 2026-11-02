@@ -72,8 +72,8 @@ fun DashboardHeroRingCard(
                 val nwText = if (netWorthPaise != null) ". Net worth: ${MoneyFormatter.formatPaiseToRupees(netWorthPaise)}" else ""
                 contentDescription = summaryLine + nwText
             },
-        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.88f)),
-        border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -82,46 +82,76 @@ fun DashboardHeroRingCard(
                 .fillMaxWidth()
                 .padding(Spacing.md)
         ) {
-            // Summary Line & Net Worth Header
+            // Header Row: Monthly Budget (Left) vs Net Worth (Right)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
+                // Left: Monthly Budget Header
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "NET WORTH",
+                        text = "MONTHLY BUDGET",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 10.sp,
                         letterSpacing = 0.8.sp
                     )
-                    if (netWorthPaise != null) {
+                    if (heroRingState is ChartState.Data) {
                         MoneyText(
-                            amountPaise = netWorthPaise,
+                            amountPaise = heroRingState.data.remainingPaise,
                             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                            semantic = if (netWorthPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                            semantic = if (heroRingState.data.remainingPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                        )
+                    } else {
+                        Text(
+                            text = "Overview",
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                if (heroRingState is ChartState.Data) {
-                    val statusIcon = when {
-                        heroRingState.data.isExceeded -> Icons.Default.Error
-                        heroRingState.data.isWarning -> Icons.Default.Warning
-                        else -> Icons.Default.CheckCircle
+                // Right: Net Worth & Status Badge
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    if (netWorthPaise != null) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "NET WORTH",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.sp,
+                                letterSpacing = 0.6.sp
+                            )
+                            MoneyText(
+                                amountPaise = netWorthPaise,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                semantic = if (netWorthPaise >= 0) MoneySemantic.Income else MoneySemantic.Expense
+                            )
+                        }
                     }
-                    val statusColor = when {
-                        heroRingState.data.isExceeded -> ExpenseRed
-                        heroRingState.data.isWarning -> WarningAmber
-                        else -> IncomeGreen
+
+                    if (heroRingState is ChartState.Data) {
+                        val statusIcon = when {
+                            heroRingState.data.isExceeded -> Icons.Default.Error
+                            heroRingState.data.isWarning -> Icons.Default.Warning
+                            else -> Icons.Default.CheckCircle
+                        }
+                        val statusColor = when {
+                            heroRingState.data.isExceeded -> ExpenseRed
+                            heroRingState.data.isWarning -> WarningAmber
+                            else -> IncomeGreen
+                        }
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = null,
+                            tint = statusColor,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
-                    Icon(
-                        imageVector = statusIcon,
-                        contentDescription = null,
-                        tint = statusColor,
-                        modifier = Modifier.size(22.dp)
-                    )
                 }
             }
 

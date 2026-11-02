@@ -60,12 +60,12 @@ fun AccountCard(
         AccountType.WALLET -> Icons.Default.Payments
     }
 
-    val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+    val containerColor = MaterialTheme.colorScheme.surface
 
     val border = if (isCreditCard && summary.currentBalancePaise < 0) {
         BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.35f))
     } else {
-        BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f))
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     }
 
     Card(

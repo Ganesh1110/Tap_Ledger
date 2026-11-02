@@ -228,7 +228,7 @@ fun DashboardScreen(
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = Spacing.md),
-                contentPadding = PaddingValues(top = Spacing.md, bottom = Spacing.listBottomPadding),
+                contentPadding = PaddingValues(top = Spacing.md, bottom = Spacing.listBottomPadding + 48.dp),
                 verticalArrangement = Arrangement.spacedBy(Spacing.md)
             ) {
                 // 1. Month Switcher Header & Quick Navigation
@@ -406,10 +406,10 @@ fun DashboardScreen(
                                     onClick = onNavigateToPending,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(14.dp),
-                                    color = if (state.pendingCount > 0) WarningAmberContainer.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                                    color = if (state.pendingCount > 0) WarningAmberContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface,
                                     border = BorderStroke(
                                         1.dp,
-                                        if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f)
+                                        if (state.pendingCount > 0) WarningAmber.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                     )
                                 ) {
                                     Row(
@@ -452,8 +452,8 @@ fun DashboardScreen(
                                     onClick = onNavigateToManualEntry,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(14.dp),
-                                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
-                                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f))
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
@@ -494,8 +494,8 @@ fun DashboardScreen(
                                     onClick = onNavigateToSavings,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(14.dp),
-                                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
-                                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f))
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
@@ -531,8 +531,8 @@ fun DashboardScreen(
                                     onClick = onNavigateToMonthClose,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(14.dp),
-                                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
-                                    border = BorderStroke(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f))
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 10.dp),
@@ -794,6 +794,10 @@ fun DashboardScreen(
                         initiallyExpanded = false
                     )
                 }
+
+                item(key = "bottom_scroll_clearance") {
+                    Spacer(modifier = Modifier.height(72.dp))
+                }
             }
 
             val currentPlanState = state.transferPlanState
@@ -951,17 +955,18 @@ private fun DashboardCategoryRow(
             .semantics(mergeDescendants = true) {
                 contentDescription = "${summary.allocation.categoryNameSnapshot}: spent ${MoneyFormatter.formatPaiseToRupees(netSpent)} of ${MoneyFormatter.formatPaiseToRupees(totalBudget)}, remaining ${MoneyFormatter.formatPaiseToRupees(remaining)}"
             },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             1.dp,
-            if (summary.isExceeded) ExpenseRed.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+            if (summary.isExceeded) ExpenseRed.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
         ),
-        shape = RoundedCornerShape(14.dp)
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+                .padding(horizontal = Spacing.md, vertical = Spacing.md)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -971,24 +976,37 @@ private fun DashboardCategoryRow(
                 Text(
                     text = summary.allocation.categoryNameSnapshot,
                     style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp),
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold
                 )
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = when {
+                        summary.isExceeded -> ExpenseRed.copy(alpha = 0.12f)
+                        summary.isWarning -> WarningAmber.copy(alpha = 0.12f)
+                        else -> IncomeGreen.copy(alpha = 0.12f)
+                    }
                 ) {
-                    Icon(
-                        imageVector = statusIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = progressColor
-                    )
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = progressColor
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = statusIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = progressColor
+                        )
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = progressColor
+                        )
+                    }
                 }
             }
 
@@ -1001,8 +1019,8 @@ private fun DashboardCategoryRow(
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                    .height(7.dp)
+                    .clip(RoundedCornerShape(4.dp))
             )
 
             Spacer(modifier = Modifier.height(Spacing.xs))
@@ -1038,7 +1056,7 @@ private fun DashboardCategoryRow(
                     )
                     MoneyText(
                         amountPaise = kotlin.math.abs(remaining),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         semantic = if (remaining >= 0) MoneySemantic.Income else MoneySemantic.Expense
                     )
                 }
