@@ -15,10 +15,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 abstract class BudgetAllocationDao {
 
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertInternal(allocation: BudgetAllocationEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertAllInternal(allocations: List<BudgetAllocationEntity>): List<Long>
 
     @Update

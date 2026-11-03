@@ -250,7 +250,7 @@ class BudgetRepository @Inject constructor(
             updatedAt = now
         )
         val id = budgetAllocationDao.insert(seeded)
-        return seeded.copy(id = id)
+        return if (id > 0) seeded.copy(id = id) else (budgetAllocationDao.getAllocation(periodId, categoryId) ?: seeded)
     }
 
     suspend fun updateBudgetAllocationAmount(periodId: Long, categoryId: Long, newAmountPaise: Long) {
@@ -556,7 +556,7 @@ class BudgetRepository @Inject constructor(
         if (period.status != com.tapledger.core.model.BudgetPeriodStatus.OPEN) return
         val categories = categoryDao.getAllCategoriesSync().associateBy { it.id }
         val allocations = budgetAllocationDao.getAllocationsForPeriodSync(periodId)
-        val allocatedCategoryIds = allocations.map { it.categoryId }.toSet()
+        val allocatedCategoryIds = allocations.map { it.categoryId }.toMutableSet()
         val now = DateTimeUtils.nowEpochMillis()
         for (alloc in allocations) {
             val cat = categories[alloc.categoryId] ?: continue
@@ -575,19 +575,23 @@ class BudgetRepository @Inject constructor(
         }
         for ((catId, cat) in categories) {
             if (cat.isActive && !allocatedCategoryIds.contains(catId)) {
-                budgetAllocationDao.insert(
-                    BudgetAllocationEntity(
-                        budgetPeriodId = periodId,
-                        categoryId = catId,
-                        categoryNameSnapshot = cat.name.trim(),
-                        bucketSnapshot = cat.defaultBucket,
-                        sortOrderSnapshot = cat.defaultSortOrder,
-                        advancePolicySnapshot = cat.defaultAdvancePolicy,
-                        amountPaise = 0L,
-                        createdAt = now,
-                        updatedAt = now
+                val existing = budgetAllocationDao.getAllocation(periodId, catId)
+                if (existing == null) {
+                    budgetAllocationDao.insert(
+                        BudgetAllocationEntity(
+                            budgetPeriodId = periodId,
+                            categoryId = catId,
+                            categoryNameSnapshot = cat.name.trim(),
+                            bucketSnapshot = cat.defaultBucket,
+                            sortOrderSnapshot = cat.defaultSortOrder,
+                            advancePolicySnapshot = cat.defaultAdvancePolicy,
+                            amountPaise = 0L,
+                            createdAt = now,
+                            updatedAt = now
+                        )
                     )
-                )
+                    allocatedCategoryIds.add(catId)
+                }
             }
         }
     }

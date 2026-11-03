@@ -97,6 +97,7 @@ class DashboardViewModel @Inject constructor(
 
     private var selectedYear = LocalDate.now(DateTimeUtils.IST_ZONE).year
     private var selectedMonth = LocalDate.now(DateTimeUtils.IST_ZONE).monthValue
+    private var loadDashboardJob: kotlinx.coroutines.Job? = null
 
     private val _uiState = MutableStateFlow(
         DashboardUiState(
@@ -138,8 +139,10 @@ class DashboardViewModel @Inject constructor(
     ) {
         selectedYear = year
         selectedMonth = month
-        viewModelScope.launch {
-            val period = budgetRepository.getOrCreateBudgetPeriod(year, month)
+        loadDashboardJob?.cancel()
+        loadDashboardJob = viewModelScope.launch {
+            try {
+                val period = budgetRepository.getOrCreateBudgetPeriod(year, month)
             val allocations = budgetRepository.getAllocationsForPeriodSync(period.id)
             val adjustments = budgetRepository.getAdjustmentsForPeriodSync(period.id)
 
@@ -301,8 +304,13 @@ class DashboardViewModel @Inject constructor(
                 isLoanTrackerEnabled = loanConfig.loanTrackerEnabled,
                 loanConfig = loanConfig
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            android.util.Log.e("DashboardViewModel", "Error loading dashboard", e)
         }
     }
+}
 
     fun syncPlannedIncomeToActual(periodId: Long, actualIncomePaise: Long) {
         viewModelScope.launch {
