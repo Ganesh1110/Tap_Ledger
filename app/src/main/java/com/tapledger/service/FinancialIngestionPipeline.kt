@@ -355,6 +355,9 @@ class FinancialIngestionPipeline @Inject constructor(
             if (matches.size == 1) {
                 return matches.first().id
             }
+            if (matches.isEmpty()) {
+                return null // Explicit card/account did not match
+            }
         }
 
         if (parsed.isCardMentioned) {

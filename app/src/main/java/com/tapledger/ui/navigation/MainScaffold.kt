@@ -124,6 +124,18 @@ fun MainScaffold(
 
     val effectiveStartDestination = if (isOnboarded == false) Screen.Onboarding.route else startDestination
 
+    LaunchedEffect(Unit) {
+        com.tapledger.ui.MainActivity.navRouteFlow.collect { route ->
+            navController.navigate(route) {
+                popUpTo(navController.graph.startDestinationId) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
+
     LaunchedEffect(isOnboarded) {
         if (isOnboarded == true && currentRoute == Screen.Onboarding.route) {
             val destination = if (viewModel.mpinManager.isMpinSet.value) Screen.Dashboard.route else Screen.MpinSetup.route

@@ -23,6 +23,10 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        val navRouteFlow = kotlinx.coroutines.flow.MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 1)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!com.tapledger.BuildConfig.DEBUG) {
@@ -34,6 +38,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (intent?.getBooleanExtra("trigger_test_notification", false) == true) {
             triggerTestNotification()
+        }
+        intent?.getStringExtra("navigate_to")?.let {
+            navRouteFlow.tryEmit(it)
         }
         val startDestination = intent?.getStringExtra("start_destination") ?: com.tapledger.ui.navigation.Screen.Dashboard.route
         val initialScrollIndex = intent?.getIntExtra("scroll_index", 0) ?: 0
@@ -55,6 +62,9 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        intent.getStringExtra("navigate_to")?.let {
+            navRouteFlow.tryEmit(it)
+        }
         if (intent.getBooleanExtra("trigger_test_notification", false)) {
             triggerTestNotification()
         }
