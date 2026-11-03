@@ -1,5 +1,6 @@
 package com.tapledger.ui.charts.util
 
+import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.MoneyFormatter
 import com.tapledger.ui.charts.model.AccountCompositionModel
 import com.tapledger.ui.charts.model.AdvanceRolloverChartModel
@@ -61,8 +62,10 @@ object ChartSummaryHelper {
 
     fun summarizeV5BulletBars(model: BulletBarsModel): String {
         if (model.envelopes.isEmpty()) return "No envelope categories defined"
-        val topEnvelope = model.envelopes.maxByOrNull { it.spentPaise } ?: model.envelopes.first()
-        val exceededCount = model.envelopes.count { it.isExceeded }
+        val nonSavings = model.envelopes.filter { it.bucket != BudgetBucket.SAVINGS }
+        val candidates = if (nonSavings.isNotEmpty()) nonSavings else model.envelopes
+        val topEnvelope = candidates.maxByOrNull { it.spentPaise } ?: candidates.first()
+        val exceededCount = candidates.count { it.isExceeded }
         val pct = ChartMath.formatBasisPoints(topEnvelope.percentageBp)
         val status = if (exceededCount > 0) {
             "$exceededCount ${if (exceededCount == 1) "category" else "categories"} over budget"

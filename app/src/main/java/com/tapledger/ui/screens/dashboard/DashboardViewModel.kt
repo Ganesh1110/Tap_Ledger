@@ -62,8 +62,8 @@ data class DashboardUiState(
     val netWorth: NetWorthSummary? = null,
     val budgetSummary: BudgetPeriodSummary? = null,
     val recentTransactions: List<TransactionEntity> = emptyList(),
-    val currentYear: Int = 2026,
-    val currentMonth: Int = 10,
+    val currentYear: Int = java.time.LocalDate.now(com.tapledger.core.util.DateTimeUtils.IST_ZONE).year,
+    val currentMonth: Int = java.time.LocalDate.now(com.tapledger.core.util.DateTimeUtils.IST_ZONE).monthValue,
     val heroRingState: ChartState<DashboardHeroRingModel> = ChartState.Loading,
     val burnUpChartState: ChartState<BurnUpChartModel> = ChartState.Loading,
     val bucketRingsState: ChartState<BucketRingsModel> = ChartState.Loading,
@@ -95,40 +95,49 @@ class DashboardViewModel @Inject constructor(
     private val budgetAllocationDao: BudgetAllocationDao
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(DashboardUiState())
+    private var selectedYear = LocalDate.now(DateTimeUtils.IST_ZONE).year
+    private var selectedMonth = LocalDate.now(DateTimeUtils.IST_ZONE).monthValue
+
+    private val _uiState = MutableStateFlow(
+        DashboardUiState(
+            currentYear = selectedYear,
+            currentMonth = selectedMonth
+        )
+    )
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            val today = LocalDate.now(DateTimeUtils.IST_ZONE)
-            loadDashboard(today.year, today.monthValue)
+            loadDashboard(selectedYear, selectedMonth)
 
             // Reactively refresh dashboard whenever transactions change
             transactionRepository.observeAllTransactions().collect {
-                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+                loadDashboard(selectedYear, selectedMonth)
             }
         }
         viewModelScope.launch {
             loanPreferences.configFlow.collect {
-                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+                loadDashboard(selectedYear, selectedMonth)
             }
         }
         viewModelScope.launch {
             categoryDao.getAllActiveCategories().collect {
-                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+                loadDashboard(selectedYear, selectedMonth)
             }
         }
         viewModelScope.launch {
             budgetAllocationDao.observeAllAllocations().collect {
-                loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
+                loadDashboard(selectedYear, selectedMonth)
             }
         }
     }
 
     fun loadDashboard(
-        year: Int = _uiState.value.currentYear,
-        month: Int = _uiState.value.currentMonth
+        year: Int = selectedYear,
+        month: Int = selectedMonth
     ) {
+        selectedYear = year
+        selectedMonth = month
         viewModelScope.launch {
             val period = budgetRepository.getOrCreateBudgetPeriod(year, month)
             val allocations = budgetRepository.getAllocationsForPeriodSync(period.id)
@@ -307,19 +316,19 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun nextMonth() {
-        val (newYear, newMonth) = if (_uiState.value.currentMonth == 12) {
-            (_uiState.value.currentYear + 1) to 1
+        val (newYear, newMonth) = if (selectedMonth == 12) {
+            (selectedYear + 1) to 1
         } else {
-            _uiState.value.currentYear to (_uiState.value.currentMonth + 1)
+            selectedYear to (selectedMonth + 1)
         }
         loadDashboard(newYear, newMonth)
     }
 
     fun prevMonth() {
-        val (newYear, newMonth) = if (_uiState.value.currentMonth == 1) {
-            (_uiState.value.currentYear - 1) to 12
+        val (newYear, newMonth) = if (selectedMonth == 1) {
+            (selectedYear - 1) to 12
         } else {
-            _uiState.value.currentYear to (_uiState.value.currentMonth - 1)
+            selectedYear to (selectedMonth - 1)
         }
         loadDashboard(newYear, newMonth)
     }
