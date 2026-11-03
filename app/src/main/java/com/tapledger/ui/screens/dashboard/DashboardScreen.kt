@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Lock
@@ -47,7 +48,6 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
@@ -115,29 +115,19 @@ import com.tapledger.ui.components.SkeletonCard
 import com.tapledger.ui.components.SkeletonList
 import com.tapledger.ui.components.StatBlock
 import com.tapledger.ui.components.TransactionRow
-import com.tapledger.domain.calculator.GoalApportionmentCalculator
 import com.tapledger.service.FinancialNotificationListenerService
 import com.tapledger.ui.screens.dashboard.components.DashboardBucketRingsCard
 import com.tapledger.ui.screens.dashboard.components.DashboardBurnUpCard
 import com.tapledger.ui.screens.dashboard.components.DashboardHeroRingCard
 import com.tapledger.ui.screens.dashboard.components.DashboardSixPeriodTrendCard
-import com.tapledger.ui.screens.dashboard.components.GoalAllocationBottomSheet
 import com.tapledger.ui.screens.dashboard.components.SettingsBottomSheet
-import com.tapledger.ui.screens.dashboard.components.TransferPlanBottomSheet
 import com.tapledger.ui.screens.dashboard.components.SafeDailySpendPill
-import com.tapledger.ui.screens.dashboard.components.TransferPlanCard
 import com.tapledger.ui.theme.ExpenseRed
 import com.tapledger.ui.theme.IncomeGreen
 import com.tapledger.ui.theme.IncomeGreenContainer
 import com.tapledger.ui.theme.Spacing
 import com.tapledger.ui.theme.WarningAmber
 import com.tapledger.ui.theme.WarningAmberContainer
-
-private data class MovedTransferInfo(
-    val movedPaise: Long,
-    val outTransactionId: Long,
-    val periodId: Long
-)
 
 @Composable
 fun DashboardScreen(
@@ -154,8 +144,6 @@ fun DashboardScreen(
     onNavigateToDiagnostics: () -> Unit,
     onNavigateToInsights: () -> Unit = {},
     onNavigateToAppLockSettings: () -> Unit = {},
-    onNavigateToSavingsGuideSettings: () -> Unit = {},
-    onNavigateToSavings: () -> Unit = {},
     onNavigateToLoans: () -> Unit = {},
     onShowWhatsNew: () -> Unit = {}
 ) {
@@ -221,13 +209,10 @@ fun DashboardScreen(
             }
         } else {
             var showSettingsMenu by remember { mutableStateOf(false) }
-            var showTransferPlanSheet by remember { mutableStateOf(false) }
-            var showGoalAllocationSheet by remember { mutableStateOf(false) }
             var showReplanDialog by remember { mutableStateOf(false) }
             var replanIncomeInput by remember(state.actualIncomePaise) {
                 mutableStateOf(if (state.actualIncomePaise > 0L) (state.actualIncomePaise / 100L).toString() else "")
             }
-            var lastMovedInfo by remember { mutableStateOf<MovedTransferInfo?>(null) }
 
             LazyColumn(
                 state = listState,
@@ -496,9 +481,9 @@ fun DashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                             ) {
-                                // 3. Savings Tile
+                                // 3. Categories Tile
                                 Surface(
-                                    onClick = onNavigateToSavings,
+                                    onClick = onNavigateToCategories,
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(14.dp),
                                     color = MaterialTheme.colorScheme.surface,
@@ -512,19 +497,19 @@ fun DashboardScreen(
                                             modifier = Modifier
                                                 .size(34.dp)
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(IncomeGreenContainer.copy(alpha = 0.6f)),
+                                                .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Icon(Icons.Default.Savings, contentDescription = null, modifier = Modifier.size(18.dp), tint = IncomeGreen)
+                                            Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.tertiary)
                                         }
                                         Spacer(modifier = Modifier.width(Spacing.xs))
                                         Column {
                                             Text(
-                                                text = "Savings",
+                                                text = "Categories",
                                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp)
                                             )
                                             Text(
-                                                text = "Goals & targets",
+                                                text = "Envelopes & plan",
                                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 1
@@ -630,39 +615,6 @@ fun DashboardScreen(
                                 }
                             }
                         }
-                    }
-                }
-
-                // 1.5. Transfer Plan Card (Savings Transfer Guide - Flow.md §18, D013)
-                state.transferPlanState?.let { planState ->
-                    item(key = "transfer_plan_card") {
-                        TransferPlanCard(
-                            state = planState,
-                            onMoveNowClick = { showTransferPlanSheet = true },
-                            onReviewClick = { showTransferPlanSheet = true },
-                            onAllocateGoalsClick = {
-                                if (planState.movedPaise != null && planState.planId != null) {
-                                    lastMovedInfo = MovedTransferInfo(
-                                        movedPaise = planState.movedPaise,
-                                        outTransactionId = 0L,
-                                        periodId = 0L
-                                    )
-                                    showGoalAllocationSheet = true
-                                }
-                            },
-                            onConfirmMatchingTransfer = { transferGroupId, amountPaise ->
-                                val planId = planState.planId ?: 0L
-                                viewModel.confirmMatchingTransfer(planId, transferGroupId, amountPaise) { outTxId, periodId ->
-                                    lastMovedInfo = MovedTransferInfo(
-                                        movedPaise = amountPaise,
-                                        outTransactionId = outTxId,
-                                        periodId = periodId
-                                    )
-                                    showGoalAllocationSheet = true
-                                }
-                            },
-                            modifier = Modifier.padding(bottom = Spacing.xs)
-                        )
                     }
                 }
 
@@ -807,53 +759,6 @@ fun DashboardScreen(
                 }
             }
 
-            val currentPlanState = state.transferPlanState
-            if (showTransferPlanSheet && currentPlanState != null) {
-                TransferPlanBottomSheet(
-                    state = currentPlanState,
-                    onDismissRequest = { showTransferPlanSheet = false },
-                    onMarkAsMoved = { movedPaise ->
-                        val planId = currentPlanState.planId ?: 0L
-                        viewModel.markPlanAsMoved(planId, movedPaise) { outTxId, periodId ->
-                            showTransferPlanSheet = false
-                            lastMovedInfo = MovedTransferInfo(
-                                movedPaise = movedPaise,
-                                outTransactionId = outTxId,
-                                periodId = periodId
-                            )
-                            showGoalAllocationSheet = true
-                        }
-                    },
-                    onDismissPlan = {
-                        currentPlanState.planId?.let { viewModel.dismissPlan(it) }
-                        showTransferPlanSheet = false
-                    },
-                    preferredPayAppPackage = state.preferredPayApp
-                )
-            }
-
-            val currentMovedInfo = lastMovedInfo
-            if (showGoalAllocationSheet && currentMovedInfo != null) {
-                GoalAllocationBottomSheet(
-                    movedPaise = currentMovedInfo.movedPaise,
-                    goals = state.activeGoals,
-                    calculator = remember { GoalApportionmentCalculator() },
-                    onConfirmAllocation = { allocations ->
-                        viewModel.allocateToGoals(
-                            allocations = allocations,
-                            transactionId = currentMovedInfo.outTransactionId,
-                            periodId = currentMovedInfo.periodId
-                        )
-                        showGoalAllocationSheet = false
-                        lastMovedInfo = null
-                    },
-                    onDismissRequest = {
-                        showGoalAllocationSheet = false
-                        lastMovedInfo = null
-                    }
-                )
-            }
-
             val currentPeriodId = state.currentPeriodId
             if (showReplanDialog && currentPeriodId != null) {
                 AlertDialog(
@@ -910,8 +815,6 @@ fun DashboardScreen(
                 SettingsBottomSheet(
                     onDismissRequest = { showSettingsMenu = false },
                     onNavigateToSetup = onNavigateToSetup,
-                    onNavigateToSavings = onNavigateToSavings,
-                    onNavigateToSavingsGuideSettings = onNavigateToSavingsGuideSettings,
                     onNavigateToLoans = onNavigateToLoans,
                     isLoanTrackerEnabled = state.isLoanTrackerEnabled,
                     onNavigateToBackup = onNavigateToBackup,

@@ -192,12 +192,6 @@ class TransactionRepository @Inject constructor(
                 )
             )
 
-            try {
-                savingsTriggerCoordinatorProvider?.get()?.onIncomeConfirmed(savedTx, now)
-            } catch (e: Exception) {
-                // Fail-safe: trigger notification hook should not fail core income recording
-            }
-
             txId
         }
     }
@@ -1043,20 +1037,6 @@ class TransactionRepository @Inject constructor(
                     createdAt = now
                 )
             )
-
-            if (updatedTx.kind == TransactionKind.INCOME) {
-                try {
-                    savingsTriggerCoordinatorProvider?.get()?.onIncomeConfirmed(updatedTx, now)
-                } catch (e: Exception) {
-                    // Fail-safe: trigger notification hook should not fail core confirmation
-                }
-            } else if (updatedTx.direction == TransactionDirection.OUT) {
-                try {
-                    savingsTriggerCoordinatorProvider?.get()?.onSavingsDebitDetected(updatedTx, now)
-                } catch (e: Exception) {
-                    // Fail-safe: dip guard hook should not fail core confirmation
-                }
-            }
         }
     }
 

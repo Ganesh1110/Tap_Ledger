@@ -36,29 +36,13 @@ import com.tapledger.core.database.dao.BudgetAllocationDao
 import com.tapledger.core.database.dao.CategoryDao
 import com.tapledger.core.database.dao.CommitmentPaymentDao
 import com.tapledger.core.database.dao.RecurringCommitmentDao
-import com.tapledger.core.database.dao.SavingsContributionDao
-import com.tapledger.core.database.dao.SavingsGoalDao
-import com.tapledger.core.database.dao.SavingsTransferPlanDao
 import com.tapledger.core.model.AccountType
 import com.tapledger.core.model.BudgetBucket
 import com.tapledger.core.model.CommitmentPaymentStatus
-import com.tapledger.core.model.SavingsContributionSource
-import com.tapledger.core.model.SavingsGoalStatus
-import com.tapledger.core.model.TransferPlanKind
-import com.tapledger.core.model.TransferPlanStatus
 import com.tapledger.core.preferences.LoanPreferences
 import com.tapledger.core.preferences.LoanPreferencesConfig
-import com.tapledger.core.preferences.SavingsGuidePreferences
-import com.tapledger.data.repository.SavingsRepository
-import com.tapledger.data.repository.TransferPlanRepository
-import com.tapledger.domain.calculator.CardDueItem
-import com.tapledger.domain.calculator.GoalApportionmentCalculator
-import com.tapledger.domain.calculator.GoalApportionmentItem
 import com.tapledger.domain.calculator.SafeDailySpendCalculator
 import com.tapledger.domain.calculator.SafeDailySpendResult
-import com.tapledger.domain.calculator.SpareCalculator
-import com.tapledger.domain.calculator.UnpaidCommitmentItem
-import com.tapledger.ui.screens.dashboard.components.TransferPlanDashboardState
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
@@ -84,9 +68,6 @@ data class DashboardUiState(
     val burnUpChartState: ChartState<BurnUpChartModel> = ChartState.Loading,
     val bucketRingsState: ChartState<BucketRingsModel> = ChartState.Loading,
     val sixPeriodTrendState: ChartState<SixPeriodTrendModel> = ChartState.Loading,
-    val transferPlanState: TransferPlanDashboardState? = null,
-    val activeGoals: List<GoalApportionmentItem> = emptyList(),
-    val preferredPayApp: String? = null,
     val safeDailySpend: SafeDailySpendResult? = null,
     val pendingSpendPaise: Long = 0L,
     val showIncomeDiscrepancyBanner: Boolean = false,
@@ -107,19 +88,11 @@ class DashboardViewModel @Inject constructor(
     private val transactionAllocationDao: TransactionAllocationDao,
     private val budgetPeriodDao: BudgetPeriodDao,
     private val monthCloseDao: MonthCloseDao,
-    private val transferPlanRepository: TransferPlanRepository,
-    private val savingsGuidePreferences: SavingsGuidePreferences,
     private val loanPreferences: LoanPreferences,
-    private val spareCalculator: SpareCalculator,
-    private val goalApportionmentCalculator: GoalApportionmentCalculator,
-    private val savingsRepository: SavingsRepository,
-    private val savingsGoalDao: SavingsGoalDao,
-    private val savingsContributionDao: SavingsContributionDao,
     private val recurringCommitmentDao: RecurringCommitmentDao,
     private val commitmentPaymentDao: CommitmentPaymentDao,
     private val categoryDao: CategoryDao,
-    private val budgetAllocationDao: BudgetAllocationDao,
-    private val savingsTransferPlanDao: SavingsTransferPlanDao
+    private val budgetAllocationDao: BudgetAllocationDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -219,155 +192,6 @@ class DashboardViewModel @Inject constructor(
                 rings to trend
             }
 
-            // 7. Savings Transfer Guide calculation & plan evaluation (Flow.md §18, D013, D014, D015)
-            val spendingAccountId = savingsGuidePreferences.getConfig().spendingAccountId
-            val savingsAccountId = savingsGuidePreferences.getConfig().savingsAccountId
-
-            val spendingAccount = if (spendingAccountId != null) {
-                accounts.find { it.id == spendingAccountId }
-            } else {
-                accounts.find { it.type == AccountType.BANK && it.name.contains("HDFC", ignoreCase = true) }
-                    ?: accounts.find { it.type == AccountType.BANK }
-            }
-
-            val savingsAccount = if (savingsAccountId != null) {
-                accounts.find { it.id == savingsAccountId }
-            } else {
-                accounts.find { it.type == AccountType.BANK && it.id != spendingAccount?.id && it.name.contains("SBI", ignoreCase = true) }
-                    ?: accounts.find { it.type == AccountType.BANK && it.id != spendingAccount?.id }
-            }
-
-            val transferPlanDashboardState = if (spendingAccount != null && savingsAccount != null) {
-                val spendingSummary = accountSummaries.find { it.account.id == spendingAccount.id }
-                val spendingBalance = spendingSummary?.currentBalancePaise ?: 0L
-
-                val cardDueItems = accountSummaries
-                    .filter { it.account.type == AccountType.CREDIT_CARD }
-                    .map {
-                        CardDueItem(
-                            accountId = it.account.id,
-                            cardName = it.account.name,
-                            balancePaise = it.currentBalancePaise
-                        )
-                    }
-
-                val allActiveCommitments = recurringCommitmentDao.getAllActiveSync()
-                val paidCommitmentIds = commitmentPaymentDao.getPaymentsForPeriodSync(period.id)
-                    .filter { it.status == CommitmentPaymentStatus.PAID }
-                    .map { it.commitmentId }
-                    .toSet()
-                val unpaidCommitmentItems = allActiveCommitments
-                    .filter { it.id !in paidCommitmentIds }
-                    .map {
-                        UnpaidCommitmentItem(
-                            commitmentId = it.id,
-                            name = it.name,
-                            amountPaise = it.amountPaise,
-                            accountId = it.accountId
-                        )
-                    }
-
-                val savingsCategories = budgetSummary.categorySummaries
-                    .filter { it.allocation.bucketSnapshot == BudgetBucket.SAVINGS }
-                val savingsAdjustedBudget = savingsCategories.sumOf { it.adjustedBudgetPaise }
-                val actualSavings = savingsCategories.sumOf { it.netSpentPaise }
-
-                val bufferPaise = savingsGuidePreferences.getConfig().bufferPaise
-                val spareResult = spareCalculator.calculateSpare(
-                    hdfcBalancePaise = spendingBalance,
-                    cardsPaidFromHdfc = cardDueItems,
-                    categorySummaries = budgetSummary.categorySummaries,
-                    unpaidCommitmentsFromHdfc = unpaidCommitmentItems,
-                    bufferPaise = bufferPaise,
-                    savingsAdjustedBudgetPaise = savingsAdjustedBudget,
-                    actualSavingsPaise = actualSavings,
-                    isDriftBannerActive = false,
-                    hasUnassignedPendingTransactions = pendingCount > 0
-                )
-
-                val existingPlans = savingsTransferPlanDao.getPlansForPeriod(period.id)
-                val activePlan = existingPlans.firstOrNull { it.status != TransferPlanStatus.DISMISSED && it.status != TransferPlanStatus.EXPIRED }
-
-                // Alerts-first match detection (Flow.md §18, D014, Milestone M20)
-                val detectedMatch = if (activePlan?.status != TransferPlanStatus.VERIFIED) {
-                    val unlinkedOutTxs = periodTxs.filter { tx ->
-                        tx.transferGroupId != null &&
-                        tx.accountId == spendingAccount.id &&
-                        tx.direction == com.tapledger.core.model.TransactionDirection.OUT &&
-                        existingPlans.none { it.transferGroupId == tx.transferGroupId }
-                    }
-                    unlinkedOutTxs.firstNotNullOfOrNull { outTx ->
-                        val matchingIn = periodTxs.find { inTx ->
-                            inTx.transferGroupId == outTx.transferGroupId &&
-                            inTx.accountId == savingsAccount.id &&
-                            inTx.direction == com.tapledger.core.model.TransactionDirection.IN &&
-                            inTx.amountPaise == outTx.amountPaise
-                        }
-                        if (matchingIn != null && outTx.transferGroupId != null) {
-                            Pair(outTx.transferGroupId, outTx.amountPaise)
-                        } else null
-                    }
-                } else null
-
-                if (activePlan != null) {
-                    TransferPlanDashboardState(
-                        hasPlan = true,
-                        planId = activePlan.id,
-                        kind = activePlan.kind,
-                        status = activePlan.status,
-                        sourceAccountName = spendingAccount.name,
-                        destAccountName = savingsAccount.name,
-                        suggestedPaise = activePlan.suggestedPaise,
-                        movedPaise = activePlan.movedPaise,
-                        spareCalculation = spareResult,
-                        isSafetyGateActive = spareResult.isSafetyGateTriggered,
-                        safetyGateReason = spareResult.safetyGateReason,
-                        detectedMatchingTransferGroupId = detectedMatch?.first,
-                        detectedMatchingAmountPaise = detectedMatch?.second
-                    )
-                } else {
-                    val suggestedPaise = spareResult.paydaySuggestionPaise
-                    val createdPlanId = if (suggestedPaise > 0L && period.status == BudgetPeriodStatus.OPEN) {
-                        transferPlanRepository.createOrUpdateSuggestedPlan(
-                            periodId = period.id,
-                            kind = TransferPlanKind.PAYDAY,
-                            sourceAccountId = spendingAccount.id,
-                            destAccountId = savingsAccount.id,
-                            suggestedPaise = suggestedPaise
-                        )
-                    } else null
-
-                    TransferPlanDashboardState(
-                        hasPlan = true,
-                        planId = createdPlanId,
-                        kind = TransferPlanKind.PAYDAY,
-                        status = TransferPlanStatus.SUGGESTED,
-                        sourceAccountName = spendingAccount.name,
-                        destAccountName = savingsAccount.name,
-                        suggestedPaise = suggestedPaise,
-                        movedPaise = null,
-                        spareCalculation = spareResult,
-                        isSafetyGateActive = spareResult.isSafetyGateTriggered,
-                        safetyGateReason = spareResult.safetyGateReason,
-                        detectedMatchingTransferGroupId = detectedMatch?.first,
-                        detectedMatchingAmountPaise = detectedMatch?.second
-                    )
-                }
-            } else null
-
-            val activeGoals = savingsGoalDao.getAllGoalsSync()
-                .filter { it.status == SavingsGoalStatus.ACTIVE }
-                .map { goal ->
-                    val balance = savingsContributionDao.getGoalBalance(goal.id)
-                    GoalApportionmentItem(
-                        goalId = goal.id,
-                        name = goal.name,
-                        priority = goal.priority,
-                        targetPaise = goal.targetPaise,
-                        currentBalancePaise = balance
-                    )
-                }
-
             // Safe Daily Spend Calculation (Flow.md §8.4/§8.5)
             val todayStartIST = DateTimeUtils.getStartOfDayEpochMillis(nowIST)
             val todayEndIST = todayStartIST + SafeDailySpendCalculator.MILLIS_PER_IST_DAY
@@ -458,9 +282,6 @@ class DashboardViewModel @Inject constructor(
                 burnUpChartState = burnUp,
                 bucketRingsState = bucketRings,
                 sixPeriodTrendState = sixTrend,
-                transferPlanState = transferPlanDashboardState,
-                activeGoals = activeGoals,
-                preferredPayApp = savingsGuidePreferences.getConfig().preferredPayApp,
                 safeDailySpend = safeDailySpend,
                 pendingSpendPaise = pendingSpendPaise,
                 showIncomeDiscrepancyBanner = showDiscrepancy,
@@ -481,132 +302,6 @@ class DashboardViewModel @Inject constructor(
                 loadDashboard(_uiState.value.currentYear, _uiState.value.currentMonth)
             } catch (e: Exception) {
                 // Ignore or log error
-            }
-        }
-    }
-
-    fun markPlanAsMoved(
-        planId: Long,
-        movedPaise: Long,
-        onSuccess: (outTransactionId: Long, periodId: Long) -> Unit
-    ) {
-        viewModelScope.launch {
-            try {
-                val categories = categoryDao.getAllCategoriesSync()
-                val savingsCat = categories.find { it.defaultBucket == BudgetBucket.SAVINGS }
-                    ?: categories.firstOrNull()
-                    ?: throw IllegalStateException("No category available for savings transfer")
-
-                val targetPlan = if (planId > 0L) {
-                    savingsTransferPlanDao.getById(planId)
-                } else null
-
-                val effectivePlanId = if (targetPlan != null) {
-                    targetPlan.id
-                } else {
-                    val currentPeriod = budgetRepository.getOrCreateBudgetPeriod(_uiState.value.currentYear, _uiState.value.currentMonth)
-                    val spendingId = savingsGuidePreferences.getConfig().spendingAccountId
-                        ?: _uiState.value.accountSummaries.find { it.account.type == AccountType.BANK }?.account?.id
-                        ?: 1L
-                    val savingsId = savingsGuidePreferences.getConfig().savingsAccountId
-                        ?: _uiState.value.accountSummaries.find { it.account.type == AccountType.BANK && it.account.id != spendingId }?.account?.id
-                        ?: 2L
-                    transferPlanRepository.createOrUpdateSuggestedPlan(
-                        periodId = currentPeriod.id,
-                        kind = TransferPlanKind.PAYDAY,
-                        sourceAccountId = spendingId,
-                        destAccountId = savingsId,
-                        suggestedPaise = movedPaise
-                    )
-                }
-
-                val periodId = targetPlan?.periodId
-                    ?: budgetRepository.getOrCreateBudgetPeriod(_uiState.value.currentYear, _uiState.value.currentMonth).id
-
-                val (outId, _) = transferPlanRepository.markAsMoved(
-                    planId = effectivePlanId,
-                    movedPaise = movedPaise,
-                    savingsCategoryId = savingsCat.id
-                )
-                loadDashboard()
-                onSuccess(outId, periodId)
-            } catch (e: Exception) {
-                // handle error
-            }
-        }
-    }
-
-    fun allocateToGoals(allocations: Map<Long, Long>, transactionId: Long, periodId: Long) {
-        viewModelScope.launch {
-            allocations.forEach { (goalId, amountPaise) ->
-                if (amountPaise > 0L) {
-                    savingsRepository.deposit(
-                        goalId = goalId,
-                        amountPaise = amountPaise,
-                        note = "Savings Transfer Allocation",
-                        transactionId = transactionId,
-                        periodId = periodId,
-                        source = SavingsContributionSource.TRANSACTION
-                    )
-                }
-            }
-            loadDashboard()
-        }
-    }
-
-    fun dismissPlan(planId: Long) {
-        viewModelScope.launch {
-            transferPlanRepository.dismissPlan(planId)
-            loadDashboard()
-        }
-    }
-
-    fun confirmMatchingTransfer(
-        planId: Long,
-        transferGroupId: String,
-        amountPaise: Long,
-        onSuccess: (outTransactionId: Long, periodId: Long) -> Unit = { _, _ -> }
-    ) {
-        viewModelScope.launch {
-            try {
-                val targetPlan = if (planId > 0L) {
-                    savingsTransferPlanDao.getById(planId)
-                } else null
-
-                val currentPeriod = budgetRepository.getOrCreateBudgetPeriod(_uiState.value.currentYear, _uiState.value.currentMonth)
-                val effectivePlanId = if (targetPlan != null) {
-                    targetPlan.id
-                } else {
-                    val spendingId = savingsGuidePreferences.getConfig().spendingAccountId
-                        ?: _uiState.value.accountSummaries.find { it.account.type == AccountType.BANK }?.account?.id
-                        ?: 1L
-                    val savingsId = savingsGuidePreferences.getConfig().savingsAccountId
-                        ?: _uiState.value.accountSummaries.find { it.account.type == AccountType.BANK && it.account.id != spendingId }?.account?.id
-                        ?: 2L
-                    transferPlanRepository.createOrUpdateSuggestedPlan(
-                        periodId = currentPeriod.id,
-                        kind = TransferPlanKind.PAYDAY,
-                        sourceAccountId = spendingId,
-                        destAccountId = savingsId,
-                        suggestedPaise = amountPaise
-                    )
-                }
-
-                transferPlanRepository.confirmPlanFromMatchingTransfer(
-                    planId = effectivePlanId,
-                    transferGroupId = transferGroupId,
-                    amountPaise = amountPaise
-                )
-
-                val legs = transactionDao.getTransferLegs(transferGroupId)
-                val outLeg = legs.find { it.direction == com.tapledger.core.model.TransactionDirection.OUT }
-                val outLegId = outLeg?.id ?: 0L
-                val periodId = targetPlan?.periodId ?: currentPeriod.id
-
-                loadDashboard()
-                onSuccess(outLegId, periodId)
-            } catch (e: Exception) {
-                // handle error
             }
         }
     }

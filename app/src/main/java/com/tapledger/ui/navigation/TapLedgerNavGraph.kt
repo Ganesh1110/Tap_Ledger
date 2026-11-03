@@ -42,11 +42,6 @@ sealed class Screen(val route: String) {
     object Onboarding : Screen("onboarding")
     object MpinSetup : Screen("mpin_setup")
     object AppLockSettings : Screen("app_lock_settings")
-    object SavingHome : Screen("saving_home")
-    object GoalDetail : Screen("goal_detail/{goalId}") {
-        fun createRoute(goalId: Long) = "goal_detail/$goalId"
-    }
-    object SavingsGuideSettings : Screen("savings_guide_settings")
     object Loans : Screen("loans")
 }
 
@@ -93,8 +88,6 @@ fun TapLedgerNavGraph(
                 onNavigateToDiagnostics = { navController.navigate(Screen.DataDiagnostics.route) },
                 onNavigateToInsights = { navController.navigate(Screen.Insights.route) },
                 onNavigateToAppLockSettings = { navController.navigate(Screen.AppLockSettings.route) },
-                onNavigateToSavingsGuideSettings = { navController.navigate(Screen.SavingsGuideSettings.route) },
-                onNavigateToSavings = { navController.navigate(Screen.SavingHome.route) },
                 onNavigateToLoans = { navController.navigate(Screen.Loans.route) },
                 onShowWhatsNew = onShowWhatsNew
             )
@@ -189,34 +182,6 @@ fun TapLedgerNavGraph(
                 mpinManager = mpinManager,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToSetup = { navController.navigate(Screen.MpinSetup.route) }
-            )
-        }
-        composable(Screen.SavingHome.route) {
-            com.tapledger.ui.screens.saving.SavingHomeScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToSettings = { navController.navigate(Screen.SavingsGuideSettings.route) },
-                onNavigateToGoalDetail = { goalId ->
-                    navController.navigate(Screen.GoalDetail.createRoute(goalId))
-                }
-            )
-        }
-        composable(
-            route = Screen.GoalDetail.route,
-            arguments = listOf(
-                androidx.navigation.navArgument("goalId") {
-                    type = androidx.navigation.NavType.LongType
-                }
-            )
-        ) { backStackEntry ->
-            val goalId = backStackEntry.arguments?.getLong("goalId") ?: 0L
-            com.tapledger.ui.screens.saving.GoalDetailScreen(
-                goalId = goalId,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable(Screen.SavingsGuideSettings.route) {
-            com.tapledger.ui.screens.saving.SavingsGuideSettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable(Screen.Loans.route) {

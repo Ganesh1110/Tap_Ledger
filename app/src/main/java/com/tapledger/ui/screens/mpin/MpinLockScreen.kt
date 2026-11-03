@@ -37,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.tapledger.core.model.AppMode
 import com.tapledger.core.security.MpinLockoutState
 import com.tapledger.core.security.MpinManager
 import com.tapledger.core.security.MpinVerifyResult
@@ -52,8 +51,6 @@ fun MpinLockScreen(
     onUnlocked: () -> Unit,
     modifier: Modifier = Modifier,
     customMessage: String? = null,
-    initialAppMode: AppMode = AppMode.MANAGER,
-    onUnlockedWithMode: (AppMode) -> Unit = {},
     onNavigateToRestoreBackup: () -> Unit = {},
     onEraseAllData: () -> Unit = {}
 ) {
@@ -61,7 +58,6 @@ fun MpinLockScreen(
     val expectedLength by mpinManager.mpinLength.collectAsState()
     val lockoutState by mpinManager.lockoutState.collectAsState()
 
-    var selectedMode by remember { mutableStateOf(initialAppMode) }
     var enteredPin by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var shakeTrigger by remember { mutableIntStateOf(0) }
@@ -90,7 +86,6 @@ fun MpinLockScreen(
                 is MpinVerifyResult.Success -> {
                     errorMessage = null
                     enteredPin = ""
-                    onUnlockedWithMode(selectedMode)
                     onUnlocked()
                 }
                 is MpinVerifyResult.LockedOut -> {

@@ -25,10 +25,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,8 +63,6 @@ private data class SettingItem(
 fun SettingsBottomSheet(
     onDismissRequest: () -> Unit,
     onNavigateToSetup: () -> Unit,
-    onNavigateToSavings: () -> Unit,
-    onNavigateToSavingsGuideSettings: () -> Unit,
     onNavigateToLoans: () -> Unit = {},
     isLoanTrackerEnabled: Boolean = true,
     onNavigateToBackup: () -> Unit,
@@ -101,22 +97,6 @@ fun SettingsBottomSheet(
                 onClick = onNavigateToLoans
             )
         } else null,
-        SettingItem(
-            title = "Savings & Goals",
-            subtitle = "Track targets, emergency funds & progress",
-            icon = Icons.Default.Savings,
-            iconTint = IncomeGreen,
-            iconBgColor = IncomeGreen.copy(alpha = 0.12f),
-            onClick = onNavigateToSavings
-        ),
-        SettingItem(
-            title = "Savings Automation Rules",
-            subtitle = "Payday suggestions & reserve buffer settings",
-            icon = Icons.Default.Tune,
-            iconTint = secondaryColor,
-            iconBgColor = secondaryColor.copy(alpha = 0.12f),
-            onClick = onNavigateToSavingsGuideSettings
-        ),
         SettingItem(
             title = "Backup & Restore",
             subtitle = "Export JSON/CSV backup or restore your data",

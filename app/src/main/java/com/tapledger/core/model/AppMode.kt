@@ -2,16 +2,16 @@ package com.tapledger.core.model
 
 /**
  * Operating mode of the application (Flow.md §18, D012).
- * - [MANAGER]: Full financial access (accounts, budget periods, transactions, backup/restore).
- * - [SAVING]: Dedicated savings & goals focus (goals, contributions, emergency fund, commitments, fixed deposits).
+ * Application operates in unified [MANAGER] mode.
  */
 enum class AppMode {
     MANAGER,
+    @Deprecated("Savings mode removed in favor of single unified mode")
     SAVING;
 
     companion object {
         fun fromNameOrDefault(name: String?): AppMode {
-            return entries.firstOrNull { it.name.equals(name, ignoreCase = true) } ?: MANAGER
+            return MANAGER
         }
     }
 }
